@@ -52,8 +52,8 @@
   "files": {
     "encoder": {
       "url": "files/encoder.onnx",
-      "sha256": "013b5322684bab9d193baaf12bdd52d794e8e870b3fd3505e9280747a510e647",
-      "sizeBytes": 156,
+      "sha256": "99391d7616f2af0635d8330a440d922c66b2e3435029cf5b71adb9ed3fb59ace",
+      "sizeBytes": 308,
       "mediaType": "application/onnx"
     },
     "predictor": {
@@ -78,6 +78,12 @@
           "dataType": "float32",
           "shape": [1, 4],
           "description": "mock log-Mel feature vector"
+        },
+        {
+          "name": "encoder_cache_in",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock streaming encoder cache input"
         }
       ],
       "outputs": [
@@ -86,6 +92,19 @@
           "dataType": "float32",
           "shape": [1, 4],
           "description": "mock encoder output"
+        },
+        {
+          "name": "encoder_cache_out",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock streaming encoder cache output"
+        }
+      ],
+      "stateRelationships": [
+        {
+          "input": "encoder_cache_in",
+          "output": "encoder_cache_out",
+          "resetAtUtteranceBoundary": true
         }
       ]
     },
