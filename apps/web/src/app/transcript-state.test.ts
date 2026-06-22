@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyTranscriptPartial,
+  buildTranscriptDownloadText,
   clearTranscript,
+  editTranscriptCommittedText,
   failTranscriptCapture,
   finishTranscriptUtterance,
   getTranscriptPlainText,
@@ -53,17 +55,66 @@ describe('transcript workspace state', () => {
     expect(final.timings.finalizationLatencyMs).toBe(40);
   });
 
-  it('keeps only actual transcript text local for copy/download actions', () => {
+  it('keeps only committed transcript text local for copy/download actions', () => {
     const state = {
       ...initialTranscriptWorkspaceState,
       committed: 'local first',
       provisional: ' speech',
     };
 
-    expect(getTranscriptPlainText(state)).toBe('local first speech');
+    expect(getTranscriptPlainText(state)).toBe('local first');
     expect(getTranscriptPlainText(startTranscriptRequest(initialTranscriptWorkspaceState))).toBe(
       '',
     );
+  });
+
+  it('edits committed text without touching active provisional state', () => {
+    const state = {
+      ...initialTranscriptWorkspaceState,
+      status: 'listening' as const,
+      committed: 'draft',
+      provisional: ' suffix',
+    };
+
+    const edited = editTranscriptCommittedText(state, 'edited transcript');
+    expect(edited.status).toBe('listening');
+    expect(edited.committed).toBe('edited transcript');
+    expect(edited.provisional).toBe(' suffix');
+  });
+
+  it('builds a plain-text download with optional local timing metadata', () => {
+    const state = {
+      ...initialTranscriptWorkspaceState,
+      committed: 'xin chào',
+      timings: {
+        ...initialTranscriptWorkspaceState.timings,
+        capturedChunks: 2,
+        capturedSamples: 2560,
+        sampleRateHz: 48000,
+        finalizationLatencyMs: 42,
+      },
+    };
+
+    expect(
+      buildTranscriptDownloadText(state, {
+        includeTimingMetadata: false,
+        generatedAtIso: '2026-06-22T00:00:00.000Z',
+        languageModeLabel: 'Auto/code-switch',
+        formattingEnabled: true,
+        spokenCommandsEnabled: false,
+      }),
+    ).toBe('xin chào\n');
+
+    const withMetadata = buildTranscriptDownloadText(state, {
+      includeTimingMetadata: true,
+      generatedAtIso: '2026-06-22T00:00:00.000Z',
+      languageModeLabel: 'Auto/code-switch',
+      formattingEnabled: true,
+      spokenCommandsEnabled: false,
+    });
+    expect(withMetadata).toContain('Language mode: Auto/code-switch');
+    expect(withMetadata).toContain('Captured chunks: 2');
+    expect(withMetadata).toContain('Finalization latency: 42 ms');
   });
 
   it('clears text while preserving an active capture session', () => {

@@ -62,6 +62,14 @@ export interface TranscriptFinalOptions {
   readonly endedAtMs: number;
 }
 
+export interface TranscriptDownloadOptions {
+  readonly includeTimingMetadata: boolean;
+  readonly generatedAtIso: string;
+  readonly languageModeLabel: string;
+  readonly formattingEnabled: boolean;
+  readonly spokenCommandsEnabled: boolean;
+}
+
 export function startTranscriptRequest(state: TranscriptWorkspaceState): TranscriptWorkspaceState {
   if (state.status === 'listening' || state.status === 'requesting') {
     return state;
@@ -204,10 +212,49 @@ export function clearTranscript(state: TranscriptWorkspaceState): TranscriptWork
   };
 }
 
-export function getTranscriptPlainText(
-  state: Pick<TranscriptWorkspaceState, 'committed' | 'provisional'>,
+export function editTranscriptCommittedText(
+  state: TranscriptWorkspaceState,
+  text: string,
+): TranscriptWorkspaceState {
+  return {
+    ...state,
+    committed: text,
+  };
+}
+
+export function getTranscriptPlainText(state: Pick<TranscriptWorkspaceState, 'committed'>): string {
+  return state.committed.trim();
+}
+
+export function buildTranscriptDownloadText(
+  state: TranscriptWorkspaceState,
+  options: TranscriptDownloadOptions,
 ): string {
-  return `${state.committed}${state.provisional}`.trim();
+  const text = getTranscriptPlainText(state);
+  const body = text.length > 0 ? text : '';
+  if (!options.includeTimingMetadata) {
+    return `${body}\n`;
+  }
+
+  return [
+    body,
+    '',
+    '---',
+    `Generated: ${options.generatedAtIso}`,
+    `Language mode: ${options.languageModeLabel}`,
+    `Formatting: ${options.formattingEnabled ? 'enabled' : 'disabled'}`,
+    `Spoken commands: ${options.spokenCommandsEnabled ? 'enabled' : 'disabled'}`,
+    `Captured chunks: ${state.timings.capturedChunks.toString()}`,
+    `Captured samples: ${state.timings.capturedSamples.toString()}`,
+    `Sample rate: ${state.timings.sampleRateHz === null ? 'pending' : `${state.timings.sampleRateHz.toString()} Hz`}`,
+    `First partial latency: ${formatOptionalLatency(state.timings.firstPartialLatencyMs)}`,
+    `Finalization latency: ${formatOptionalLatency(state.timings.finalizationLatencyMs)}`,
+    '',
+  ].join('\n');
+}
+
+function formatOptionalLatency(value: number | null): string {
+  return value === null ? 'pending' : `${Math.round(value).toString()} ms`;
 }
 
 function validateUtteranceId(value: string): void {

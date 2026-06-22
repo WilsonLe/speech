@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 test('captures while the hold-to-talk control is pressed', async ({ page }) => {
@@ -5,12 +6,12 @@ test('captures while the hold-to-talk control is pressed', async ({ page }) => {
 
   const transcript = page.getByRole('region', { name: /focused push-to-talk dictation/i });
   const pushToTalk = transcript.getByRole('button', { name: /hold to talk/i });
-  const output = transcript.getByLabel('Transcript output');
+  const provisional = transcript.getByLabel('Provisional transcript suffix');
   const metrics = transcript.getByLabel('Transcript latency and capture status');
 
   await pressButton(page, pushToTalk);
   await expect(pushToTalk).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
-  await expect(output).toContainText('Listening…');
+  await expect(provisional).toContainText('Listening…');
   await expect(transcript.getByRole('button', { name: 'Copy' })).toBeDisabled();
   await expect
     .poll(async () => readMetric(metrics, 'Chunks'), { timeout: 10_000 })
@@ -27,16 +28,61 @@ test('uses Space as a page-scoped push-to-talk shortcut without scrolling', asyn
 
   const transcript = page.getByRole('region', { name: /focused push-to-talk dictation/i });
   const pushToTalk = transcript.getByRole('button', { name: /hold to talk/i });
-  const output = transcript.getByLabel('Transcript output');
+  const provisional = transcript.getByLabel('Provisional transcript suffix');
 
   await page.keyboard.down('Space');
   await expect(pushToTalk).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
-  await expect(output).toContainText('Listening…');
+  await expect(provisional).toContainText('Listening…');
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
   await page.keyboard.up('Space');
   await expect(pushToTalk).toHaveText(/hold to talk/i, { timeout: 10_000 });
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('edits, copies, downloads, and clears committed transcript text locally', async ({
+  context,
+  page,
+}) => {
+  await page.goto('/');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: new URL(page.url()).origin,
+  });
+
+  const transcript = page.getByRole('region', { name: /focused push-to-talk dictation/i });
+  const output = transcript.getByLabel('Transcript output');
+  await output.fill('Xin chào local-first speech.');
+
+  await expect(transcript.getByRole('button', { name: 'Copy' })).toBeEnabled();
+  await transcript.getByRole('button', { name: 'Copy' }).click();
+  await expect(transcript.getByText(/copied to clipboard locally/i)).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe('Xin chào local-first speech.');
+
+  await transcript.getByLabel(/Recognition mode/i).selectOption('en');
+  await expect(
+    transcript.getByLabel('Transcript runtime state').getByText('English', { exact: true }),
+  ).toBeVisible();
+  await transcript.getByLabel(/Enable final formatting/i).uncheck();
+  await transcript.getByLabel(/Enable spoken commands/i).check();
+  await transcript.getByLabel(/Include local timing metadata/i).check();
+
+  const downloadPromise = page.waitForEvent('download');
+  await transcript.getByRole('button', { name: /Download \.txt/i }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^speech-transcript-.*\.txt$/);
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const downloadedText = await readFile(downloadPath!, 'utf8');
+  expect(downloadedText).toContain('Xin chào local-first speech.');
+  expect(downloadedText).toContain('Language mode: English');
+  expect(downloadedText).toContain('Formatting: disabled');
+  expect(downloadedText).toContain('Spoken commands: enabled');
+
+  await transcript.getByRole('button', { name: 'Clear' }).click();
+  await expect(output).toHaveValue('');
+  await expect(transcript.getByRole('button', { name: 'Copy' })).toBeDisabled();
 });
 
 async function pressButton(page: Page, button: Locator): Promise<void> {
