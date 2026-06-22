@@ -31,7 +31,8 @@ body {
     radial-gradient(circle at 80% 10%, rgba(16, 185, 129, 0.16), transparent 28rem), #020617;
 }
 
-button {
+button,
+.button {
   border: 0;
   border-radius: 999px;
   padding: 0.85rem 1.25rem;
@@ -39,15 +40,18 @@ button {
   background: var(--accent);
   font: inherit;
   font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
 }
 
-button:focus-visible {
+button:focus-visible,
+.button:focus-visible {
   outline: 3px solid #facc15;
   outline-offset: 3px;
 }
 
-button.secondary {
+button.secondary,
+.button.secondary {
   color: #dbeafe;
   background: rgba(15, 23, 42, 0.88);
   border: 1px solid var(--panel-border);
@@ -118,7 +122,8 @@ h2 {
 }
 
 .panel,
-.roadmap {
+.roadmap,
+.diagnostics {
   padding: 1.5rem;
   border: 1px solid var(--panel-border);
   border-radius: 1.25rem;
@@ -127,7 +132,9 @@ h2 {
 
 .panel p,
 .panel li,
-.roadmap p {
+.roadmap p,
+.diagnostics p,
+.diagnostics li {
   color: #cbd5e1;
   line-height: 1.6;
 }
@@ -135,6 +142,66 @@ h2 {
 .state-count {
   color: #67e8f9 !important;
   font-weight: 700;
+}
+
+.diagnostics {
+  margin-bottom: 1rem;
+}
+
+.section-heading {
+  max-width: 760px;
+}
+
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.diagnostics-summary strong {
+  display: inline-flex;
+  width: 4rem;
+  height: 4rem;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  border-radius: 1.2rem;
+  color: #082f49;
+  background: #67e8f9;
+  font-size: 2rem;
+}
+
+.diagnostics dl {
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.diagnostics dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  padding-bottom: 0.45rem;
+}
+
+.diagnostics dt {
+  color: #94a3b8;
+}
+
+.diagnostics dd {
+  margin: 0;
+  color: #e2e8f0;
+  font-weight: 700;
+  text-align: right;
+}
+
+.probe-list {
+  font-size: 0.92rem;
+}
+
+.warnings-panel {
+  grid-column: 1 / -1;
 }
 
 .roadmap-list {
@@ -190,7 +257,8 @@ h2 {
     border-radius: 1rem;
   }
 
-  .panel-grid {
+  .panel-grid,
+  .diagnostics-grid {
     grid-template-columns: 1fr;
   }
 
