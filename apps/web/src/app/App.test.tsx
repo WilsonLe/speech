@@ -8,6 +8,7 @@ describe('App', () => {
 
     expect(html).toContain('Local-first bilingual dictation');
     expect(html).toContain('Privacy baseline');
+    expect(html).toContain('Focused push-to-talk dictation');
     expect(html).toContain('Browser capability report');
     expect(html).toContain('Permission and capture check');
     expect(html).toContain('Dedicated worker ONNX Runtime loader');
