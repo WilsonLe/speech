@@ -2,6 +2,7 @@ import { RUNTIME_STATES } from '@speech/protocol';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { MicrophonePanel } from './MicrophonePanel';
 import { ModelRuntimePanel } from './ModelRuntimePanel';
+import { OfflineModelPanel } from './OfflineModelPanel';
 import { TranscriptPanel } from './TranscriptPanel';
 import { roadmap } from './milestones';
 
@@ -50,6 +51,7 @@ export function App() {
       </section>
 
       <TranscriptPanel />
+      <OfflineModelPanel />
       <DiagnosticsPanel />
       <MicrophonePanel />
       <ModelRuntimePanel />
