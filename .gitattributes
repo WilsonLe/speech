@@ -1,0 +1,11 @@
+*.onnx binary
+*.pt binary
+*.pth binary
+*.ckpt binary
+*.safetensors binary
+*.wav binary
+*.flac binary
+*.mp3 binary
+*.m4a binary
+*.opus binary
+*.speechprofile binary

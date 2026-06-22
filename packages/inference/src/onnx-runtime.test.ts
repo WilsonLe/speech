@@ -109,5 +109,6 @@ function fakeOrtModule(): OrtRuntimeModule {
     InferenceSession: {
       create: vi.fn(async () => ({ dispose: vi.fn() })),
     },
+    Tensor: vi.fn(),
   } as unknown as OrtRuntimeModule;
 }

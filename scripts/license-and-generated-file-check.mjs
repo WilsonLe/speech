@@ -35,6 +35,11 @@ const allowedRootMarkdown = new Set([
   'MODEL_LICENSES.md',
   'THIRD_PARTY_NOTICES.md',
 ]);
+const allowedMockOnnxFiles = new Set([
+  'model-packs/example-manifest/files/encoder.onnx',
+  'model-packs/example-manifest/files/joiner.onnx',
+  'model-packs/example-manifest/files/predictor.onnx',
+]);
 
 const failures = [];
 
@@ -51,7 +56,7 @@ async function walk(directory) {
     }
 
     const extension = path.extname(entry.name).toLowerCase();
-    if (forbiddenExtensions.has(extension)) {
+    if (forbiddenExtensions.has(extension) && !allowedMockOnnxFiles.has(relativePath)) {
       failures.push(`Forbidden speech/model artifact committed: ${relativePath}`);
     }
 
