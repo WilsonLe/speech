@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilsonle.github.io/speech/schemas/speech-model-manifest-v2.schema.json",
+  "title": "SpeechModelManifestV2",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "version",
+    "displayName",
+    "languages",
+    "supportedLanguageModes",
+    "architecture",
+    "license",
+    "sampleRateHz",
+    "feature",
+    "tokenizer",
+    "streaming",
+    "contextBiasing",
+    "files",
+    "graphs",
+    "recommended"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "enum": ["vi", "en"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "supportedLanguageModes": {
+      "type": "array",
+      "items": {
+        "enum": ["vi", "en", "auto", "mixed"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "architecture": {
+      "const": "rnnt"
+    },
+    "sampleRateHz": {
+      "const": 16000
+    },
+    "license": {
+      "type": "object",
+      "required": ["name", "redistributionAllowed"]
+    },
+    "feature": {
+      "type": "object",
+      "required": [
+        "type",
+        "bins",
+        "frameLengthMs",
+        "frameShiftMs",
+        "fftSize",
+        "lowFreqHz",
+        "highFreqHz",
+        "dither",
+        "snipEdges"
+      ]
+    },
+    "tokenizer": {
+      "type": "object",
+      "required": ["type", "vocabularySize", "byteFallback", "blankId"]
+    },
+    "streaming": {
+      "type": "object",
+      "required": ["chunkFrames", "chunkShiftFrames", "rightContextFrames", "maxSymbolsPerFrame"]
+    },
+    "contextBiasing": {
+      "type": "object",
+      "required": [
+        "supported",
+        "algorithm",
+        "maxActiveEntries",
+        "maxPhraseTokens",
+        "defaultWeight",
+        "maxCumulativeBonus"
+      ]
+    },
+    "files": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "graphs": {
+      "type": "object",
+      "required": ["encoder", "predictor", "joiner"]
+    },
+    "recommended": {
+      "type": "object",
+      "required": ["webgpu", "wasmThreads", "expectedMemoryMb"]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="speech icon">
+  <rect width="512" height="512" rx="112" fill="#020617"/>
+  <path d="M128 270c0-71 57-128 128-128s128 57 128 128" fill="none" stroke="#38bdf8" stroke-width="34" stroke-linecap="round"/>
+  <path d="M176 278c0-44 36-80 80-80s80 36 80 80" fill="none" stroke="#22c55e" stroke-width="34" stroke-linecap="round"/>
+  <rect x="228" y="112" width="56" height="208" rx="28" fill="#e2e8f0"/>
+  <path d="M176 290c0 44 36 80 80 80s80-36 80-80" fill="none" stroke="#e2e8f0" stroke-width="28" stroke-linecap="round"/>
+  <path d="M256 370v54M210 424h92" stroke="#e2e8f0" stroke-width="28" stroke-linecap="round"/>
+</svg>

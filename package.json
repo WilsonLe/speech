@@ -1,0 +1,39 @@
+{
+  "name": "speech",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local-first Vietnamese/English streaming speech-to-text PWA with private voice personalization",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.1.3",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @speech/web dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint . && pnpm python:lint && pnpm license-and-generated-file-check",
+    "format": "prettier --write .",
+    "format-check": "prettier --check .",
+    "test": "pnpm -r --if-present test && pnpm python:test",
+    "test:unit": "pnpm -r --if-present test",
+    "chromium-smoke": "pnpm --filter @speech/web chromium-smoke",
+    "python:lint": "uv run ruff check tools training",
+    "python:test": "uv run pytest tools training",
+    "license-and-generated-file-check": "node scripts/license-and-generated-file-check.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.29.0",
+    "@types/node": "^24.0.3",
+    "eslint": "^9.29.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.2.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.1",
+    "vitest": "^3.2.4"
+  }
+}

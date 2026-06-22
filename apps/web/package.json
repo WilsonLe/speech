@@ -1,0 +1,29 @@
+{
+  "name": "@speech/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Installable local-first speech-to-text PWA shell.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "chromium-smoke": "playwright test"
+  },
+  "dependencies": {
+    "@speech/protocol": "workspace:*",
+    "@vitejs/plugin-react": "^4.5.2",
+    "vite": "^6.3.5",
+    "vite-plugin-pwa": "^1.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6"
+  }
+}

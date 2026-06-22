@@ -1,0 +1,17 @@
+{
+  "name": "@speech/decoder",
+  "version": "0.0.0",
+  "private": true,
+  "description": "RNN-T decoding, stable-prefix control, and contextual-scoring integration.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {}
+}

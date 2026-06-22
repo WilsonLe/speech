@@ -1,0 +1,17 @@
+{
+  "name": "@speech/formatter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Vietnamese/English normalization, detokenization, punctuation, and ITN.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {}
+}

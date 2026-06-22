@@ -1,0 +1,22 @@
+name: Model compatibility
+description: Report model-pack, ONNX, tokenizer, or provider compatibility issues.
+title: ''
+labels: []
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should change or what happened?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Browser, OS, model/profile version, steps, expected behavior, and relevant logs without private audio or transcripts.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Acceptance or validation notes
+      description: How should maintainers verify the fix or feature?

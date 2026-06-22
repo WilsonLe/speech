@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "id": "local-dev-rnnt-mock",
+  "version": "0.0.0",
+  "displayName": "Local development RNN-T mock manifest",
+  "languages": ["vi", "en"],
+  "supportedLanguageModes": ["vi", "en", "auto", "mixed"],
+  "architecture": "rnnt",
+  "license": {
+    "name": "Metadata-only mock; no weights distributed",
+    "redistributionAllowed": false
+  },
+  "sampleRateHz": 16000,
+  "feature": {
+    "type": "log-mel",
+    "bins": 80,
+    "frameLengthMs": 25,
+    "frameShiftMs": 10,
+    "fftSize": 512,
+    "lowFreqHz": 20,
+    "highFreqHz": 7600,
+    "dither": 0,
+    "snipEdges": false
+  },
+  "tokenizer": {
+    "type": "tokens",
+    "vocabularySize": 4,
+    "byteFallback": true,
+    "blankId": 0,
+    "languageTokenIds": {
+      "vi": 1,
+      "en": 2,
+      "mixed": 3
+    }
+  },
+  "streaming": {
+    "chunkFrames": 16,
+    "chunkShiftFrames": 8,
+    "rightContextFrames": 4,
+    "maxSymbolsPerFrame": 3
+  },
+  "contextBiasing": {
+    "supported": false,
+    "algorithm": "token-trie",
+    "maxActiveEntries": 0,
+    "maxPhraseTokens": 0,
+    "defaultWeight": 0,
+    "maxCumulativeBonus": 0
+  },
+  "files": {
+    "encoder": {
+      "url": "/models/mock/encoder.onnx",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sizeBytes": 1,
+      "mediaType": "application/octet-stream"
+    }
+  },
+  "graphs": {
+    "encoder": {
+      "fileKey": "encoder",
+      "inputs": [
+        {
+          "name": "features",
+          "dataType": "float32",
+          "shape": ["batch", "frames", 80],
+          "description": "log-Mel features"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "encoded",
+          "dataType": "float32",
+          "shape": ["batch", "frames", 256],
+          "description": "encoder output"
+        }
+      ]
+    },
+    "predictor": {
+      "fileKey": "predictor",
+      "inputs": [
+        {
+          "name": "tokens",
+          "dataType": "int64",
+          "shape": ["batch", "symbols"],
+          "description": "previous non-blank tokens"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "predicted",
+          "dataType": "float32",
+          "shape": ["batch", "symbols", 256],
+          "description": "predictor output"
+        }
+      ]
+    },
+    "joiner": {
+      "fileKey": "joiner",
+      "inputs": [
+        {
+          "name": "encoded",
+          "dataType": "float32",
+          "shape": ["batch", 256],
+          "description": "encoder frame"
+        },
+        {
+          "name": "predicted",
+          "dataType": "float32",
+          "shape": ["batch", 256],
+          "description": "predictor state"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dataType": "float32",
+          "shape": ["batch", 4],
+          "description": "token logits"
+        }
+      ]
+    }
+  },
+  "recommended": {
+    "webgpu": false,
+    "wasmThreads": 1,
+    "expectedMemoryMb": 64
+  }
+}

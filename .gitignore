@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+.venv/
+
+# build outputs
+dist/
+coverage/
+playwright-report/
+test-results/
+
+# local env
+.env
+.env.*
+!.env.example
+
+# caches
+.vite/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# private/local speech artifacts
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.opus
+*.speechprofile
+profiles/
+recordings/
+model-cache/
