@@ -1,3 +1,4 @@
+export * from './finalization';
 export * from './greedy-rnnt';
 export * from './stable-prefix';
 
