@@ -10,6 +10,7 @@ describe('App', () => {
     expect(html).toContain('Privacy baseline');
     expect(html).toContain('Browser capability report');
     expect(html).toContain('Permission and capture check');
+    expect(html).toContain('Dedicated worker ONNX Runtime loader');
     expect(html).toContain('Implementation roadmap');
   });
 });

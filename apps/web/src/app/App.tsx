@@ -1,6 +1,7 @@
 import { RUNTIME_STATES } from '@speech/protocol';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { MicrophonePanel } from './MicrophonePanel';
+import { ModelRuntimePanel } from './ModelRuntimePanel';
 import { roadmap } from './milestones';
 
 const privacyPoints = [
@@ -49,6 +50,7 @@ export function App() {
 
       <DiagnosticsPanel />
       <MicrophonePanel />
+      <ModelRuntimePanel />
 
       <section className="roadmap" aria-labelledby="roadmap-title">
         <h2 id="roadmap-title">Implementation roadmap</h2>

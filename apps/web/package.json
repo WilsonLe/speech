@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@speech/audio": "workspace:*",
+    "@speech/inference": "workspace:*",
     "@speech/protocol": "workspace:*",
     "@vitejs/plugin-react": "^4.5.2",
     "react": "^19.1.0",
