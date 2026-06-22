@@ -19,7 +19,7 @@
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
-    "@vitejs/plugin-react": "^4.5.2",
+    "@vitejs/plugin-react": "^6.0.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "vite": "^6.3.5",
