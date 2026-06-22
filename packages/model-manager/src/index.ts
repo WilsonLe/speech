@@ -1,3 +1,4 @@
+export * from './install';
 export * from './storage';
 
 export interface ModelManagerPackageInfo {

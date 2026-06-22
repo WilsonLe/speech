@@ -93,7 +93,11 @@ importers:
 
   packages/inference: {}
 
-  packages/model-manager: {}
+  packages/model-manager:
+    dependencies:
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/personalization: {}
 
