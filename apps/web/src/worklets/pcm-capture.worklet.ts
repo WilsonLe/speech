@@ -1,10 +1,14 @@
 import {
   calculatePcmLevelMetrics,
+  createSharedPcmRingBufferViews,
   downmixToMono,
   getDefaultPcmCaptureProcessorOptions,
+  getPcmRingBufferState,
+  writePcmRingBuffer,
   type PcmCaptureProcessorOptions,
   type PcmCaptureWorkletCommand,
   type PcmCaptureWorkletMessage,
+  type SharedPcmRingBuffer,
 } from '@speech/audio';
 
 interface WorkletProcessorConstructorOptions {
@@ -24,6 +28,8 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
   private levelPeak = 0;
   private levelSumSquares = 0;
   private levelClippedSamples = 0;
+  private ringBuffer: SharedPcmRingBuffer | null = null;
+  private pendingRingDroppedSamples = 0;
 
   constructor(options: WorkletProcessorConstructorOptions = {}) {
     super();
@@ -61,7 +67,11 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     }
 
     this.accumulateLevel(this.scratch, sampleCount);
-    this.appendChunk(this.scratch, sampleCount);
+    if (this.ringBuffer) {
+      this.writeRingBuffer(this.scratch, sampleCount);
+    } else {
+      this.appendChunk(this.scratch, sampleCount);
+    }
     return true;
   }
 
@@ -73,13 +83,22 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
         this.postState('CAPTURE_STARTED');
         break;
       case 'STOP':
-        this.flushChunk();
+        if (!this.ringBuffer) {
+          this.flushChunk();
+        }
         this.flushLevel();
         this.recording = false;
         this.postState('CAPTURE_STOPPED');
         break;
       case 'RESET':
         this.resetBuffers();
+        break;
+      case 'USE_SHARED_RING_BUFFER':
+        this.ringBuffer = createSharedPcmRingBufferViews(command.ringBuffer);
+        this.postRingStatus(0);
+        break;
+      case 'USE_CHUNK_MESSAGES':
+        this.ringBuffer = null;
         break;
       default:
         this.postMessage({
@@ -95,6 +114,19 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
   private ensureScratch(sampleCount: number): void {
     if (this.scratch.length < sampleCount) {
       this.scratch = new Float32Array(sampleCount);
+    }
+  }
+
+  private writeRingBuffer(samples: Float32Array, sampleCount: number): void {
+    if (!this.ringBuffer) {
+      return;
+    }
+
+    const result = writePcmRingBuffer(this.ringBuffer, samples, sampleCount);
+    this.pendingRingDroppedSamples += result.droppedSamples;
+    if (result.droppedSamples > 0) {
+      this.postRingStatus(this.pendingRingDroppedSamples);
+      this.pendingRingDroppedSamples = 0;
     }
   }
 
@@ -192,10 +224,30 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       metrics,
     });
     this.sequence += 1;
+    if (this.ringBuffer) {
+      this.postRingStatus(this.pendingRingDroppedSamples);
+      this.pendingRingDroppedSamples = 0;
+    }
     this.levelSampleCount = 0;
     this.levelPeak = 0;
     this.levelSumSquares = 0;
     this.levelClippedSamples = 0;
+  }
+
+  private postRingStatus(droppedSamples: number): void {
+    if (!this.ringBuffer) {
+      return;
+    }
+
+    this.postMessage({
+      type: 'RING_BUFFER_STATUS',
+      sequence: this.sequence,
+      sampleRateHz: sampleRate,
+      capturedFrame: currentFrame,
+      droppedSamples,
+      state: getPcmRingBufferState(this.ringBuffer),
+    });
+    this.sequence += 1;
   }
 
   private postState(type: 'CAPTURE_STARTED' | 'CAPTURE_STOPPED'): void {
@@ -219,6 +271,7 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     this.levelPeak = 0;
     this.levelSumSquares = 0;
     this.levelClippedSamples = 0;
+    this.pendingRingDroppedSamples = 0;
   }
 }
 

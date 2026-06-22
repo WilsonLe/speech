@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AudioContextLike, ConnectableAudioNodeLike } from './microphone';
+import { createSharedPcmRingBuffer, getPcmRingBufferState } from './ring-buffer';
 import {
   attachPcmCaptureWorklet,
   type AudioWorkletNodeLike,
@@ -82,11 +83,12 @@ describe('PCM capture worklet attachment', () => {
     expect(sourceNode.connections).toEqual([workletNode]);
     expect(workletNode.connections).toEqual([destination]);
     expect(workletNode.port.started).toBe(true);
+    expect(workletNode.port.posted).toEqual([{ type: 'USE_CHUNK_MESSAGES' }]);
 
     controller.start();
     controller.start();
     expect(controller.active).toBe(true);
-    expect(workletNode.port.posted).toEqual([{ type: 'START' }]);
+    expect(workletNode.port.posted).toEqual([{ type: 'USE_CHUNK_MESSAGES' }, { type: 'START' }]);
 
     workletNode.port.emit({
       type: 'LEVEL',
@@ -106,5 +108,57 @@ describe('PCM capture worklet attachment', () => {
     expect(sourceNode.disconnected).toBe(true);
     expect(workletNode.disconnected).toBe(true);
     expect(workletNode.port.closed).toBe(true);
+  });
+
+  it('sends a shared ring buffer configuration before capture starts', async () => {
+    const sourceNode = new FakeAudioNode();
+    const destination = new FakeAudioNode();
+    const workletNode = new FakeWorkletNode();
+    const ringBuffer = createSharedPcmRingBuffer({
+      sourceSampleRateHz: 48_000,
+      capacitySamples: 16,
+    });
+    const messages: PcmCaptureWorkletMessage[] = [];
+
+    const audioContext: AudioContextLike = {
+      sampleRate: 48_000,
+      state: 'running',
+      destination,
+      audioWorklet: { addModule: async () => undefined },
+      createMediaStreamSource: () => sourceNode,
+      resume: async () => undefined,
+      close: async () => undefined,
+    };
+
+    await attachPcmCaptureWorklet({
+      audioContext,
+      sourceNode,
+      workletModuleUrl: '/pcm-capture.worklet.js',
+      sharedRingBuffer: ringBuffer,
+      onMessage: (message) => messages.push(message),
+      createAudioWorkletNode: () => workletNode,
+    });
+
+    expect(workletNode.port.posted[0]).toMatchObject({ type: 'USE_SHARED_RING_BUFFER' });
+    const state = getPcmRingBufferState(ringBuffer);
+    expect(state).toMatchObject({
+      capacitySamples: 16,
+      sourceSampleRateHz: 48_000,
+    });
+    expect(messages).toHaveLength(0);
+
+    workletNode.port.emit({
+      type: 'RING_BUFFER_STATUS',
+      sequence: 1,
+      sampleRateHz: 48_000,
+      capturedFrame: 0,
+      droppedSamples: 0,
+      state,
+    });
+    expect(messages[0]).toMatchObject({
+      type: 'RING_BUFFER_STATUS',
+      droppedSamples: 0,
+      state: { availableSamples: 0, capacitySamples: 16 },
+    });
   });
 });
