@@ -8,6 +8,8 @@ applyTo: 'model-packs/**,packages/protocol/**,packages/model-manager/**,packages
 - Start model manifests at schema version 2.
 - Validate manifests before downloading large assets.
 - Enumerate every graph input/output tensor name, data type, shape convention, and state-cache relationship.
+- Every graph `fileKey` and speaker-embedding `encoderFileKey` must reference a declared manifest `files` entry.
+- Manifest file entries require non-empty URLs/media types, positive sizes, and lowercase 64-character SHA-256 checksums before any large download or activation.
 - Never rely on undocumented tensor ordering.
 - Download into a temporary version, verify size/checksum/license metadata, then atomically activate.
 - Keep production weights out of Git unless redistribution rights and participant consent are documented explicitly.

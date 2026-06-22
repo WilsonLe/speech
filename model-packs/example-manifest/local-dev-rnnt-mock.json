@@ -53,6 +53,18 @@
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "sizeBytes": 1,
       "mediaType": "application/octet-stream"
+    },
+    "predictor": {
+      "url": "/models/mock/predictor.onnx",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "sizeBytes": 1,
+      "mediaType": "application/octet-stream"
+    },
+    "joiner": {
+      "url": "/models/mock/joiner.onnx",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "sizeBytes": 1,
+      "mediaType": "application/octet-stream"
     }
   },
   "graphs": {
