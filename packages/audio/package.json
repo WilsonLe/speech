@@ -13,5 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "dependencies": {
+    "@speech/protocol": "workspace:*"
+  }
 }

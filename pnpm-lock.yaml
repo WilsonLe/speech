@@ -41,6 +41,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@speech/audio':
+        specifier: workspace:*
+        version: link:../../packages/audio
       '@speech/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -70,7 +73,11 @@ importers:
         specifier: ^19.1.6
         version: 19.2.3(@types/react@19.2.17)
 
-  packages/audio: {}
+  packages/audio:
+    dependencies:
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/benchmark: {}
 
