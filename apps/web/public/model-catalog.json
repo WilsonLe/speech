@@ -1,5 +1,29 @@
 {
   "schemaVersion": 1,
-  "models": [],
-  "note": "Production model metadata will be added only after license and redistribution review."
+  "models": [
+    {
+      "id": "vietasr-iter3-int8",
+      "version": "2025-07-24-e827965",
+      "displayName": "VietASR Iteration 3 Vietnamese INT8 candidate",
+      "languages": ["vi"],
+      "manifestUrl": "/model-packs/vietasr-iter3-int8/manifest.json",
+      "manifestSha256": "1bcb686a76028e61fb9ca523b2ebe0dfaf19a42684af4c425d00cdad0de9a66e",
+      "license": {
+        "spdx": "Apache-2.0",
+        "name": "Apache-2.0",
+        "redistributionAllowed": true
+      },
+      "runtime": {
+        "status": "candidate",
+        "installable": true,
+        "streamingReady": false,
+        "notes": [
+          "External model files are downloaded from a pinned Hugging Face revision and verified by SHA-256 before activation.",
+          "The inspected ONNX encoder accepts full feature sequences and lengths but does not expose streaming cache tensors; it is a Vietnamese baseline candidate until streaming parity is proven.",
+          "No model weights are committed to this repository."
+        ]
+      }
+    }
+  ],
+  "note": "Catalog entries may point to external model files only when license and checksum metadata are documented."
 }

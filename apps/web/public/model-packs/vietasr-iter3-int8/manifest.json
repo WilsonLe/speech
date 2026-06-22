@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "id": "vietasr-iter3-int8",
+  "version": "2025-07-24-e827965",
+  "displayName": "VietASR Iteration 3 Vietnamese INT8 candidate",
+  "languages": ["vi"],
+  "supportedLanguageModes": ["vi"],
+  "architecture": "rnnt",
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Apache-2.0",
+    "noticeUrl": "https://huggingface.co/zzasdf/viet_iter3_pseudo_label/raw/main/README.md",
+    "redistributionAllowed": true
+  },
+  "sampleRateHz": 16000,
+  "feature": {
+    "type": "log-mel",
+    "bins": 80,
+    "frameLengthMs": 25,
+    "frameShiftMs": 10,
+    "fftSize": 512,
+    "lowFreqHz": 20,
+    "highFreqHz": 7600,
+    "dither": 0,
+    "snipEdges": false
+  },
+  "tokenizer": {
+    "type": "sentencepiece",
+    "vocabularySize": 2000,
+    "byteFallback": false,
+    "blankId": 0,
+    "unkId": 2,
+    "bosId": 1,
+    "eosId": 1,
+    "wordBoundaryMarker": "▁"
+  },
+  "streaming": {
+    "chunkFrames": 64,
+    "chunkShiftFrames": 64,
+    "rightContextFrames": 0,
+    "maxSymbolsPerFrame": 4
+  },
+  "contextBiasing": {
+    "supported": false,
+    "algorithm": "token-trie",
+    "maxActiveEntries": 0,
+    "maxPhraseTokens": 0,
+    "defaultWeight": 0,
+    "maxCumulativeBonus": 0
+  },
+  "files": {
+    "encoder": {
+      "url": "https://huggingface.co/zzasdf/viet_iter3_pseudo_label/resolve/e827965a37aab92a4455566fac49c0e80a23afef/exp/encoder-epoch-12-avg-8.int8.onnx",
+      "sha256": "b3abdef7a660fea7faf5e076b3c7613b0fc98406707103784d018189bb522124",
+      "sizeBytes": 70876129,
+      "mediaType": "application/onnx"
+    },
+    "predictor": {
+      "url": "https://huggingface.co/zzasdf/viet_iter3_pseudo_label/resolve/e827965a37aab92a4455566fac49c0e80a23afef/exp/decoder-epoch-12-avg-8.int8.onnx",
+      "sha256": "0cf67da076d09c78b47c39de5fee80cb6608593db8eaf1b6ca9fd0d818220677",
+      "sizeBytes": 1308690,
+      "mediaType": "application/onnx"
+    },
+    "joiner": {
+      "url": "https://huggingface.co/zzasdf/viet_iter3_pseudo_label/resolve/e827965a37aab92a4455566fac49c0e80a23afef/exp/joiner-epoch-12-avg-8.int8.onnx",
+      "sha256": "38ec49e1c18e4feb0cad4de13e25c83a866cf56f4a66f22e8ff579d591a69a46",
+      "sizeBytes": 1033417,
+      "mediaType": "application/onnx"
+    },
+    "sentencepieceModel": {
+      "url": "https://huggingface.co/zzasdf/viet_iter3_pseudo_label/resolve/e827965a37aab92a4455566fac49c0e80a23afef/data/Vietnam_bpe_2000_new/bpe.model",
+      "sha256": "289dbb44527c13c419ae3a4d8ce6a349f01a97f8777e69934a77e3692d2f10db",
+      "sizeBytes": 270695,
+      "mediaType": "application/octet-stream"
+    },
+    "tokens": {
+      "url": "https://huggingface.co/zzasdf/viet_iter3_pseudo_label/resolve/e827965a37aab92a4455566fac49c0e80a23afef/data/Vietnam_bpe_2000_new/tokens.txt",
+      "sha256": "f536d03c2e95ebd2930cf0abec88e823bd17d3c1933da7ae6a82db3b80605e15",
+      "sizeBytes": 25847,
+      "mediaType": "text/plain; charset=utf-8"
+    }
+  },
+  "graphs": {
+    "encoder": {
+      "fileKey": "encoder",
+      "inputs": [
+        {
+          "name": "x",
+          "dataType": "float32",
+          "shape": ["N", "T", 80],
+          "description": "80-bin log-Mel feature frames"
+        },
+        {
+          "name": "x_lens",
+          "dataType": "int64",
+          "shape": ["N"],
+          "description": "feature-frame lengths"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "encoder_out",
+          "dataType": "float32",
+          "shape": ["N", "T", 512],
+          "description": "encoder activations"
+        },
+        {
+          "name": "encoder_out_lens",
+          "dataType": "int64",
+          "shape": ["N"],
+          "description": "encoder output lengths"
+        }
+      ]
+    },
+    "predictor": {
+      "fileKey": "predictor",
+      "inputs": [
+        {
+          "name": "y",
+          "dataType": "int64",
+          "shape": ["N", 2],
+          "description": "previous token context pairs"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "decoder_out",
+          "dataType": "float32",
+          "shape": ["N", 512],
+          "description": "predictor activations"
+        }
+      ]
+    },
+    "joiner": {
+      "fileKey": "joiner",
+      "inputs": [
+        {
+          "name": "encoder_out",
+          "dataType": "float32",
+          "shape": ["N", 512],
+          "description": "single-frame encoder vector"
+        },
+        {
+          "name": "decoder_out",
+          "dataType": "float32",
+          "shape": ["N", 512],
+          "description": "predictor vector"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logit",
+          "dataType": "float32",
+          "shape": ["N", 2000],
+          "description": "token logits"
+        }
+      ]
+    }
+  },
+  "recommended": {
+    "webgpu": false,
+    "wasmThreads": 1,
+    "expectedMemoryMb": 512
+  }
+}

@@ -1,3 +1,4 @@
+export * from './catalog';
 export * from './install';
 export * from './storage';
 
