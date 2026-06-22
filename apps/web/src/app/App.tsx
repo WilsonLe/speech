@@ -1,4 +1,5 @@
 import { RUNTIME_STATES } from '@speech/protocol';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { roadmap } from './milestones';
 
 const privacyPoints = [
@@ -19,9 +20,9 @@ export function App() {
         </p>
         <div className="hero-actions" aria-label="Foundation actions">
           <button type="button">Model install placeholder</button>
-          <button type="button" className="secondary">
-            Diagnostics placeholder
-          </button>
+          <a className="button secondary" href="#diagnostics">
+            View diagnostics
+          </a>
         </div>
       </section>
 
@@ -44,6 +45,8 @@ export function App() {
           </ul>
         </article>
       </section>
+
+      <DiagnosticsPanel />
 
       <section className="roadmap" aria-labelledby="roadmap-title">
         <h2 id="roadmap-title">Implementation roadmap</h2>
