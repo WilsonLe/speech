@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Synthetic transcript rendering parity fixtures; no audio or private transcripts.",
+  "description": "Synthetic transcript rendering and formatting parity fixtures; no audio or private transcripts.",
   "tokenizer": {
     "wordBoundaryMarker": "▁",
     "ignoredTokenIds": [0, 1],
@@ -42,6 +42,50 @@
       "description": "Mixed Vietnamese/English-style technical term split across subword pieces.",
       "tokenIds": [15, 16, 11, 12, 13, 14],
       "expectedText": "hôm nay deployment xong!"
+    }
+  ],
+  "formatCases": [
+    {
+      "id": "vi-percent-time-date",
+      "input": "hôm nay tăng hai mươi phần trăm lúc ba giờ mười lăm ngày hai mươi hai tháng sáu năm hai nghìn không trăm hai mươi sáu",
+      "options": {
+        "languageMode": "vi"
+      },
+      "expectedText": "hôm nay tăng 20% lúc 3:15 22/6/2026"
+    },
+    {
+      "id": "vi-currency-phone",
+      "input": "phí hai mươi nghìn đồng số điện thoại không chín không một hai ba",
+      "options": {
+        "languageMode": "vi"
+      },
+      "expectedText": "phí 20.000 đồng số điện thoại 090123"
+    },
+    {
+      "id": "vi-spoken-command-opt-in",
+      "input": "xin chào xuống dòng Minh",
+      "options": {
+        "languageMode": "vi",
+        "spokenCommandsEnabled": true
+      },
+      "expectedText": "xin chào\nMinh"
+    },
+    {
+      "id": "mixed-preserve-english-casing",
+      "input": "deploy API xong",
+      "options": {
+        "languageMode": "mixed"
+      },
+      "expectedText": "deploy API xong"
+    },
+    {
+      "id": "verbatim-no-itn",
+      "input": "hai mươi phần trăm",
+      "options": {
+        "languageMode": "vi",
+        "verbatim": true
+      },
+      "expectedText": "hai mươi phần trăm"
     }
   ]
 }
