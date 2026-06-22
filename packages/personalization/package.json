@@ -1,6 +1,6 @@
 {
   "name": "@speech/personalization",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Speaker profile and adapter runtime contracts.",
   "type": "module",
