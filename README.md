@@ -6,7 +6,7 @@ Local-first Vietnamese/English streaming speech-to-text PWA with private voice p
 
 ## Current status
 
-The project is a v0.1 release candidate for the PWA/runtime foundation:
+The project is tagged as the v0.1.0 PWA/runtime foundation release:
 
 - responsive transcript workspace with page-scoped push-to-talk controls;
 - microphone permission, `AudioWorklet` PCM capture, shared-memory and transferable-buffer audio transport primitives;
@@ -66,6 +66,7 @@ Start with:
 - `docs/instructions/model-card-vietasr-iter3-int8.instructions.md` — current external VietASR candidate model card.
 - `docs/instructions/benchmark.instructions.md` — diagnostics export and performance methodology.
 - `docs/instructions/release-validation.instructions.md` — accessibility, soak/stress, network-privacy, and performance evidence rules.
+- `docs/instructions/release-process.instructions.md` — release tag, checksum, GitHub release, and hosted PWA verification rules.
 - `docs/instructions/testing.instructions.md` — standard validation commands and CI expectations.
 
 ## Browser support and deployment
@@ -93,7 +94,7 @@ Current catalog:
 
 ## Known limitations
 
-- The current release candidate validates the browser runtime and model-pack contracts; it does not yet publish a production bilingual streaming ASR accuracy benchmark.
+- The v0.1.0 release validates the browser runtime and model-pack contracts; it does not yet publish a production bilingual streaming ASR accuracy benchmark.
 - The VietASR candidate is Vietnamese-only and its inspected ONNX encoder is full-sequence/length based, not streaming-cache based.
 - The benchmark panel runs synthetic worker timing for export plumbing and methodology; headline latency/RTF numbers require real model packs on declared reference hardware.
 - Global OS hotkeys, cross-application insertion, vocabulary steering, guided voice enrollment, and personal adapter training are roadmap items for later milestones.
