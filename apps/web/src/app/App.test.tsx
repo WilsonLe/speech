@@ -11,6 +11,7 @@ describe('App', () => {
     expect(html).toContain('Focused push-to-talk dictation');
     expect(html).toContain('Offline readiness and model lifecycle');
     expect(html).toContain('Browser capability report');
+    expect(html).toContain('Benchmark and diagnostics export');
     expect(html).toContain('Permission and capture check');
     expect(html).toContain('Dedicated worker ONNX Runtime loader');
     expect(html).toContain('Implementation roadmap');

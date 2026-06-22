@@ -1,4 +1,5 @@
 import { RUNTIME_STATES } from '@speech/protocol';
+import { BenchmarkPanel } from './BenchmarkPanel';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { MicrophonePanel } from './MicrophonePanel';
 import { ModelRuntimePanel } from './ModelRuntimePanel';
@@ -29,6 +30,9 @@ export function App() {
           <a className="button secondary" href="#diagnostics">
             View diagnostics
           </a>
+          <a className="button secondary" href="#benchmark">
+            Run benchmark
+          </a>
         </div>
       </section>
 
@@ -55,6 +59,7 @@ export function App() {
       <TranscriptPanel />
       <OfflineModelPanel />
       <DiagnosticsPanel />
+      <BenchmarkPanel />
       <MicrophonePanel />
       <ModelRuntimePanel />
 
