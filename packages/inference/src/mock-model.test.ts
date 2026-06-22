@@ -44,11 +44,20 @@ describe('mock ONNX model pack', () => {
 
     try {
       const features = new runtime.ort.Tensor('float32', Float32Array.from([1, 2, 3, 4]), [1, 4]);
+      const encoderCacheIn = new runtime.ort.Tensor(
+        'float32',
+        Float32Array.from([0, 0, 0, 0]),
+        [1, 4],
+      );
       const tokens = new runtime.ort.Tensor('float32', Float32Array.from([0.5, 0, 1, 0]), [1, 4]);
 
-      const encoded = await encoder.run({ features });
+      const encoded = await encoder.run({ features, encoder_cache_in: encoderCacheIn });
       const predicted = await predictor.run({ tokens });
       const encodedTensor = requireTensor(encoded['encoded'], 'encoded');
+      const encoderCacheOutTensor = requireTensor(
+        encoded['encoder_cache_out'],
+        'encoder_cache_out',
+      );
       const predictedTensor = requireTensor(predicted['predicted'], 'predicted');
       const logits = await joiner.run({
         encoded: encodedTensor,
@@ -57,6 +66,7 @@ describe('mock ONNX model pack', () => {
       const logitsTensor = requireTensor(logits['logits'], 'logits');
 
       expect(Array.from(encodedTensor.data as Float32Array)).toEqual([1, 2, 3, 4]);
+      expect(Array.from(encoderCacheOutTensor.data as Float32Array)).toEqual([1, 2, 3, 4]);
       expect(Array.from(predictedTensor.data as Float32Array)).toEqual([0.5, 0, 1, 0]);
       expect(Array.from(logitsTensor.data as Float32Array)).toEqual([1.5, 2, 4, 4]);
     } finally {

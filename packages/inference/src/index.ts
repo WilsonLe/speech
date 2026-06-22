@@ -1,3 +1,4 @@
+export * from './encoder-cache';
 export * from './onnx-runtime';
 export * from './provider-benchmark';
 

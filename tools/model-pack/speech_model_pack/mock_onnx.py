@@ -66,14 +66,54 @@ def mock_add_model(
     )
 
 
+def mock_encoder_cache_model(
+    *,
+    graph_name: str,
+    feature_input_name: str,
+    cache_input_name: str,
+    encoded_output_name: str,
+    cache_output_name: str,
+    elem_type: int = TENSOR_FLOAT,
+    shape: tuple[ShapeDimension, ...] = (1, 4),
+) -> bytes:
+    """Build a minimal encoder graph that carries recurrent cache state."""
+    return _model(
+        graph_name=graph_name,
+        nodes=[
+            _node(
+                name=f"{graph_name}-add-cache",
+                op_type="Add",
+                inputs=[feature_input_name, cache_input_name],
+                outputs=[encoded_output_name],
+            ),
+            _node(
+                name=f"{graph_name}-cache-out",
+                op_type="Identity",
+                inputs=[encoded_output_name],
+                outputs=[cache_output_name],
+            ),
+        ],
+        inputs=[
+            _value_info(feature_input_name, elem_type, shape),
+            _value_info(cache_input_name, elem_type, shape),
+        ],
+        outputs=[
+            _value_info(encoded_output_name, elem_type, shape),
+            _value_info(cache_output_name, elem_type, shape),
+        ],
+    )
+
+
 def generate_mock_graphs(output_dir: Path) -> dict[str, Path]:
     """Write the repository's tiny mock RNN-T component graphs."""
     output_dir.mkdir(parents=True, exist_ok=True)
     graphs = {
-        "encoder": mock_identity_model(
+        "encoder": mock_encoder_cache_model(
             graph_name="mock-encoder",
-            input_name="features",
-            output_name="encoded",
+            feature_input_name="features",
+            cache_input_name="encoder_cache_in",
+            encoded_output_name="encoded",
+            cache_output_name="encoder_cache_out",
         ),
         "predictor": mock_identity_model(
             graph_name="mock-predictor",
