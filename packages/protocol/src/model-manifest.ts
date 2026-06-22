@@ -116,6 +116,22 @@ export interface ManifestValidationResult {
   readonly errors: readonly string[];
 }
 
+const languageValues = new Set<SpeechLanguage>(['vi', 'en']);
+const languageModeValues = new Set<SpeechLanguageMode>(['vi', 'en', 'auto', 'mixed']);
+const tensorDataTypeValues = new Set<TensorDataType>([
+  'float32',
+  'float16',
+  'int32',
+  'int64',
+  'uint8',
+  'int8',
+  'bool',
+]);
+const tokenizerTypeValues = new Set(['sentencepiece', 'tokens']);
+const contextBiasingAlgorithmValues = new Set(['token-trie', 'aho-corasick']);
+const sha256Pattern = /^[a-f0-9]{64}$/;
+const modelIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
+
 export function validateSpeechModelManifestV2(value: unknown): ManifestValidationResult {
   const errors: string[] = [];
 
@@ -124,48 +140,574 @@ export function validateSpeechModelManifestV2(value: unknown): ManifestValidatio
   }
 
   if (value['schemaVersion'] !== 2) errors.push('schemaVersion must be 2');
+  validatePatternString(value['id'], 'id', modelIdPattern, errors);
+  validateNonEmptyString(value['version'], 'version', errors);
+  validateNonEmptyString(value['displayName'], 'displayName', errors);
   if (value['architecture'] !== 'rnnt') errors.push('architecture must be rnnt');
   if (value['sampleRateHz'] !== 16000) errors.push('sampleRateHz must be 16000');
 
-  for (const key of ['id', 'version', 'displayName'] as const) {
-    const field = value[key];
-    if (typeof field !== 'string' || field.length === 0) {
-      errors.push(`${key} must be a non-empty string`);
-    }
-  }
-
-  const languages = value['languages'];
-  if (!Array.isArray(languages) || languages.length === 0) {
-    errors.push('languages must be a non-empty array');
-  }
-
-  const license = value['license'];
-  if (!isRecord(license)) {
-    errors.push('license metadata is required');
-  } else if (
-    license['redistributionAllowed'] !== true &&
-    license['redistributionAllowed'] !== false
-  ) {
-    errors.push('license.redistributionAllowed must be boolean');
-  }
-
-  const files = value['files'];
-  if (!isRecord(files) || Object.keys(files).length === 0) {
-    errors.push('files must list at least one model artifact');
-  }
-
-  const graphs = value['graphs'];
-  if (!isRecord(graphs)) {
-    errors.push('graphs contract is required');
-  } else {
-    for (const graphName of ['encoder', 'predictor', 'joiner'] as const) {
-      if (!isRecord(graphs[graphName])) {
-        errors.push(`graphs.${graphName} is required`);
+  const languages = validateEnumArray(value['languages'], 'languages', languageValues, errors);
+  const supportedLanguageModes = validateEnumArray(
+    value['supportedLanguageModes'],
+    'supportedLanguageModes',
+    languageModeValues,
+    errors,
+  );
+  if (languages !== undefined && supportedLanguageModes !== undefined) {
+    for (const language of languages) {
+      if (!supportedLanguageModes.includes(language)) {
+        errors.push(`supportedLanguageModes must include language ${language}`);
       }
     }
   }
 
+  validateLicense(value['license'], errors);
+  validateFeature(value['feature'], errors);
+  const vocabularySize = validateTokenizer(value['tokenizer'], errors);
+  validateStreaming(value['streaming'], errors);
+  validateContextBiasing(value['contextBiasing'], errors);
+  const fileKeys = validateFiles(value['files'], errors);
+  validateGraphs(value['graphs'], fileKeys, errors);
+  validatePersonalization(value['personalization'], fileKeys, errors);
+  validateRecommended(value['recommended'], errors);
+
+  if (vocabularySize !== undefined) {
+    validateTokenizerIds(value['tokenizer'], vocabularySize, errors);
+  }
+
   return { ok: errors.length === 0, errors };
+}
+
+export function parseSpeechModelManifestV2(value: unknown): SpeechModelManifestV2 {
+  const result = validateSpeechModelManifestV2(value);
+  if (!result.ok) {
+    throw new Error(`Invalid SpeechModelManifestV2: ${result.errors.join('; ')}`);
+  }
+  return value as SpeechModelManifestV2;
+}
+
+function validateLicense(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('license must be an object');
+    return;
+  }
+  validateNonEmptyString(value['name'], 'license.name', errors);
+  validateOptionalNonEmptyString(value['spdx'], 'license.spdx', errors);
+  validateOptionalNonEmptyString(value['noticeUrl'], 'license.noticeUrl', errors);
+  if (typeof value['redistributionAllowed'] !== 'boolean') {
+    errors.push('license.redistributionAllowed must be boolean');
+  }
+}
+
+function validateFeature(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('feature must be an object');
+    return;
+  }
+  if (value['type'] !== 'log-mel') errors.push('feature.type must be log-mel');
+  validatePositiveInteger(value['bins'], 'feature.bins', errors);
+  const frameLengthMs = validatePositiveNumber(
+    value['frameLengthMs'],
+    'feature.frameLengthMs',
+    errors,
+  );
+  validatePositiveNumber(value['frameShiftMs'], 'feature.frameShiftMs', errors);
+  const fftSize = validatePositiveInteger(value['fftSize'], 'feature.fftSize', errors);
+  const lowFreqHz = validateNonNegativeNumber(value['lowFreqHz'], 'feature.lowFreqHz', errors);
+  const highFreqHz = validatePositiveNumber(value['highFreqHz'], 'feature.highFreqHz', errors);
+  validateNonNegativeNumber(value['dither'], 'feature.dither', errors);
+  if (typeof value['snipEdges'] !== 'boolean') errors.push('feature.snipEdges must be boolean');
+
+  if (fftSize !== undefined && !isPowerOfTwo(fftSize)) {
+    errors.push('feature.fftSize must be a power of two');
+  }
+  if (frameLengthMs !== undefined && fftSize !== undefined) {
+    const frameLengthSamples = Math.round((16_000 * frameLengthMs) / 1_000);
+    if (fftSize < frameLengthSamples) {
+      errors.push('feature.fftSize must be at least the frame length in samples');
+    }
+  }
+  if (lowFreqHz !== undefined && highFreqHz !== undefined) {
+    if (highFreqHz <= lowFreqHz || highFreqHz > 8_000) {
+      errors.push('feature.highFreqHz must be above lowFreqHz and at or below Nyquist');
+    }
+  }
+}
+
+function validateTokenizer(value: unknown, errors: string[]): number | undefined {
+  if (!isRecord(value)) {
+    errors.push('tokenizer must be an object');
+    return undefined;
+  }
+  validateEnumValue(value['type'], 'tokenizer.type', tokenizerTypeValues, errors);
+  if (typeof value['byteFallback'] !== 'boolean')
+    errors.push('tokenizer.byteFallback must be boolean');
+  return validatePositiveInteger(value['vocabularySize'], 'tokenizer.vocabularySize', errors);
+}
+
+function validateTokenizerIds(value: unknown, vocabularySize: number, errors: string[]): void {
+  if (!isRecord(value)) {
+    return;
+  }
+  for (const key of ['blankId', 'unkId', 'bosId', 'eosId'] as const) {
+    const idValue = value[key];
+    if (key === 'blankId' || idValue !== undefined) {
+      validateTokenId(idValue, `tokenizer.${key}`, vocabularySize, errors);
+    }
+  }
+
+  const languageTokenIds = value['languageTokenIds'];
+  if (languageTokenIds !== undefined) {
+    if (!isRecord(languageTokenIds)) {
+      errors.push('tokenizer.languageTokenIds must be an object');
+    } else {
+      for (const [mode, tokenId] of Object.entries(languageTokenIds)) {
+        if (!languageModeValues.has(mode as SpeechLanguageMode)) {
+          errors.push(`tokenizer.languageTokenIds.${mode} is not a supported language mode`);
+          continue;
+        }
+        validateTokenId(tokenId, `tokenizer.languageTokenIds.${mode}`, vocabularySize, errors);
+      }
+    }
+  }
+
+  validateOptionalNonEmptyString(
+    value['wordBoundaryMarker'],
+    'tokenizer.wordBoundaryMarker',
+    errors,
+  );
+}
+
+function validateStreaming(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('streaming must be an object');
+    return;
+  }
+  const chunkFrames = validatePositiveInteger(
+    value['chunkFrames'],
+    'streaming.chunkFrames',
+    errors,
+  );
+  const chunkShiftFrames = validatePositiveInteger(
+    value['chunkShiftFrames'],
+    'streaming.chunkShiftFrames',
+    errors,
+  );
+  validateNonNegativeInteger(value['rightContextFrames'], 'streaming.rightContextFrames', errors);
+  validatePositiveInteger(value['maxSymbolsPerFrame'], 'streaming.maxSymbolsPerFrame', errors);
+  if (
+    chunkFrames !== undefined &&
+    chunkShiftFrames !== undefined &&
+    chunkShiftFrames > chunkFrames
+  ) {
+    errors.push('streaming.chunkShiftFrames must be less than or equal to chunkFrames');
+  }
+}
+
+function validateContextBiasing(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('contextBiasing must be an object');
+    return;
+  }
+  const supported = value['supported'];
+  if (typeof supported !== 'boolean') errors.push('contextBiasing.supported must be boolean');
+  validateEnumValue(
+    value['algorithm'],
+    'contextBiasing.algorithm',
+    contextBiasingAlgorithmValues,
+    errors,
+  );
+  const maxActiveEntries = validateNonNegativeInteger(
+    value['maxActiveEntries'],
+    'contextBiasing.maxActiveEntries',
+    errors,
+  );
+  const maxPhraseTokens = validateNonNegativeInteger(
+    value['maxPhraseTokens'],
+    'contextBiasing.maxPhraseTokens',
+    errors,
+  );
+  validateNonNegativeNumber(value['defaultWeight'], 'contextBiasing.defaultWeight', errors);
+  const maxCumulativeBonus = validateNonNegativeNumber(
+    value['maxCumulativeBonus'],
+    'contextBiasing.maxCumulativeBonus',
+    errors,
+  );
+  if (supported === true) {
+    if (maxActiveEntries === 0) errors.push('contextBiasing.maxActiveEntries must be positive');
+    if (maxPhraseTokens === 0) errors.push('contextBiasing.maxPhraseTokens must be positive');
+    if (maxCumulativeBonus === 0) errors.push('contextBiasing.maxCumulativeBonus must be positive');
+  }
+}
+
+function validateFiles(value: unknown, errors: string[]): ReadonlySet<string> {
+  const fileKeys = new Set<string>();
+  if (!isRecord(value)) {
+    errors.push('files must be an object');
+    return fileKeys;
+  }
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    errors.push('files must list at least one model artifact');
+  }
+
+  for (const [fileKey, fileValue] of entries) {
+    if (fileKey.length === 0) errors.push('files keys must be non-empty');
+    fileKeys.add(fileKey);
+    const path = `files.${fileKey}`;
+    if (!isRecord(fileValue)) {
+      errors.push(`${path} must be an object`);
+      continue;
+    }
+    validateNonEmptyString(fileValue['url'], `${path}.url`, errors);
+    validatePatternString(fileValue['sha256'], `${path}.sha256`, sha256Pattern, errors);
+    validatePositiveInteger(fileValue['sizeBytes'], `${path}.sizeBytes`, errors);
+    validateNonEmptyString(fileValue['mediaType'], `${path}.mediaType`, errors);
+  }
+
+  return fileKeys;
+}
+
+function validateGraphs(value: unknown, fileKeys: ReadonlySet<string>, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('graphs must be an object');
+    return;
+  }
+
+  for (const graphName of ['encoder', 'predictor', 'joiner'] as const) {
+    if (!isRecord(value[graphName])) {
+      errors.push(`graphs.${graphName} is required`);
+    } else {
+      validateGraph(value[graphName], `graphs.${graphName}`, fileKeys, errors);
+    }
+  }
+
+  for (const graphName of ['speakerEncoder', 'adapter', 'finalizer'] as const) {
+    if (value[graphName] !== undefined) {
+      validateGraph(value[graphName], `graphs.${graphName}`, fileKeys, errors);
+    }
+  }
+}
+
+function validateGraph(
+  value: unknown,
+  path: string,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  const fileKey = validateNonEmptyString(value['fileKey'], `${path}.fileKey`, errors);
+  if (fileKey !== undefined && !fileKeys.has(fileKey)) {
+    errors.push(`${path}.fileKey must reference an entry in files`);
+  }
+
+  const inputNames = validateTensorArray(value['inputs'], `${path}.inputs`, errors);
+  const outputNames = validateTensorArray(value['outputs'], `${path}.outputs`, errors);
+  validateStateRelationships(value['stateRelationships'], path, inputNames, outputNames, errors);
+}
+
+function validateTensorArray(value: unknown, path: string, errors: string[]): ReadonlySet<string> {
+  const names = new Set<string>();
+  if (!Array.isArray(value) || value.length === 0) {
+    errors.push(`${path} must be a non-empty array`);
+    return names;
+  }
+
+  value.forEach((tensor, index) => {
+    const tensorPath = `${path}[${index}]`;
+    if (!isRecord(tensor)) {
+      errors.push(`${tensorPath} must be an object`);
+      return;
+    }
+
+    const name = validateNonEmptyString(tensor['name'], `${tensorPath}.name`, errors);
+    if (name !== undefined) {
+      if (names.has(name)) errors.push(`${tensorPath}.name must be unique within ${path}`);
+      names.add(name);
+    }
+    validateEnumValue(tensor['dataType'], `${tensorPath}.dataType`, tensorDataTypeValues, errors);
+    validateNonEmptyString(tensor['description'], `${tensorPath}.description`, errors);
+
+    const shape = tensor['shape'];
+    if (!Array.isArray(shape) || shape.length === 0) {
+      errors.push(`${tensorPath}.shape must be a non-empty array`);
+    } else {
+      shape.forEach((dimension, dimensionIndex) => {
+        const dimensionPath = `${tensorPath}.shape[${dimensionIndex}]`;
+        if (typeof dimension === 'string') {
+          if (dimension.length === 0) errors.push(`${dimensionPath} must not be empty`);
+        } else if (!Number.isInteger(dimension) || dimension <= 0) {
+          errors.push(`${dimensionPath} must be a positive integer or symbolic string`);
+        }
+      });
+    }
+  });
+
+  return names;
+}
+
+function validateStateRelationships(
+  value: unknown,
+  graphPath: string,
+  inputNames: ReadonlySet<string>,
+  outputNames: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    errors.push(`${graphPath}.stateRelationships must be an array`);
+    return;
+  }
+
+  value.forEach((relationship, index) => {
+    const path = `${graphPath}.stateRelationships[${index}]`;
+    if (!isRecord(relationship)) {
+      errors.push(`${path} must be an object`);
+      return;
+    }
+    const input = validateNonEmptyString(relationship['input'], `${path}.input`, errors);
+    const output = validateNonEmptyString(relationship['output'], `${path}.output`, errors);
+    if (typeof relationship['resetAtUtteranceBoundary'] !== 'boolean') {
+      errors.push(`${path}.resetAtUtteranceBoundary must be boolean`);
+    }
+    if (input !== undefined && !inputNames.has(input)) {
+      errors.push(`${path}.input must reference a graph input tensor`);
+    }
+    if (output !== undefined && !outputNames.has(output)) {
+      errors.push(`${path}.output must reference a graph output tensor`);
+    }
+  });
+}
+
+function validatePersonalization(
+  value: unknown,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (value === undefined) return;
+  if (!isRecord(value)) {
+    errors.push('personalization must be an object');
+    return;
+  }
+
+  const speakerEmbedding = value['speakerEmbedding'];
+  if (speakerEmbedding !== undefined) {
+    if (!isRecord(speakerEmbedding)) {
+      errors.push('personalization.speakerEmbedding must be an object');
+    } else {
+      if (typeof speakerEmbedding['supported'] !== 'boolean') {
+        errors.push('personalization.speakerEmbedding.supported must be boolean');
+      }
+      validatePositiveInteger(
+        speakerEmbedding['dimension'],
+        'personalization.speakerEmbedding.dimension',
+        errors,
+      );
+      validateNonEmptyString(
+        speakerEmbedding['inputName'],
+        'personalization.speakerEmbedding.inputName',
+        errors,
+      );
+      const encoderFileKey = validateNonEmptyString(
+        speakerEmbedding['encoderFileKey'],
+        'personalization.speakerEmbedding.encoderFileKey',
+        errors,
+      );
+      if (encoderFileKey !== undefined && !fileKeys.has(encoderFileKey)) {
+        errors.push('personalization.speakerEmbedding.encoderFileKey must reference files');
+      }
+    }
+  }
+
+  const residualAdapter = value['residualAdapter'];
+  if (residualAdapter !== undefined) {
+    if (!isRecord(residualAdapter)) {
+      errors.push('personalization.residualAdapter must be an object');
+    } else {
+      if (typeof residualAdapter['supported'] !== 'boolean') {
+        errors.push('personalization.residualAdapter.supported must be boolean');
+      }
+      validatePositiveInteger(
+        residualAdapter['contractVersion'],
+        'personalization.residualAdapter.contractVersion',
+        errors,
+      );
+      validateStringArray(
+        residualAdapter['insertionPoints'],
+        'personalization.residualAdapter.insertionPoints',
+        errors,
+      );
+      validatePositiveInteger(
+        residualAdapter['maxParameters'],
+        'personalization.residualAdapter.maxParameters',
+        errors,
+      );
+    }
+  }
+}
+
+function validateRecommended(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('recommended must be an object');
+    return;
+  }
+  if (typeof value['webgpu'] !== 'boolean') errors.push('recommended.webgpu must be boolean');
+  validatePositiveInteger(value['wasmThreads'], 'recommended.wasmThreads', errors);
+  validatePositiveInteger(value['expectedMemoryMb'], 'recommended.expectedMemoryMb', errors);
+}
+
+function validateEnumArray<T extends string>(
+  value: unknown,
+  path: string,
+  allowed: ReadonlySet<T>,
+  errors: string[],
+): readonly T[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) {
+    errors.push(`${path} must be a non-empty array`);
+    return undefined;
+  }
+
+  const seen = new Set<T>();
+  const values: T[] = [];
+  value.forEach((entry, index) => {
+    if (typeof entry !== 'string' || !allowed.has(entry as T)) {
+      errors.push(`${path}[${index}] is not supported`);
+      return;
+    }
+    const typedEntry = entry as T;
+    if (seen.has(typedEntry)) errors.push(`${path}[${index}] must be unique`);
+    seen.add(typedEntry);
+    values.push(typedEntry);
+  });
+  return values;
+}
+
+function validateStringArray(value: unknown, path: string, errors: string[]): readonly string[] {
+  if (!Array.isArray(value)) {
+    errors.push(`${path} must be an array`);
+    return [];
+  }
+  const seen = new Set<string>();
+  value.forEach((entry, index) => {
+    if (typeof entry !== 'string' || entry.length === 0) {
+      errors.push(`${path}[${index}] must be a non-empty string`);
+      return;
+    }
+    if (seen.has(entry)) errors.push(`${path}[${index}] must be unique`);
+    seen.add(entry);
+  });
+  return [...seen];
+}
+
+function validateEnumValue(
+  value: unknown,
+  path: string,
+  allowed: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (typeof value !== 'string' || !allowed.has(value)) {
+    errors.push(`${path} is not supported`);
+  }
+}
+
+function validateTokenId(
+  value: unknown,
+  path: string,
+  vocabularySize: number,
+  errors: string[],
+): number | undefined {
+  const tokenId = validateNonNegativeInteger(value, path, errors);
+  if (tokenId !== undefined && tokenId >= vocabularySize) {
+    errors.push(`${path} must be less than tokenizer.vocabularySize`);
+  }
+  return tokenId;
+}
+
+function validatePositiveInteger(
+  value: unknown,
+  path: string,
+  errors: string[],
+): number | undefined {
+  if (!Number.isInteger(value) || (value as number) <= 0) {
+    errors.push(`${path} must be a positive integer`);
+    return undefined;
+  }
+  return value as number;
+}
+
+function validateNonNegativeInteger(
+  value: unknown,
+  path: string,
+  errors: string[],
+): number | undefined {
+  if (!Number.isInteger(value) || (value as number) < 0) {
+    errors.push(`${path} must be a non-negative integer`);
+    return undefined;
+  }
+  return value as number;
+}
+
+function validatePositiveNumber(
+  value: unknown,
+  path: string,
+  errors: string[],
+): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    errors.push(`${path} must be a positive number`);
+    return undefined;
+  }
+  return value;
+}
+
+function validateNonNegativeNumber(
+  value: unknown,
+  path: string,
+  errors: string[],
+): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    errors.push(`${path} must be a non-negative number`);
+    return undefined;
+  }
+  return value;
+}
+
+function validateNonEmptyString(
+  value: unknown,
+  path: string,
+  errors: string[],
+): string | undefined {
+  if (typeof value !== 'string' || value.length === 0) {
+    errors.push(`${path} must be a non-empty string`);
+    return undefined;
+  }
+  return value;
+}
+
+function validateOptionalNonEmptyString(value: unknown, path: string, errors: string[]): void {
+  if (value !== undefined) {
+    validateNonEmptyString(value, path, errors);
+  }
+}
+
+function validatePatternString(
+  value: unknown,
+  path: string,
+  pattern: RegExp,
+  errors: string[],
+): string | undefined {
+  const stringValue = validateNonEmptyString(value, path, errors);
+  if (stringValue !== undefined && !pattern.test(stringValue)) {
+    errors.push(`${path} has invalid format`);
+  }
+  return stringValue;
+}
+
+function isPowerOfTwo(value: number): boolean {
+  return Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
