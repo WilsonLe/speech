@@ -354,25 +354,56 @@ h2 {
 }
 
 .transcript-display {
-  min-height: 13rem;
   margin: 1.25rem 0;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 1.25rem;
   padding: 1.25rem;
   color: #f8fafc;
   background: rgba(2, 6, 23, 0.58);
-  font-size: clamp(1.35rem, 4vw, 2.25rem);
-  line-height: 1.45;
-  white-space: pre-wrap;
 }
 
-.transcript-placeholder {
+.transcript-editor-label {
+  display: block;
+  margin-bottom: 0.65rem;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.transcript-editor {
+  width: 100%;
+  min-height: 13rem;
+  resize: vertical;
+  border: 0;
+  border-radius: 0.9rem;
+  padding: 1rem;
+  color: #f8fafc;
+  background: rgba(2, 6, 23, 0.7);
+  font: inherit;
+  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  line-height: 1.45;
+}
+
+.transcript-editor::placeholder {
   color: #64748b;
 }
 
+.transcript-editor:focus-visible,
+.transcript-settings-card select:focus-visible,
+.transcript-settings-card input:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 3px;
+}
+
 .transcript-provisional {
+  margin: 0.85rem 0 0;
   color: #bae6fd;
   background: linear-gradient(transparent 62%, rgba(56, 189, 248, 0.22) 62%);
+  font-size: clamp(1.05rem, 2.4vw, 1.35rem);
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .transcript-controls {
@@ -391,6 +422,72 @@ h2 {
 .push-to-talk-button[aria-pressed='true'] {
   color: #450a0a;
   background: #fca5a5;
+}
+
+.transcript-settings-privacy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.75fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.transcript-settings-card,
+.transcript-privacy-card {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.42);
+}
+
+.transcript-settings-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.transcript-settings-card legend,
+.transcript-privacy-card h3 {
+  margin-bottom: 0.5rem;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.transcript-settings-card label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem;
+  align-items: center;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.transcript-settings-card label[for='language-mode-select'] {
+  grid-template-columns: 1fr;
+}
+
+.transcript-settings-card select {
+  width: min(100%, 22rem);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.88);
+  font: inherit;
+}
+
+.transcript-settings-card input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent-strong);
+}
+
+.transcript-privacy-card ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.transcript-privacy-card li {
+  color: #cbd5e1;
+  line-height: 1.6;
 }
 
 .transcript-footer {
@@ -555,6 +652,7 @@ h2 {
   .panel-grid,
   .diagnostics-grid,
   .transcript-layout,
+  .transcript-settings-privacy,
   .transcript-footer,
   .offline-grid,
   .model-card {

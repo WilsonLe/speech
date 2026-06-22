@@ -8,7 +8,9 @@ import {
 } from '@speech/audio';
 import pcmCaptureWorkletUrl from '../worklets/pcm-capture.worklet.ts?worker&url';
 import {
+  buildTranscriptDownloadText,
   clearTranscript,
+  editTranscriptCommittedText,
   failTranscriptCapture,
   finishTranscriptUtterance,
   getTranscriptPlainText,
@@ -22,6 +24,28 @@ import {
 
 const pushToTalkKeyLabel = 'Space';
 
+type TranscriptLanguageMode = 'vi' | 'en' | 'auto';
+
+interface TranscriptSettingsState {
+  readonly languageMode: TranscriptLanguageMode;
+  readonly formattingEnabled: boolean;
+  readonly spokenCommandsEnabled: boolean;
+  readonly includeTimingMetadataInDownload: boolean;
+}
+
+const languageModeLabels: Record<TranscriptLanguageMode, string> = {
+  vi: 'Vietnamese',
+  en: 'English',
+  auto: 'Auto/code-switch',
+};
+
+const defaultTranscriptSettings: TranscriptSettingsState = {
+  languageMode: 'auto',
+  formattingEnabled: true,
+  spokenCommandsEnabled: false,
+  includeTimingMetadataInDownload: false,
+};
+
 export function TranscriptPanel() {
   const microphoneController = useMemo(() => new MicrophoneCaptureController(), []);
   const workletController = useRef<PcmCaptureWorkletController | null>(null);
@@ -31,6 +55,7 @@ export function TranscriptPanel() {
   const [workspace, setWorkspace] = useState<TranscriptWorkspaceState>(
     initialTranscriptWorkspaceState,
   );
+  const [settings, setSettings] = useState<TranscriptSettingsState>(defaultTranscriptSettings);
   const [copyStatus, setCopyStatus] = useState('Transcript has not been copied yet.');
 
   const updateWorkspace = useCallback(
@@ -199,7 +224,18 @@ export function TranscriptPanel() {
 
   function downloadTranscript() {
     if (!hasTranscriptText) return;
-    const blob = new Blob([`${transcriptText}\n`], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob(
+      [
+        buildTranscriptDownloadText(workspace, {
+          includeTimingMetadata: settings.includeTimingMetadataInDownload,
+          generatedAtIso: new Date().toISOString(),
+          languageModeLabel: languageModeLabels[settings.languageMode],
+          formattingEnabled: settings.formattingEnabled,
+          spokenCommandsEnabled: settings.spokenCommandsEnabled,
+        }),
+      ],
+      { type: 'text/plain;charset=utf-8' },
+    );
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -231,23 +267,38 @@ export function TranscriptPanel() {
             value={formatCaptureStatus(workspace.status)}
             tone={statusTone(workspace.status)}
           />
-          <StatusPill label="Mode" value="Auto/code-switch ready UI" tone="neutral" />
+          <StatusPill
+            label="Mode"
+            value={languageModeLabels[settings.languageMode]}
+            tone="neutral"
+          />
         </div>
       </div>
 
-      <div
-        className="transcript-display"
-        aria-label="Transcript output"
-        aria-live="polite"
-        aria-atomic="false"
-      >
-        {workspace.committed.length > 0 ? (
-          <span>{workspace.committed}</span>
-        ) : (
-          <span className="transcript-placeholder">Transcript will appear here.</span>
-        )}
+      <div className="transcript-display">
+        <label className="transcript-editor-label" htmlFor="committed-transcript-text">
+          Transcript output — committed text
+        </label>
+        <textarea
+          id="committed-transcript-text"
+          className="transcript-editor"
+          value={workspace.committed}
+          placeholder="Transcript will appear here."
+          onChange={(event) => {
+            const { value } = event.currentTarget;
+            updateWorkspace((current) => editTranscriptCommittedText(current, value));
+            setCopyStatus('Transcript has local edits that have not been copied yet.');
+          }}
+          spellCheck="true"
+        />
         {displayProvisional.length > 0 ? (
-          <span className="transcript-provisional">{displayProvisional}</span>
+          <p
+            className="transcript-provisional"
+            aria-label="Provisional transcript suffix"
+            aria-live="polite"
+          >
+            {displayProvisional}
+          </p>
         ) : null}
       </div>
 
@@ -318,6 +369,75 @@ export function TranscriptPanel() {
       <p className="status-message" aria-live="polite">
         {copyStatus}
       </p>
+
+      <div className="transcript-settings-privacy" aria-label="Transcript settings and privacy">
+        <fieldset className="transcript-settings-card">
+          <legend>Transcript settings</legend>
+          <label htmlFor="language-mode-select">
+            Recognition mode
+            <select
+              id="language-mode-select"
+              value={settings.languageMode}
+              onChange={(event) => {
+                const value = event.currentTarget.value as TranscriptLanguageMode;
+                setSettings((current) => ({ ...current, languageMode: value }));
+              }}
+            >
+              <option value="vi">Vietnamese</option>
+              <option value="en">English</option>
+              <option value="auto">Auto/code-switch</option>
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.formattingEnabled}
+              onChange={(event) => {
+                const { checked } = event.currentTarget;
+                setSettings((current) => ({ ...current, formattingEnabled: checked }));
+              }}
+            />
+            Enable final formatting when formatter integration is active
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.spokenCommandsEnabled}
+              onChange={(event) => {
+                const { checked } = event.currentTarget;
+                setSettings((current) => ({ ...current, spokenCommandsEnabled: checked }));
+              }}
+            />
+            Enable spoken commands only after explicit opt-in
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.includeTimingMetadataInDownload}
+              onChange={(event) => {
+                const { checked } = event.currentTarget;
+                setSettings((current) => ({
+                  ...current,
+                  includeTimingMetadataInDownload: checked,
+                }));
+              }}
+            />
+            Include local timing metadata in downloaded .txt files
+          </label>
+        </fieldset>
+
+        <article className="transcript-privacy-card" aria-labelledby="transcript-privacy-title">
+          <h3 id="transcript-privacy-title">Privacy and export</h3>
+          <ul>
+            <li>
+              Copy uses the browser Clipboard API and never sends transcript text to a server.
+            </li>
+            <li>Download creates a local text file from the committed transcript only.</li>
+            <li>Provisional text remains visual guidance and is excluded from copy/download.</li>
+            <li>Network use is limited to app updates and explicit model lifecycle actions.</li>
+          </ul>
+        </article>
+      </div>
 
       <dl className="transcript-footer" aria-label="Transcript latency and capture status">
         <div>

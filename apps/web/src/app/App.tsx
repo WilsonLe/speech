@@ -23,7 +23,9 @@ export function App() {
           low-flicker partials, private vocabulary steering, and guided voice personalization.
         </p>
         <div className="hero-actions" aria-label="Foundation actions">
-          <button type="button">Model install placeholder</button>
+          <a className="button" href="#offline-model-title">
+            Manage offline model
+          </a>
           <a className="button secondary" href="#diagnostics">
             View diagnostics
           </a>
