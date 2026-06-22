@@ -25,7 +25,7 @@
     "license-and-generated-file-check": "node scripts/license-and-generated-file-check.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "^9.29.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.3",
     "eslint": "^9.29.0",
     "eslint-plugin-react-hooks": "^5.2.0",
