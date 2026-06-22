@@ -14,12 +14,13 @@
     "chromium-smoke": "playwright test"
   },
   "dependencies": {
+    "@speech/audio": "workspace:*",
     "@speech/protocol": "workspace:*",
     "@vitejs/plugin-react": "^4.5.2",
-    "vite": "^6.3.5",
-    "vite-plugin-pwa": "^1.0.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "vite": "^6.3.5",
+    "vite-plugin-pwa": "^1.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.1",

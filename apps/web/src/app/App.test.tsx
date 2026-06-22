@@ -9,6 +9,7 @@ describe('App', () => {
     expect(html).toContain('Local-first bilingual dictation');
     expect(html).toContain('Privacy baseline');
     expect(html).toContain('Browser capability report');
+    expect(html).toContain('Permission and capture check');
     expect(html).toContain('Implementation roadmap');
   });
 });
