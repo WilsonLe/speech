@@ -184,6 +184,14 @@ export function MicrophonePanel() {
           clippingRatio: message.metrics.clippingRatio,
         }));
         break;
+      case 'RING_BUFFER_STATUS':
+        setCaptureSummary((current) => ({
+          ...current,
+          sampleRateHz: message.sampleRateHz,
+          samples: message.state.writeSequence,
+          message: `Shared ring buffer queued ${message.state.availableSamples} samples with ${message.state.overrunCount} overruns.`,
+        }));
+        break;
       case 'CAPTURE_ERROR':
         setError({
           code: message.code,

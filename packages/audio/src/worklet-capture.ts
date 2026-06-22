@@ -1,6 +1,12 @@
 import type { ErrorCode } from '@speech/protocol';
 import type { AudioContextLike, ConnectableAudioNodeLike } from './microphone';
 import type { PcmLevelMetrics } from './pcm';
+import {
+  getSharedPcmRingBufferTransfer,
+  type PcmRingBufferState,
+  type SharedPcmRingBuffer,
+  type SharedPcmRingBufferTransfer,
+} from './ring-buffer';
 
 export const PCM_CAPTURE_PROCESSOR_NAME = 'pcm-capture';
 
@@ -35,6 +41,15 @@ export interface PcmCaptureStateMessage {
   readonly capturedFrame: number;
 }
 
+export interface PcmCaptureRingBufferStatusMessage {
+  readonly type: 'RING_BUFFER_STATUS';
+  readonly sequence: number;
+  readonly sampleRateHz: number;
+  readonly capturedFrame: number;
+  readonly droppedSamples: number;
+  readonly state: PcmRingBufferState;
+}
+
 export interface PcmCaptureErrorMessage {
   readonly type: 'CAPTURE_ERROR';
   readonly sequence: number;
@@ -46,9 +61,12 @@ export type PcmCaptureWorkletMessage =
   | PcmCaptureLevelMessage
   | PcmCaptureChunkMessage
   | PcmCaptureStateMessage
+  | PcmCaptureRingBufferStatusMessage
   | PcmCaptureErrorMessage;
 
-export type PcmCaptureWorkletCommand = { readonly type: 'START' | 'STOP' | 'RESET' };
+export type PcmCaptureWorkletCommand =
+  | { readonly type: 'START' | 'STOP' | 'RESET' | 'USE_CHUNK_MESSAGES' }
+  | { readonly type: 'USE_SHARED_RING_BUFFER'; readonly ringBuffer: SharedPcmRingBufferTransfer };
 
 export interface PcmCaptureWorkletFailure {
   readonly code: ErrorCode;
@@ -75,6 +93,7 @@ export interface PcmCaptureWorkletAttachOptions {
   readonly chunkSizeSamples?: number;
   readonly levelIntervalMs?: number;
   readonly clipThreshold?: number;
+  readonly sharedRingBuffer?: SharedPcmRingBuffer;
   readonly onMessage?: (message: PcmCaptureWorkletMessage) => void;
   readonly createAudioWorkletNode?: (
     context: AudioContextLike,
@@ -182,6 +201,14 @@ export async function attachPcmCaptureWorklet(
 
   workletNode.port.onmessage = (event) => options.onMessage?.(event.data);
   workletNode.port.start?.();
+  if (options.sharedRingBuffer) {
+    workletNode.port.postMessage({
+      type: 'USE_SHARED_RING_BUFFER',
+      ringBuffer: getSharedPcmRingBufferTransfer(options.sharedRingBuffer),
+    });
+  } else {
+    workletNode.port.postMessage({ type: 'USE_CHUNK_MESSAGES' });
+  }
   options.sourceNode.connect(workletNode);
   workletNode.connect(options.audioContext.destination);
 
