@@ -44,6 +44,9 @@ importers:
       '@speech/audio':
         specifier: workspace:*
         version: link:../../packages/audio
+      '@speech/benchmark':
+        specifier: workspace:*
+        version: link:../../packages/benchmark
       '@speech/inference':
         specifier: workspace:*
         version: link:../../packages/inference
