@@ -150,7 +150,8 @@ h2 {
 }
 
 .diagnostics,
-.microphone {
+.microphone,
+.runtime {
   margin-bottom: 1rem;
 }
 
@@ -253,6 +254,12 @@ h2 {
   border-radius: 0.9rem;
   padding: 0.85rem 1rem;
   background: rgba(15, 23, 42, 0.72);
+}
+
+.runtime-actions {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
 }
 
 .error-message {
