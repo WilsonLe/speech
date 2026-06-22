@@ -2,15 +2,16 @@
 
 The Apache-2.0 code license does not cover model weights, datasets, derived checkpoints, pseudo-labels, or private voice recordings.
 
-Before any model pack is published, document:
+Before any model pack is published or listed as installable, document:
 
 - model identity and version;
 - architecture and training sources;
 - license name/SPDX identifier when available;
 - redistribution rights;
 - model card URL or local notice;
-- checksums for every downloadable file;
-- known restrictions and attribution requirements.
+- checksums and sizes for every downloadable file;
+- graph-contract compatibility and browser runtime status;
+- known restrictions, attribution requirements, and evaluation gaps.
 
 No production model weights are committed to this repository.
 
@@ -22,8 +23,10 @@ No production model weights are committed to this repository.
 
 `apps/web/public/model-packs/vietasr-iter3-int8/manifest.json` is metadata only. It references external ONNX/tokenizer files from the public Hugging Face repository `zzasdf/viet_iter3_pseudo_label` pinned to revision `e827965a37aab92a4455566fac49c0e80a23afef`.
 
+- Local model card: `docs/instructions/model-card-vietasr-iter3-int8.instructions.md`
 - Source repository: https://github.com/zzasdf/VietASR
 - Model files: https://huggingface.co/zzasdf/viet_iter3_pseudo_label
 - License metadata inspected: Hugging Face model card declares `apache-2.0`; the upstream GitHub repository is Apache-2.0.
 - Committed artifacts: catalog and manifest metadata only; no production model weights are stored in Git.
 - Runtime status: candidate baseline. The inspected ONNX encoder exposes full-sequence `x`/`x_lens` inputs and does not expose streaming cache tensors, so streaming parity must be proven before this pack is presented as a low-latency streaming model.
+- Evaluation status: no repository-published WER/CER, code-switch, latency, RTF, memory, or named-entity recall results yet. Synthetic benchmark reports validate export plumbing only.
