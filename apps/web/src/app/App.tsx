@@ -2,6 +2,7 @@ import { RUNTIME_STATES } from '@speech/protocol';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { MicrophonePanel } from './MicrophonePanel';
 import { ModelRuntimePanel } from './ModelRuntimePanel';
+import { TranscriptPanel } from './TranscriptPanel';
 import { roadmap } from './milestones';
 
 const privacyPoints = [
@@ -48,6 +49,7 @@ export function App() {
         </article>
       </section>
 
+      <TranscriptPanel />
       <DiagnosticsPanel />
       <MicrophonePanel />
       <ModelRuntimePanel />

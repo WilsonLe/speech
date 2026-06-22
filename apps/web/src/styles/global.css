@@ -151,7 +151,8 @@ h2 {
 
 .diagnostics,
 .microphone,
-.runtime {
+.runtime,
+.transcript {
   margin-bottom: 1rem;
 }
 
@@ -302,6 +303,123 @@ h2 {
   text-align: right;
 }
 
+.transcript-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.45fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.transcript-heading {
+  max-width: 780px;
+}
+
+.transcript-status-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.status-pill {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 1rem;
+  padding: 0.85rem;
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.status-pill span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #94a3b8;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.status-pill strong {
+  color: #e2e8f0;
+}
+
+.status-pill[data-tone='good'] strong {
+  color: #86efac;
+}
+
+.status-pill[data-tone='warn'] strong {
+  color: #fde68a;
+}
+
+.status-pill[data-tone='error'] strong {
+  color: #fecaca;
+}
+
+.transcript-display {
+  min-height: 13rem;
+  margin: 1.25rem 0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  color: #f8fafc;
+  background: rgba(2, 6, 23, 0.58);
+  font-size: clamp(1.35rem, 4vw, 2.25rem);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.transcript-placeholder {
+  color: #64748b;
+}
+
+.transcript-provisional {
+  color: #bae6fd;
+  background: linear-gradient(transparent 62%, rgba(56, 189, 248, 0.22) 62%);
+}
+
+.transcript-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.push-to-talk-button {
+  min-width: min(100%, 14rem);
+  color: #052e16;
+  background: #86efac;
+}
+
+.push-to-talk-button[aria-pressed='true'] {
+  color: #450a0a;
+  background: #fca5a5;
+}
+
+.transcript-footer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+.transcript-footer div {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 0.9rem;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.36);
+}
+
+.transcript-footer dt {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.transcript-footer dd {
+  margin: 0.25rem 0 0;
+  color: #e2e8f0;
+  font-weight: 800;
+}
+
 .roadmap-list {
   display: grid;
   gap: 0.75rem;
@@ -356,8 +474,18 @@ h2 {
   }
 
   .panel-grid,
-  .diagnostics-grid {
+  .diagnostics-grid,
+  .transcript-layout,
+  .transcript-footer {
     grid-template-columns: 1fr;
+  }
+
+  .transcript-display {
+    min-height: 10rem;
+  }
+
+  .transcript-controls button {
+    width: 100%;
   }
 
   .roadmap-card {

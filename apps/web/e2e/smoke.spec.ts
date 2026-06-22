@@ -7,4 +7,5 @@ test('renders the foundation PWA shell', async ({ page }) => {
     page.getByRole('heading', { name: /local-first bilingual dictation/i }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: /model install placeholder/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /hold to talk/i })).toBeVisible();
 });
