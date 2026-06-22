@@ -262,6 +262,15 @@ h2 {
   margin-top: 1.25rem;
 }
 
+.runtime-warnings {
+  margin: 0;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  border-radius: 0.9rem;
+  padding: 0.85rem 1rem 0.85rem 2rem;
+  color: #fde68a;
+  background: rgba(113, 63, 18, 0.18);
+}
+
 .error-message {
   color: #fecaca !important;
   border: 1px solid rgba(248, 113, 113, 0.35);

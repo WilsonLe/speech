@@ -16,7 +16,7 @@ export function ModelRuntimePanel() {
   async function handleCheckRuntime() {
     setStatus({ state: 'loading' });
     try {
-      const result = await checkAsrWorkerRuntime({ preferredProvider: 'wasm' });
+      const result = await checkAsrWorkerRuntime({ preferredProvider: 'auto' });
       setStatus({ state: 'ready', ...result });
     } catch (error) {
       setStatus({
@@ -33,7 +33,8 @@ export function ModelRuntimePanel() {
         <h2 id="runtime-title">Dedicated worker ONNX Runtime loader</h2>
         <p>
           ONNX Runtime Web is loaded only inside the ASR worker. The UI thread can request a
-          lightweight runtime check, but it does not import ORT or instantiate model sessions.
+          lightweight provider benchmark and fallback check, but it does not import ORT or
+          instantiate model sessions.
         </p>
       </div>
 
@@ -43,7 +44,7 @@ export function ModelRuntimePanel() {
           onClick={() => void handleCheckRuntime()}
           disabled={status.state === 'loading'}
         >
-          {status.state === 'loading' ? 'Checking runtime…' : 'Check worker runtime'}
+          {status.state === 'loading' ? 'Benchmarking provider…' : 'Benchmark worker provider'}
         </button>
         <RuntimeStatusMessage status={status} />
       </div>
@@ -53,24 +54,35 @@ export function ModelRuntimePanel() {
 
 function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {
   if (status.state === 'idle') {
-    return <p className="status-message">Worker runtime check has not run yet.</p>;
+    return <p className="status-message">Worker provider benchmark has not run yet.</p>;
   }
   if (status.state === 'loading') {
-    return <p className="status-message">Loading ONNX Runtime Web in a dedicated worker…</p>;
+    return (
+      <p className="status-message">Benchmarking ONNX Runtime providers in a dedicated worker…</p>
+    );
   }
   if (status.state === 'error') {
     return <p className="status-message error-message">{status.message}</p>;
   }
   return (
-    <dl className="microphone-settings" aria-label="ONNX Runtime worker status">
-      <div>
-        <dt>Provider</dt>
-        <dd>{status.provider ?? 'unknown'}</dd>
-      </div>
-      <div>
-        <dt>WASM threads</dt>
-        <dd>{status.wasmThreads ?? 'unknown'}</dd>
-      </div>
-    </dl>
+    <>
+      <dl className="microphone-settings" aria-label="ONNX Runtime worker status">
+        <div>
+          <dt>Provider</dt>
+          <dd>{status.provider ?? 'unknown'}</dd>
+        </div>
+        <div>
+          <dt>WASM threads</dt>
+          <dd>{status.wasmThreads ?? 'unknown'}</dd>
+        </div>
+      </dl>
+      {status.warnings.length > 0 ? (
+        <ul className="runtime-warnings" aria-label="Provider fallback warnings">
+          {status.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+    </>
   );
 }

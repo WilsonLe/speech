@@ -1,11 +1,23 @@
 /// <reference lib="webworker" />
 
-import { loadOnnxRuntimeWeb, type PreferredOrtProvider } from '@speech/inference';
+import {
+  InMemoryProviderPreferenceStore,
+  loadOnnxRuntimeWeb,
+  providerBenchmarkCacheKey,
+  selectProviderWithBenchmark,
+  type LoadedOnnxRuntimeWeb,
+  type OrtExecutionProvider,
+  type OrtRuntimeCapabilities,
+  type PreferredOrtProvider,
+  type ProviderBenchmarkWarning,
+  type ProviderPreferenceStore,
+} from '@speech/inference';
 import type { AsrWorkerToMain, MainToAsrWorker, RuntimeCapabilities } from '@speech/protocol';
 
 const ctx = self as DedicatedWorkerGlobalScope;
 
 let disposed = false;
+let providerPreferenceStore: ProviderPreferenceStore | undefined;
 
 ctx.addEventListener('message', (event: MessageEvent<MainToAsrWorker>) => {
   void handleMessage(event.data);
@@ -20,7 +32,7 @@ async function handleMessage(message: MainToAsrWorker): Promise<void> {
   switch (message.type) {
     case 'INIT':
       disposed = false;
-      await initializeRuntime(message.preferredProvider);
+      await initializeRuntime(message.preferredProvider, message.modelId);
       return;
     case 'DISPOSE':
       disposed = true;
@@ -44,13 +56,49 @@ async function handleMessage(message: MainToAsrWorker): Promise<void> {
   }
 }
 
-async function initializeRuntime(preferredProvider: PreferredOrtProvider): Promise<void> {
+async function initializeRuntime(
+  preferredProvider: PreferredOrtProvider,
+  modelId: string,
+): Promise<void> {
   try {
-    postMessage({ type: 'MODEL_PROGRESS', phase: 'loading-onnx-runtime', completed: 0, total: 1 });
-    const runtime = await loadOnnxRuntimeWeb({
+    const capabilities = detectWorkerCapabilities();
+    const loadedRuntimes = new Map<OrtExecutionProvider, LoadedOnnxRuntimeWeb>();
+    postMessage({ type: 'MODEL_PROGRESS', phase: 'selecting-provider', completed: 0, total: 1 });
+    const selection = await selectProviderWithBenchmark({
       preferredProvider,
-      capabilities: detectWorkerCapabilities(),
+      capabilities,
+      cacheKey: providerBenchmarkCacheKey({
+        modelId,
+        modelVersion: 'runtime-loader',
+        browserKey: workerBrowserKey(),
+        deviceKey: workerDeviceKey(capabilities),
+      }),
+      preferenceStore: getProviderPreferenceStore(),
+      benchmarkProvider: async (provider) => {
+        postMessage({
+          type: 'MODEL_PROGRESS',
+          phase: `benchmark-${provider}-provider`,
+          completed: 0,
+          total: 1,
+        });
+        const startedAt = performance.now();
+        const runtime = await loadOnnxRuntimeWeb({ preferredProvider: provider, capabilities });
+        loadedRuntimes.set(provider, runtime);
+        const durationMs = performance.now() - startedAt;
+        postMessage({
+          type: 'MODEL_PROGRESS',
+          phase: `benchmark-${provider}-provider`,
+          completed: 1,
+          total: 1,
+        });
+        return { durationMs };
+      },
     });
+
+    postProviderWarnings(selection.warnings);
+    const runtime =
+      loadedRuntimes.get(selection.selectedProvider) ??
+      (await loadOnnxRuntimeWeb({ preferredProvider: selection.selectedProvider, capabilities }));
     postMessage({ type: 'MODEL_PROGRESS', phase: 'onnx-runtime-loaded', completed: 1, total: 1 });
     postMessage({
       type: 'METRICS',
@@ -70,13 +118,14 @@ async function initializeRuntime(preferredProvider: PreferredOrtProvider): Promi
   }
 }
 
-function detectWorkerCapabilities() {
+function detectWorkerCapabilities(): OrtRuntimeCapabilities {
   const navigatorValue = globalThis.navigator;
+  const hardwareConcurrency = navigatorValue?.hardwareConcurrency;
   return {
     webGpu: navigatorValue !== undefined && 'gpu' in navigatorValue,
     crossOriginIsolated: globalThis.crossOriginIsolated === true,
     sharedArrayBuffer: typeof globalThis.SharedArrayBuffer === 'function',
-    hardwareConcurrency: navigatorValue?.hardwareConcurrency,
+    ...(typeof hardwareConcurrency === 'number' ? { hardwareConcurrency } : {}),
   };
 }
 
@@ -101,6 +150,71 @@ function runtimeCapabilities(webGpuSelected: boolean): RuntimeCapabilities {
     persistentStorage: false,
     selectedTier,
   };
+}
+
+function postProviderWarnings(warnings: readonly ProviderBenchmarkWarning[]): void {
+  for (const warning of warnings) {
+    postMessage({ type: 'WARNING', code: warning.code, message: warning.message });
+  }
+}
+
+function getProviderPreferenceStore(): ProviderPreferenceStore {
+  providerPreferenceStore ??= createProviderPreferenceStore();
+  return providerPreferenceStore;
+}
+
+function createProviderPreferenceStore(): ProviderPreferenceStore {
+  return typeof globalThis.caches === 'undefined'
+    ? new InMemoryProviderPreferenceStore()
+    : new CacheProviderPreferenceStore('speech-provider-preferences-v1');
+}
+
+class CacheProviderPreferenceStore implements ProviderPreferenceStore {
+  constructor(private readonly cacheName: string) {}
+
+  async getPreferredProvider(cacheKey: string): Promise<OrtExecutionProvider | undefined> {
+    try {
+      const cache = await globalThis.caches.open(this.cacheName);
+      const response = await cache.match(providerPreferenceRequest(cacheKey));
+      if (response === undefined) return undefined;
+      const provider = await response.text();
+      return isOrtExecutionProvider(provider) ? provider : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async setPreferredProvider(cacheKey: string, provider: OrtExecutionProvider): Promise<void> {
+    try {
+      const cache = await globalThis.caches.open(this.cacheName);
+      await cache.put(providerPreferenceRequest(cacheKey), new Response(provider));
+    } catch {
+      // Provider caching is an optimization; runtime selection must still succeed without it.
+    }
+  }
+}
+
+function providerPreferenceRequest(cacheKey: string): Request {
+  return new Request(
+    new URL(`/__speech/provider-preferences/${encodeURIComponent(cacheKey)}`, ctx.location.origin),
+  );
+}
+
+function isOrtExecutionProvider(value: string): value is OrtExecutionProvider {
+  return value === 'webgpu' || value === 'wasm';
+}
+
+function workerBrowserKey(): string {
+  return globalThis.navigator?.userAgent ?? 'unknown-browser';
+}
+
+function workerDeviceKey(capabilities: OrtRuntimeCapabilities): string {
+  return [
+    `cores:${capabilities.hardwareConcurrency ?? 'unknown'}`,
+    `isolated:${capabilities.crossOriginIsolated}`,
+    `sab:${capabilities.sharedArrayBuffer}`,
+    `webgpu:${capabilities.webGpu}`,
+  ].join(';');
 }
 
 function postMessage(message: AsrWorkerToMain): void {

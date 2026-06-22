@@ -1,4 +1,5 @@
 export * from './onnx-runtime';
+export * from './provider-benchmark';
 
 export interface InferencePackageInfo {
   readonly name: '@speech/inference';

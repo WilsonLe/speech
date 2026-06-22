@@ -4,6 +4,7 @@ import asrWorkerUrl from './asr.worker.ts?worker&url';
 export interface AsrWorkerRuntimeCheckResult {
   readonly provider: RuntimeMetrics['provider'];
   readonly wasmThreads?: number;
+  readonly warnings: readonly string[];
 }
 
 export interface AsrWorkerRuntimeCheckOptions {
@@ -29,6 +30,7 @@ export function checkAsrWorkerRuntime(
 
   return new Promise((resolve, reject) => {
     let latestMetrics: RuntimeMetrics | undefined;
+    const warnings: string[] = [];
     const timeout = globalThis.setTimeout(() => {
       worker.terminate();
       reject(new Error('Timed out while loading ONNX Runtime Web in the ASR worker.'));
@@ -40,12 +42,17 @@ export function checkAsrWorkerRuntime(
         latestMetrics = message.metrics;
         return;
       }
+      if (message.type === 'WARNING') {
+        warnings.push(message.message);
+        return;
+      }
       if (message.type === 'READY') {
         globalThis.clearTimeout(timeout);
         worker.postMessage({ type: 'DISPOSE' } satisfies MainToAsrWorker);
         worker.terminate();
         resolve({
           provider: latestMetrics?.provider,
+          warnings,
           ...(latestMetrics?.wasmThreads === undefined
             ? {}
             : { wasmThreads: latestMetrics.wasmThreads }),
