@@ -284,6 +284,17 @@ export function getManifestRequiredStorageBytes(manifest: SpeechModelManifestV2)
   return Object.values(manifest.files).reduce((total, file) => total + file.sizeBytes, 0);
 }
 
+export async function deleteInstalledModelRecord(
+  storage: ModelStorageBackend,
+  modelId: string,
+): Promise<boolean> {
+  const activeRecord = await getInstalledModelRecord(storage, modelId);
+  if (activeRecord !== undefined) {
+    await storage.clearVersion(activeRecord.modelId, activeRecord.activeVersion);
+  }
+  return storage.deleteFile(registryLocator(modelId));
+}
+
 export async function getInstalledModelRecord(
   storage: ModelStorageBackend,
   modelId: string,

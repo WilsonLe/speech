@@ -11,4 +11,5 @@ applyTo: 'packages/model-manager/**,apps/web/src/workers/**,apps/web/src/app/**'
 - Never overwrite active model files in place; write temporary versions, verify downloaded and stored bytes, copy into the inactive target version, then update the active pointer last.
 - Treat the active model registry as the source of truth for the selected version; a failed download, checksum, storage verification, or license gate must leave the previous active pointer intact.
 - Delete and list operations must be scoped by model ID and version so rollback/reinstall flows can preserve unrelated model versions.
+- Deleting an active model through lifecycle UI must remove both the active registry record and that active version's files; it must not affect unrelated model versions.
 - Do not store private audio, transcripts, enrollment recordings, or profile artifacts in the model-file backend.

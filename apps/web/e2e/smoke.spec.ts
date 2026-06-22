@@ -8,4 +8,7 @@ test('renders the foundation PWA shell', async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole('button', { name: /model install placeholder/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /hold to talk/i })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: /offline readiness and model lifecycle/i }),
+  ).toBeVisible();
 });

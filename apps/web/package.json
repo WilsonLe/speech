@@ -16,12 +16,14 @@
   "dependencies": {
     "@speech/audio": "workspace:*",
     "@speech/inference": "workspace:*",
+    "@speech/model-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
     "@vitejs/plugin-react": "^4.5.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "vite": "^6.3.5",
-    "vite-plugin-pwa": "^1.0.0"
+    "vite-plugin-pwa": "^1.0.0",
+    "workbox-window": "^7.4.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.1",

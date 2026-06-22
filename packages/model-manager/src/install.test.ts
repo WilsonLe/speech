@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SpeechModelManifestV2 } from '@speech/protocol';
 import {
+  deleteInstalledModelRecord,
   getInstalledModelRecord,
   installModelPack,
   sha256ArrayBuffer,
@@ -47,6 +48,23 @@ describe('model pack installation', () => {
     });
     expect(progress.map((event) => event.phase)).toContain('cleaning-temporary-version');
     expect(progress.at(-1)?.phase).toBe('activating-version');
+  });
+
+  it('deletes the active registry record and active version files', async () => {
+    const storage = new InMemoryModelStorageBackend();
+    const files = modelFileBytes({ encoder: [1], predictor: [2], joiner: [3] });
+    const manifest = await makeManifest('1.0.0', files);
+    const record = await installModelPack(manifest, {
+      storage,
+      installId: 'delete-active',
+      downloadFile: fakeDownloader(files),
+    });
+
+    await expect(deleteInstalledModelRecord(storage, manifest.id)).resolves.toBe(true);
+    await expect(getInstalledModelRecord(storage, manifest.id)).resolves.toBeUndefined();
+    await expect(
+      storage.listFiles({ modelId: manifest.id, version: record.activeVersion }),
+    ).resolves.toHaveLength(0);
   });
 
   it('rejects checksum mismatches and leaves no active model behind', async () => {
