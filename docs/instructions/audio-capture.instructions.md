@@ -14,4 +14,5 @@ applyTo: 'packages/audio/**,apps/web/src/app/MicrophonePanel.tsx,apps/web/src/wo
 - Shared-memory capture uses a single-producer/single-consumer PCM ring with monotonic `Int32` read/write sequence counters and an explicit overrun counter.
 - On ring-buffer overrun, drop the oldest unread samples to preserve the newest low-latency audio and increment the overrun counter; never silently corrupt ordering.
 - Do not enable the shared ring in UI smoke paths until an ASR worker consumer is attached; otherwise an idle consumer will intentionally fill and overrun the ring.
+- Transferable-buffer fallback chunks must come from a bounded reusable pool; the receiving side must return transferred buffers to the worklet after copying/counting them.
 - Do not persist dictation audio from the microphone check or worklet smoke path.

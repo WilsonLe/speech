@@ -1,6 +1,7 @@
 import {
   calculatePcmLevelMetrics,
   createSharedPcmRingBufferViews,
+  createTransferableFloat32BufferPool,
   downmixToMono,
   getDefaultPcmCaptureProcessorOptions,
   getPcmRingBufferState,
@@ -9,6 +10,8 @@ import {
   type PcmCaptureWorkletCommand,
   type PcmCaptureWorkletMessage,
   type SharedPcmRingBuffer,
+  type TransferableFloat32BufferLease,
+  type TransferableFloat32BufferPool,
 } from '@speech/audio';
 
 interface WorkletProcessorConstructorOptions {
@@ -19,7 +22,8 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
   private readonly chunkSizeSamples: number;
   private readonly levelIntervalSamples: number;
   private readonly clipThreshold: number;
-  private chunkBuffer: Float32Array;
+  private readonly transferPool: TransferableFloat32BufferPool;
+  private chunkLease: TransferableFloat32BufferLease;
   private chunkOffset = 0;
   private scratch = new Float32Array(128);
   private sequence = 0;
@@ -43,7 +47,12 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       ),
     );
     this.clipThreshold = options.processorOptions?.clipThreshold ?? defaults.clipThreshold;
-    this.chunkBuffer = new Float32Array(this.chunkSizeSamples);
+    this.transferPool = createTransferableFloat32BufferPool({
+      sampleLength: this.chunkSizeSamples,
+      initialBufferCount: 4,
+      maxBufferCount: 32,
+    });
+    this.chunkLease = this.transferPool.acquire();
     this.port.onmessage = (event) => this.handleCommand(event.data as PcmCaptureWorkletCommand);
   }
 
@@ -100,6 +109,9 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       case 'USE_CHUNK_MESSAGES':
         this.ringBuffer = null;
         break;
+      case 'RETURN_TRANSFERRED_BUFFER':
+        this.transferPool.release(command.bufferId, command.buffer);
+        break;
       default:
         this.postMessage({
           type: 'CAPTURE_ERROR',
@@ -137,7 +149,10 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
         this.chunkSizeSamples - this.chunkOffset,
         sampleCount - copied,
       );
-      this.chunkBuffer.set(samples.subarray(copied, copied + writableSamples), this.chunkOffset);
+      this.chunkLease.view.set(
+        samples.subarray(copied, copied + writableSamples),
+        this.chunkOffset,
+      );
       this.chunkOffset += writableSamples;
       copied += writableSamples;
 
@@ -169,11 +184,9 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    const pcm =
-      this.chunkOffset === this.chunkSizeSamples
-        ? this.chunkBuffer
-        : this.chunkBuffer.slice(0, this.chunkOffset);
+    const lease = this.chunkLease;
     const sampleCount = this.chunkOffset;
+    const pcm = lease.view;
     const metrics = calculatePcmLevelMetrics(pcm, sampleCount, this.clipThreshold);
     const pcmBuffer = pcm.buffer;
     if (!(pcmBuffer instanceof ArrayBuffer)) {
@@ -190,6 +203,7 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     const message: PcmCaptureWorkletMessage = {
       type: 'PCM_CHUNK',
       sequence: this.sequence,
+      bufferId: lease.id,
       sampleRateHz: sampleRate,
       capturedFrame: currentFrame - sampleCount,
       sampleCount,
@@ -199,8 +213,19 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
 
     this.postMessage(message, [pcmBuffer]);
     this.sequence += 1;
-    this.chunkBuffer = new Float32Array(this.chunkSizeSamples);
-    this.chunkOffset = 0;
+    try {
+      this.chunkLease = this.transferPool.acquire();
+      this.chunkOffset = 0;
+    } catch (error) {
+      this.recording = false;
+      this.postMessage({
+        type: 'CAPTURE_ERROR',
+        sequence: this.sequence,
+        code: 'AUDIO_CONTEXT_FAILED',
+        message: error instanceof Error ? error.message : 'Transferable buffer pool failed.',
+      });
+      this.sequence += 1;
+    }
   }
 
   private flushLevel(): void {
@@ -265,7 +290,6 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
   }
 
   private resetBuffers(): void {
-    this.chunkBuffer = new Float32Array(this.chunkSizeSamples);
     this.chunkOffset = 0;
     this.levelSampleCount = 0;
     this.levelPeak = 0;

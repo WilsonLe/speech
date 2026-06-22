@@ -25,11 +25,13 @@ class FakeAudioNode implements ConnectableAudioNodeLike {
 class FakeMessagePort {
   onmessage: ((event: MessageEvent<PcmCaptureWorkletMessage>) => void) | null = null;
   readonly posted: PcmCaptureWorkletCommand[] = [];
+  readonly transfers: Transferable[][] = [];
   closed = false;
   started = false;
 
-  postMessage(message: PcmCaptureWorkletCommand): void {
+  postMessage(message: PcmCaptureWorkletCommand, transfer: Transferable[] = []): void {
     this.posted.push(message);
+    this.transfers.push(transfer);
   }
 
   start(): void {
@@ -98,6 +100,23 @@ describe('PCM capture worklet attachment', () => {
       metrics: { sampleCount: 128, peak: 0.5, rms: 0.2, clippedSamples: 0, clippingRatio: 0 },
     });
     expect(messages).toHaveLength(1);
+
+    const returnedBuffer = new ArrayBuffer(16);
+    controller.releaseTransferredBuffer({
+      type: 'PCM_CHUNK',
+      sequence: 2,
+      bufferId: 7,
+      sampleRateHz: 48_000,
+      capturedFrame: 256,
+      sampleCount: 4,
+      pcm: returnedBuffer,
+      metrics: { sampleCount: 4, peak: 0.5, rms: 0.25, clippedSamples: 0, clippingRatio: 0 },
+    });
+    expect(workletNode.port.posted.at(-1)).toMatchObject({
+      type: 'RETURN_TRANSFERRED_BUFFER',
+      bufferId: 7,
+    });
+    expect(workletNode.port.transfers.at(-1)).toEqual([returnedBuffer]);
 
     controller.stop();
     expect(controller.active).toBe(false);
