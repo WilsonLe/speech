@@ -1,16 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import pcmCaptureWorkletUrl from '../worklets/pcm-capture.worklet.ts?worker&url';
 import {
   MicrophoneCaptureController,
+  attachPcmCaptureWorklet,
   getDefaultMicrophoneProcessingOptions,
   type MicrophoneCaptureFailure,
   type MicrophoneCaptureSnapshot,
   type MicrophoneProcessingOptions,
+  type PcmCaptureWorkletController,
+  type PcmCaptureWorkletFailure,
+  type PcmCaptureWorkletMessage,
 } from '@speech/audio';
 
 interface ToggleConfig {
   readonly key: keyof MicrophoneProcessingOptions;
   readonly label: string;
   readonly description: string;
+}
+
+interface WorkletCaptureSummary {
+  readonly status: 'idle' | 'loading' | 'capturing' | 'stopped' | 'error';
+  readonly chunks: number;
+  readonly samples: number;
+  readonly sampleRateHz: number | null;
+  readonly lastChunkSamples: number;
+  readonly peak: number;
+  readonly rms: number;
+  readonly clippingRatio: number;
+  readonly message: string;
 }
 
 const toggles: readonly ToggleConfig[] = [
@@ -32,17 +49,35 @@ const toggles: readonly ToggleConfig[] = [
   },
 ];
 
+const idleCaptureSummary: WorkletCaptureSummary = {
+  status: 'idle',
+  chunks: 0,
+  samples: 0,
+  sampleRateHz: null,
+  lastChunkSamples: 0,
+  peak: 0,
+  rms: 0,
+  clippingRatio: 0,
+  message: 'AudioWorklet capture is idle until you start a microphone check.',
+};
+
 export function MicrophonePanel() {
   const controller = useMemo(() => new MicrophoneCaptureController(), []);
+  const workletController = useRef<PcmCaptureWorkletController | null>(null);
   const [processing, setProcessing] = useState<MicrophoneProcessingOptions>(() =>
     getDefaultMicrophoneProcessingOptions(),
   );
   const [status, setStatus] = useState<'idle' | 'requesting' | 'active' | 'error'>('idle');
   const [snapshot, setSnapshot] = useState<MicrophoneCaptureSnapshot | null>(null);
-  const [error, setError] = useState<MicrophoneCaptureFailure | null>(null);
+  const [error, setError] = useState<MicrophoneCaptureFailure | PcmCaptureWorkletFailure | null>(
+    null,
+  );
+  const [captureSummary, setCaptureSummary] = useState<WorkletCaptureSummary>(idleCaptureSummary);
 
   useEffect(() => {
     return () => {
+      workletController.current?.dispose();
+      workletController.current = null;
       void controller.stop();
     };
   }, [controller]);
@@ -50,6 +85,11 @@ export function MicrophonePanel() {
   async function startMicrophoneCheck() {
     setStatus('requesting');
     setError(null);
+    setCaptureSummary({
+      ...idleCaptureSummary,
+      status: 'loading',
+      message: 'Loading AudioWorklet…',
+    });
 
     try {
       const session = await controller.start({ processing });
@@ -61,18 +101,99 @@ export function MicrophonePanel() {
         trackState: session.trackState,
         startedAt: session.startedAt,
       });
+
+      const captureWorklet = await attachPcmCaptureWorklet({
+        audioContext: session.audioContext,
+        sourceNode: session.sourceNode,
+        workletModuleUrl: pcmCaptureWorkletUrl,
+        onMessage: handleWorkletMessage,
+      });
+      workletController.current = captureWorklet;
+      captureWorklet.start();
       setStatus('active');
+      setCaptureSummary((current) => ({
+        ...current,
+        status: 'capturing',
+        sampleRateHz: session.audioContextSampleRateHz,
+        message: 'AudioWorklet is capturing device-rate PCM and posting local metrics.',
+      }));
     } catch (captureError) {
+      workletController.current?.dispose();
+      workletController.current = null;
+      await controller.stop();
       setSnapshot(null);
-      setError(captureError as MicrophoneCaptureFailure);
+      setError(toCaptureFailure(captureError));
       setStatus('error');
+      setCaptureSummary({
+        ...idleCaptureSummary,
+        status: 'error',
+        message: 'AudioWorklet capture could not start.',
+      });
     }
   }
 
   async function stopMicrophoneCheck() {
+    workletController.current?.stop();
+    workletController.current?.dispose();
+    workletController.current = null;
     await controller.stop();
     setStatus('idle');
     setSnapshot(null);
+    setCaptureSummary((current) => ({
+      ...current,
+      status: 'stopped',
+      message: 'Capture stopped and microphone resources were released.',
+    }));
+  }
+
+  function handleWorkletMessage(message: PcmCaptureWorkletMessage) {
+    switch (message.type) {
+      case 'CAPTURE_STARTED':
+        setCaptureSummary((current) => ({
+          ...current,
+          status: 'capturing',
+          sampleRateHz: message.sampleRateHz,
+          message: 'AudioWorklet capture started.',
+        }));
+        break;
+      case 'CAPTURE_STOPPED':
+        setCaptureSummary((current) => ({
+          ...current,
+          status: 'stopped',
+          message: 'AudioWorklet capture stopped.',
+        }));
+        break;
+      case 'LEVEL':
+        setCaptureSummary((current) => ({
+          ...current,
+          sampleRateHz: message.sampleRateHz,
+          peak: message.metrics.peak,
+          rms: message.metrics.rms,
+          clippingRatio: message.metrics.clippingRatio,
+        }));
+        break;
+      case 'PCM_CHUNK':
+        setCaptureSummary((current) => ({
+          ...current,
+          chunks: current.chunks + 1,
+          samples: current.samples + message.sampleCount,
+          sampleRateHz: message.sampleRateHz,
+          lastChunkSamples: message.sampleCount,
+          peak: message.metrics.peak,
+          rms: message.metrics.rms,
+          clippingRatio: message.metrics.clippingRatio,
+        }));
+        break;
+      case 'CAPTURE_ERROR':
+        setError({
+          code: message.code,
+          message: message.message,
+          recoveryStep: 'Stop capture, refresh the PWA, and try again.',
+        });
+        setStatus('error');
+        setCaptureSummary((current) => ({ ...current, status: 'error', message: message.message }));
+        break;
+    }
   }
 
   return (
@@ -81,8 +202,9 @@ export function MicrophonePanel() {
         <p className="eyebrow">Microphone</p>
         <h2 id="microphone-title">Permission and capture check</h2>
         <p>
-          Microphone access is requested only when you press start. The app asks for mono audio and
-          reports the actual browser track settings because browsers may not honor every constraint.
+          Microphone access is requested only when you press start. The app asks for mono audio,
+          attaches an AudioWorklet capture processor, and reports actual browser track settings
+          because browsers may not honor every constraint.
         </p>
       </div>
 
@@ -124,6 +246,40 @@ export function MicrophonePanel() {
           {error.message} {error.recoveryStep}
         </p>
       ) : null}
+
+      <dl className="probe-list microphone-settings" aria-label="AudioWorklet capture metrics">
+        <div>
+          <dt>AudioWorklet status</dt>
+          <dd>{captureSummary.status}</dd>
+        </div>
+        <div>
+          <dt>Captured chunks</dt>
+          <dd>{captureSummary.chunks}</dd>
+        </div>
+        <div>
+          <dt>Captured samples</dt>
+          <dd>{captureSummary.samples}</dd>
+        </div>
+        <div>
+          <dt>Worklet sample rate</dt>
+          <dd>
+            {captureSummary.sampleRateHz ? `${captureSummary.sampleRateHz} Hz` : 'not started'}
+          </dd>
+        </div>
+        <div>
+          <dt>Peak level</dt>
+          <dd>{captureSummary.peak.toFixed(3)}</dd>
+        </div>
+        <div>
+          <dt>RMS level</dt>
+          <dd>{captureSummary.rms.toFixed(3)}</dd>
+        </div>
+        <div>
+          <dt>Clipping</dt>
+          <dd>{formatPercent(captureSummary.clippingRatio)}</dd>
+        </div>
+      </dl>
+      <p className="status-message">{captureSummary.message}</p>
 
       {snapshot ? (
         <dl className="probe-list microphone-settings" aria-label="Actual microphone settings">
@@ -167,4 +323,32 @@ function formatSetting(value: boolean | undefined): string {
   }
 
   return value ? 'enabled' : 'disabled';
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function toCaptureFailure(error: unknown): MicrophoneCaptureFailure | PcmCaptureWorkletFailure {
+  if (isCaptureFailure(error)) {
+    return error;
+  }
+
+  return {
+    code: 'AUDIO_CONTEXT_FAILED',
+    message: error instanceof Error ? error.message : 'Microphone capture failed.',
+    recoveryStep: 'Stop capture, refresh the PWA, and try again.',
+  };
+}
+
+function isCaptureFailure(
+  error: unknown,
+): error is MicrophoneCaptureFailure | PcmCaptureWorkletFailure {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    'message' in error &&
+    'recoveryStep' in error
+  );
 }
