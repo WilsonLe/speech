@@ -96,6 +96,9 @@ importers:
 
   packages/inference:
     dependencies:
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       onnxruntime-web:
         specifier: 1.27.0
         version: 1.27.0

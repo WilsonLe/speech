@@ -2,7 +2,7 @@ import type { InferenceSession } from 'onnxruntime-web';
 
 type OrtWebModule = typeof import('onnxruntime-web');
 
-export type OrtRuntimeModule = Pick<OrtWebModule, 'env' | 'InferenceSession'>;
+export type OrtRuntimeModule = Pick<OrtWebModule, 'env' | 'InferenceSession' | 'Tensor'>;
 export type OrtInferenceSession = InferenceSession;
 export type OrtSessionOptions = InferenceSession.SessionOptions;
 
