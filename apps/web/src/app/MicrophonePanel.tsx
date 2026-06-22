@@ -183,6 +183,7 @@ export function MicrophonePanel() {
           rms: message.metrics.rms,
           clippingRatio: message.metrics.clippingRatio,
         }));
+        workletController.current?.releaseTransferredBuffer(message);
         break;
       case 'RING_BUFFER_STATUS':
         setCaptureSummary((current) => ({

@@ -27,6 +27,7 @@ export interface PcmCaptureLevelMessage {
 export interface PcmCaptureChunkMessage {
   readonly type: 'PCM_CHUNK';
   readonly sequence: number;
+  readonly bufferId: number;
   readonly sampleRateHz: number;
   readonly capturedFrame: number;
   readonly sampleCount: number;
@@ -66,7 +67,12 @@ export type PcmCaptureWorkletMessage =
 
 export type PcmCaptureWorkletCommand =
   | { readonly type: 'START' | 'STOP' | 'RESET' | 'USE_CHUNK_MESSAGES' }
-  | { readonly type: 'USE_SHARED_RING_BUFFER'; readonly ringBuffer: SharedPcmRingBufferTransfer };
+  | { readonly type: 'USE_SHARED_RING_BUFFER'; readonly ringBuffer: SharedPcmRingBufferTransfer }
+  | {
+      readonly type: 'RETURN_TRANSFERRED_BUFFER';
+      readonly bufferId: number;
+      readonly buffer: ArrayBuffer;
+    };
 
 export interface PcmCaptureWorkletFailure {
   readonly code: ErrorCode;
@@ -76,7 +82,7 @@ export interface PcmCaptureWorkletFailure {
 
 interface MessagePortLike {
   onmessage: ((event: MessageEvent<PcmCaptureWorkletMessage>) => void) | null;
-  postMessage: (message: PcmCaptureWorkletCommand) => void;
+  postMessage: (message: PcmCaptureWorkletCommand, transfer?: Transferable[]) => void;
   close?: () => void;
   start?: () => void;
 }
@@ -140,6 +146,17 @@ export class PcmCaptureWorkletController {
     }
     this.workletNode.port.postMessage({ type: 'STOP' });
     this.started = false;
+  }
+
+  releaseTransferredBuffer(message: PcmCaptureChunkMessage): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.workletNode.port.postMessage(
+      { type: 'RETURN_TRANSFERRED_BUFFER', bufferId: message.bufferId, buffer: message.pcm },
+      [message.pcm],
+    );
   }
 
   dispose(): void {
