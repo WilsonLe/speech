@@ -9,5 +9,6 @@ applyTo: 'packages/audio/**,apps/web/src/app/MicrophonePanel.tsx,apps/web/src/wo
 - Request mono audio, but always inspect and display the actual `MediaStreamTrack.getSettings()` values because browsers may ignore constraints.
 - Expose browser echo cancellation, noise suppression, and automatic gain control as user-visible settings.
 - Stop every media track, disconnect audio nodes, and close the `AudioContext` on stop/dispose; repeated stop calls must be safe.
-- Keep capture setup separate from `AudioWorklet` processing and model inference. The worklet must only capture/enqueue audio in later issues.
-- Do not persist dictation audio from the microphone check.
+- Keep capture setup separate from `AudioWorklet` processing and model inference. The worklet must only capture, downmix, meter, and enqueue or emit PCM transport messages.
+- Worklet output connected to the audio graph must be silent; never play microphone audio back through the speakers.
+- Do not persist dictation audio from the microphone check or worklet smoke path.

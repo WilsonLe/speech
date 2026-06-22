@@ -34,6 +34,8 @@ export interface MicrophoneCaptureSnapshot {
 
 export interface MicrophoneCaptureSession extends MicrophoneCaptureSnapshot {
   readonly stream: MediaStream;
+  readonly audioContext: AudioContextLike;
+  readonly sourceNode: ConnectableAudioNodeLike;
   readonly stop: () => Promise<void>;
 }
 
@@ -47,14 +49,21 @@ interface MediaDevicesLike {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
 }
 
-interface AudioSourceNodeLike {
+export interface ConnectableAudioNodeLike {
+  connect: (destination: ConnectableAudioNodeLike) => ConnectableAudioNodeLike;
   disconnect: () => void;
 }
 
-interface AudioContextLike {
+export interface AudioWorkletLike {
+  addModule: (moduleURL: string | URL) => Promise<void>;
+}
+
+export interface AudioContextLike {
   readonly sampleRate: number;
   readonly state: AudioContextState;
-  createMediaStreamSource: (stream: MediaStream) => AudioSourceNodeLike;
+  readonly destination: ConnectableAudioNodeLike;
+  readonly audioWorklet?: AudioWorkletLike;
+  createMediaStreamSource: (stream: MediaStream) => ConnectableAudioNodeLike;
   resume: () => Promise<void>;
   close: () => Promise<void>;
 }
@@ -111,7 +120,13 @@ export class MicrophoneCaptureController {
       return null;
     }
 
-    const { stream: _stream, stop: _stop, ...snapshot } = this.activeSession;
+    const {
+      stream: _stream,
+      audioContext: _audioContext,
+      sourceNode: _sourceNode,
+      stop: _stop,
+      ...snapshot
+    } = this.activeSession;
     return snapshot;
   }
 
@@ -149,6 +164,8 @@ export class MicrophoneCaptureController {
         trackLabel: track.label,
         trackState: track.readyState,
         startedAt: this.now(),
+        audioContext,
+        sourceNode,
         stop: async () => {
           if (this.activeSession?.stream === stream) {
             this.activeSession = null;
@@ -192,7 +209,7 @@ function createBrowserAudioContext(): AudioContextLike {
     throw createMicrophoneError('AUDIO_CONTEXT_FAILED', 'AudioContext is unavailable.');
   }
 
-  return new AudioContextConstructor();
+  return new AudioContextConstructor() as unknown as AudioContextLike;
 }
 
 function normalizeTrackSettings(settings: MediaTrackSettings): MicrophoneTrackSettings {
@@ -219,7 +236,7 @@ function normalizeTrackSettings(settings: MediaTrackSettings): MicrophoneTrackSe
 
 async function disposeResources(
   stream: MediaStream,
-  sourceNode: AudioSourceNodeLike,
+  sourceNode: ConnectableAudioNodeLike,
   audioContext: AudioContextLike,
 ): Promise<void> {
   sourceNode.disconnect();

@@ -65,6 +65,14 @@ describe('microphone capture controller', () => {
     const requested: MediaStreamConstraints[] = [];
     let disconnected = false;
     let closed = false;
+    const fakeDestination = {
+      connect: () => fakeDestination,
+      disconnect: () => undefined,
+    };
+    const fakeSource = {
+      connect: () => fakeSource,
+      disconnect: () => (disconnected = true),
+    };
 
     const controller = new MicrophoneCaptureController({
       now: () => '2026-06-22T00:00:00.000Z',
@@ -77,7 +85,8 @@ describe('microphone capture controller', () => {
       createAudioContext: () => ({
         sampleRate: 48000,
         state: 'running',
-        createMediaStreamSource: () => ({ disconnect: () => (disconnected = true) }),
+        destination: fakeDestination,
+        createMediaStreamSource: () => fakeSource,
         resume: async () => undefined,
         close: async () => {
           closed = true;
