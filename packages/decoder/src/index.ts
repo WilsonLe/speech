@@ -1,4 +1,5 @@
 export * from './greedy-rnnt';
+export * from './stable-prefix';
 
 export interface DecoderPackageInfo {
   readonly name: '@speech/decoder';
