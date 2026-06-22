@@ -7,7 +7,7 @@
       "displayName": "VietASR Iteration 3 Vietnamese INT8 candidate",
       "languages": ["vi"],
       "manifestUrl": "/model-packs/vietasr-iter3-int8/manifest.json",
-      "manifestSha256": "1bcb686a76028e61fb9ca523b2ebe0dfaf19a42684af4c425d00cdad0de9a66e",
+      "manifestSha256": "0cbafc714706596d70f3f3e1ab4e1b65dd287e403a2af9c94a64a24f3ecbf538",
       "license": {
         "spdx": "Apache-2.0",
         "name": "Apache-2.0",
