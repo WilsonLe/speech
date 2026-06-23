@@ -7,6 +7,7 @@ applyTo: 'packages/context-bias/**,packages/enrollment/**,packages/personalizati
 
 - Deliver vocabulary steering before speaker profiles, and speaker profiles before adapter training.
 - Solve rare terms with contextual biasing before acoustic fine-tuning.
+- Keep vocabulary entry/set schemas in `@speech/protocol` and structural validation/revision extraction in `@speech/context-bias`.
 - Apply vocabulary revisions and profile swaps only at utterance boundaries.
 - Refuse profiles whose base model identity, graph-contract hash, checksum, or regression gate fails.
 - Preserve one-click fallback to the generic model.
