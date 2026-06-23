@@ -8,7 +8,7 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**,MODEL_LICENSES
 - Audio and transcripts remain local unless the user explicitly exports them.
 - No telemetry, remote logging, analytics, or crash uploads are enabled by default.
 - During active transcription, do not fetch remote services; model downloads and app updates must be explicit lifecycle events outside active dictation.
-- Enrollment recordings, speaker embeddings, adapters, and exported profiles are sensitive voice-biometric-like personal data.
+- Enrollment recordings, speaker embeddings, adapters, and exported profiles are sensitive voice-biometric-like personal data; follow `docs/instructions/voice-profile-threat-model.instructions.md` for threat-model reviews and release gates.
 - Persist enrollment audio only after explicit user acceptance/save into private profile storage; never use localStorage/IndexedDB for raw voice data, and keep delete-all voice-data flows local and deterministic.
 - Never place private audio/transcripts/profile artifacts in logs, screenshots, fixtures, support bundles, or CI artifacts.
 - Base-vs-profile evaluation reports may be exported only as aggregate local metrics with privacy flags; omit prompt text, raw audio, raw embeddings, profile files, and model weights.

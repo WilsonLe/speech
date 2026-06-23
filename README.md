@@ -61,6 +61,7 @@ Start with:
 - `docs/instructions/repository.instructions.md` — workflow, docs placement, and repository guardrails.
 - `docs/instructions/architecture.instructions.md` — thread ownership and worker/UI boundaries.
 - `docs/instructions/privacy-data.instructions.md` — local-data, telemetry, licensing, and sensitive-profile rules.
+- `docs/instructions/voice-profile-threat-model.instructions.md` — threat model and review checklist for guided enrollment, profile storage, export/import, activation, and future adapters.
 - `docs/instructions/deployment-vercel.instructions.md` — Vercel deployment and required security headers.
 - `docs/instructions/model-format.instructions.md` — model-pack manifest, graph-contract, checksum, and activation rules.
 - `docs/instructions/model-card-vietasr-iter3-int8.instructions.md` — current external VietASR candidate model card.
