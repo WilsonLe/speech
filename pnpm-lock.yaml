@@ -143,6 +143,9 @@ importers:
       '@speech/enrollment':
         specifier: workspace:*
         version: link:../enrollment
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/profile-manager:
     dependencies:

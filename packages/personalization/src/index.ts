@@ -4,6 +4,7 @@ import type {
   EnrollmentTakeQualityStatus,
   EnrollmentVoiceCondition,
 } from '@speech/enrollment';
+import type { EvaluationMetrics, ModelIdentity } from '@speech/protocol';
 
 export type SpeakerEmbeddingSourceKind = 'signal-statistics-baseline' | 'model-speaker-encoder';
 export type SpeakerEmbeddingRejectedReason =
@@ -261,6 +262,261 @@ export function parseSpeakerEmbeddingVector(bytes: ArrayBuffer): Float32Array<Ar
   return output;
 }
 
+export type HeldOutProfileEvaluationAdaptationType =
+  | 'speaker-embedding'
+  | 'residual-adapter'
+  | 'merged-model';
+
+export type HeldOutProfileEvaluationMetricName =
+  | 'wordErrorRate'
+  | 'characterErrorRate'
+  | 'switchBoundaryErrorRate'
+  | 'customTermRecall'
+  | 'aliasTriggerRecall'
+  | 'falseCustomTermInsertionsPer100NonTargetUtterances'
+  | 'firstPartialLatencyMs'
+  | 'finalizationLatencyMs'
+  | 'realTimeFactor';
+
+export type HeldOutProfileEvaluationMetricUnit =
+  | 'ratio'
+  | 'ms'
+  | 'x-real-time'
+  | 'count-per-100-utterances';
+
+export type HeldOutProfileEvaluationMetricDirection = 'lower-is-better' | 'higher-is-better';
+export type HeldOutProfileEvaluationComparisonStatus =
+  | 'improved'
+  | 'regressed'
+  | 'unchanged'
+  | 'not-applicable';
+
+export interface HeldOutProfileEvaluationPrivacyV1 {
+  readonly containsAudio: false;
+  readonly containsTranscriptText: false;
+  readonly containsRawProfileData: false;
+  readonly containsModelWeights: false;
+  readonly networkUpload: false;
+  readonly localOnly: true;
+}
+
+export interface HeldOutProfileEvaluationSetV1 {
+  readonly id: string;
+  readonly sentenceBankVersion: string;
+  readonly split: 'held-out';
+  readonly caseCount: number;
+  readonly notes: readonly string[];
+}
+
+export interface HeldOutProfileEvaluationCaseMetricsInputV1 {
+  readonly referenceWordCount: number;
+  readonly wordErrorCount: number;
+  readonly referenceCharacterCount: number;
+  readonly characterErrorCount: number;
+  readonly switchBoundaryCount?: number;
+  readonly switchBoundaryErrorCount?: number;
+  readonly expectedCustomTermCount?: number;
+  readonly recalledCustomTermCount?: number;
+  readonly expectedAliasTriggerCount?: number;
+  readonly recalledAliasTriggerCount?: number;
+  readonly falseCustomTermInsertionCount?: number;
+  readonly firstPartialLatencyMs?: number;
+  readonly finalizationLatencyMs?: number;
+  readonly realTimeFactor?: number;
+}
+
+export interface HeldOutProfileEvaluationCaseInputV1 {
+  readonly id: string;
+  readonly language: EnrollmentSentenceLanguage;
+  readonly voiceCondition: EnrollmentVoiceCondition;
+  readonly nonTargetCustomTermUtterance?: boolean;
+  readonly base: HeldOutProfileEvaluationCaseMetricsInputV1;
+  readonly profile: HeldOutProfileEvaluationCaseMetricsInputV1;
+}
+
+export interface HeldOutProfileEvaluationRateScoreV1 {
+  readonly numerator: number;
+  readonly denominator: number;
+  readonly rate: number | null;
+}
+
+export interface HeldOutProfileEvaluationSummaryScoreV1 {
+  readonly count: number;
+  readonly mean: number | null;
+  readonly median: number | null;
+  readonly p95: number | null;
+}
+
+export interface HeldOutProfileEvaluationMetricComparisonV1 {
+  readonly name: HeldOutProfileEvaluationMetricName;
+  readonly unit: HeldOutProfileEvaluationMetricUnit;
+  readonly direction: HeldOutProfileEvaluationMetricDirection;
+  readonly base: HeldOutProfileEvaluationRateScoreV1 | HeldOutProfileEvaluationSummaryScoreV1;
+  readonly profile: HeldOutProfileEvaluationRateScoreV1 | HeldOutProfileEvaluationSummaryScoreV1;
+  readonly delta: number | null;
+  readonly relativeChange: number | null;
+  readonly status: HeldOutProfileEvaluationComparisonStatus;
+}
+
+export interface HeldOutProfileEvaluationSliceV1 {
+  readonly id: string;
+  readonly label: string;
+  readonly filters: {
+    readonly language?: EnrollmentSentenceLanguage;
+    readonly voiceCondition?: EnrollmentVoiceCondition;
+  };
+  readonly caseCount: number;
+  readonly metrics: readonly HeldOutProfileEvaluationMetricComparisonV1[];
+}
+
+export interface HeldOutProfileEvaluationDefinitionsV1 {
+  readonly wordErrorRate: string;
+  readonly characterErrorRate: string;
+  readonly switchBoundaryErrorRate: string;
+  readonly customTermRecall: string;
+  readonly aliasTriggerRecall: string;
+  readonly falseCustomTermInsertionsPer100NonTargetUtterances: string;
+  readonly latencyAndRtf: string;
+}
+
+export interface HeldOutProfileEvaluationActivationGateOptions {
+  readonly minRelativeErrorImprovement: number;
+  readonly minCustomTermRecallAbsoluteImprovement: number;
+  readonly maxRelativeRealTimeFactorRegression: number;
+  readonly maxFalseInsertionPer100Regression: number;
+}
+
+export interface HeldOutProfileEvaluationActivationGateV1 {
+  readonly passed: boolean;
+  readonly options: HeldOutProfileEvaluationActivationGateOptions;
+  readonly criteria: {
+    readonly wordErrorRelativeImprovement: number | null;
+    readonly characterErrorRelativeImprovement: number | null;
+    readonly customTermRecallAbsoluteImprovement: number | null;
+    readonly realTimeFactorRelativeRegression: number | null;
+    readonly falseInsertionPer100Regression: number | null;
+  };
+  readonly reasons: readonly string[];
+}
+
+export interface HeldOutProfileEvaluationSummaryV1 {
+  readonly caseCount: number;
+  readonly languageCounts: Readonly<Record<EnrollmentSentenceLanguage, number>>;
+  readonly voiceConditionCounts: Readonly<Record<EnrollmentVoiceCondition, number>>;
+}
+
+export interface HeldOutProfileEvaluationReportV1 {
+  readonly schemaVersion: 1;
+  readonly reportType: 'held-out-profile-evaluation';
+  readonly generatedAt: string;
+  readonly evaluationId: string;
+  readonly profileId: string;
+  readonly baseModel: ModelIdentity;
+  readonly adaptationType: HeldOutProfileEvaluationAdaptationType;
+  readonly heldOutSet: HeldOutProfileEvaluationSetV1;
+  readonly privacy: HeldOutProfileEvaluationPrivacyV1;
+  readonly summary: HeldOutProfileEvaluationSummaryV1;
+  readonly overall: HeldOutProfileEvaluationSliceV1;
+  readonly slices: readonly HeldOutProfileEvaluationSliceV1[];
+  readonly activationGate: HeldOutProfileEvaluationActivationGateV1;
+  readonly definitions: HeldOutProfileEvaluationDefinitionsV1;
+  readonly warnings: readonly string[];
+}
+
+export interface CreateHeldOutProfileEvaluationReportOptions {
+  readonly generatedAt: string;
+  readonly evaluationId: string;
+  readonly profileId: string;
+  readonly baseModel: ModelIdentity;
+  readonly adaptationType: HeldOutProfileEvaluationAdaptationType;
+  readonly heldOutSet: Omit<HeldOutProfileEvaluationSetV1, 'split' | 'caseCount'>;
+  readonly cases: readonly HeldOutProfileEvaluationCaseInputV1[];
+  readonly activationGate?: Partial<HeldOutProfileEvaluationActivationGateOptions>;
+  readonly warnings?: readonly string[];
+}
+
+export const defaultHeldOutProfileActivationGateOptions: HeldOutProfileEvaluationActivationGateOptions =
+  {
+    minRelativeErrorImprovement: 0.05,
+    minCustomTermRecallAbsoluteImprovement: 0.1,
+    maxRelativeRealTimeFactorRegression: 0.1,
+    maxFalseInsertionPer100Regression: 0,
+  };
+
+export const heldOutProfileEvaluationDefinitions: HeldOutProfileEvaluationDefinitionsV1 = {
+  wordErrorRate: 'Word errors divided by reference words on held-out prompts.',
+  characterErrorRate: 'Character errors divided by reference characters on held-out prompts.',
+  switchBoundaryErrorRate:
+    'Code-switch boundary errors divided by annotated switch boundaries when available.',
+  customTermRecall:
+    'Recalled exact canonical custom-term matches divided by expected custom-term matches.',
+  aliasTriggerRecall: 'Recalled alias-trigger matches divided by expected alias-trigger matches.',
+  falseCustomTermInsertionsPer100NonTargetUtterances:
+    'Unexpected emitted custom-term matches per 100 held-out utterances that do not target custom terms.',
+  latencyAndRtf:
+    'Latency and real-time-factor values are aggregate local measurements; raw audio and transcript text are excluded.',
+};
+
+export function createHeldOutProfileEvaluationReport(
+  options: CreateHeldOutProfileEvaluationReportOptions,
+): HeldOutProfileEvaluationReportV1 {
+  if (options.cases.length === 0) {
+    throw new Error('At least one held-out evaluation case is required.');
+  }
+  const gateOptions = {
+    ...defaultHeldOutProfileActivationGateOptions,
+    ...(options.activationGate ?? {}),
+  };
+  validateActivationGateOptions(gateOptions);
+  const cases = options.cases.map(copyAndValidateHeldOutCase);
+  const overall = createHeldOutSlice('overall', 'Overall held-out prompts', {}, cases);
+  const slices = createHeldOutSlices(cases);
+  const warnings = [...(options.warnings ?? [])];
+  if (options.heldOutSet.notes.length === 0) {
+    warnings.push('Held-out evaluation set has no methodology notes.');
+  }
+
+  return {
+    schemaVersion: 1,
+    reportType: 'held-out-profile-evaluation',
+    generatedAt: options.generatedAt,
+    evaluationId: options.evaluationId,
+    profileId: options.profileId,
+    baseModel: { ...options.baseModel },
+    adaptationType: options.adaptationType,
+    heldOutSet: {
+      id: options.heldOutSet.id,
+      sentenceBankVersion: options.heldOutSet.sentenceBankVersion,
+      split: 'held-out',
+      caseCount: cases.length,
+      notes: [...options.heldOutSet.notes],
+    },
+    privacy: createHeldOutEvaluationPrivacy(),
+    summary: summarizeHeldOutCases(cases),
+    overall,
+    slices,
+    activationGate: evaluateHeldOutActivationGate(overall, gateOptions),
+    definitions: heldOutProfileEvaluationDefinitions,
+    warnings,
+  };
+}
+
+export function evaluationMetricsFromHeldOutReport(
+  report: HeldOutProfileEvaluationReportV1,
+  variant: 'base' | 'profile',
+): EvaluationMetrics {
+  const metricMap = new Map(report.overall.metrics.map((metric) => [metric.name, metric]));
+  return removeUnsetEvaluationMetrics({
+    wer: scoreValue(metricMap.get('wordErrorRate')?.[variant]),
+    cer: scoreValue(metricMap.get('characterErrorRate')?.[variant]),
+    customTermRecall: scoreValue(metricMap.get('customTermRecall')?.[variant]),
+    falseInsertionsPer100Utterances: scoreValue(
+      metricMap.get('falseCustomTermInsertionsPer100NonTargetUtterances')?.[variant],
+    ),
+    realTimeFactor: scoreValue(metricMap.get('realTimeFactor')?.[variant]),
+  });
+}
+
 export interface PersonalizationPackageInfo {
   readonly name: '@speech/personalization';
   readonly status: 'planned' | 'active';
@@ -270,8 +526,555 @@ export interface PersonalizationPackageInfo {
 export const packageInfo: PersonalizationPackageInfo = {
   name: '@speech/personalization',
   status: 'active',
-  description: 'Speaker profile and adapter runtime contracts.',
+  description: 'Speaker profile, held-out evaluation, and adapter runtime contracts.',
 };
+
+type HeldOutCaseVariant = 'base' | 'profile';
+
+type HeldOutCaseFilter = HeldOutProfileEvaluationSliceV1['filters'];
+
+interface HeldOutAggregate {
+  readonly cases: readonly HeldOutProfileEvaluationCaseInputV1[];
+  readonly variant: HeldOutCaseVariant;
+}
+
+function createHeldOutEvaluationPrivacy(): HeldOutProfileEvaluationPrivacyV1 {
+  return {
+    containsAudio: false,
+    containsTranscriptText: false,
+    containsRawProfileData: false,
+    containsModelWeights: false,
+    networkUpload: false,
+    localOnly: true,
+  };
+}
+
+function copyAndValidateHeldOutCase(
+  input: HeldOutProfileEvaluationCaseInputV1,
+): HeldOutProfileEvaluationCaseInputV1 {
+  if (input.id.trim().length === 0) {
+    throw new Error('Held-out evaluation case id must be non-empty.');
+  }
+  validateHeldOutCaseMetrics(input.base, `${input.id}.base`);
+  validateHeldOutCaseMetrics(input.profile, `${input.id}.profile`);
+  if (input.nonTargetCustomTermUtterance === true) {
+    validateNoExpectedCustomTargets(input.base, `${input.id}.base`);
+    validateNoExpectedCustomTargets(input.profile, `${input.id}.profile`);
+  }
+  return {
+    id: input.id,
+    language: input.language,
+    voiceCondition: input.voiceCondition,
+    ...(input.nonTargetCustomTermUtterance === undefined
+      ? {}
+      : { nonTargetCustomTermUtterance: input.nonTargetCustomTermUtterance }),
+    base: { ...input.base },
+    profile: { ...input.profile },
+  };
+}
+
+function validateHeldOutCaseMetrics(
+  metrics: HeldOutProfileEvaluationCaseMetricsInputV1,
+  label: string,
+): void {
+  validateNonNegativeInteger(metrics.referenceWordCount, `${label}.referenceWordCount`);
+  validateNonNegativeInteger(metrics.wordErrorCount, `${label}.wordErrorCount`);
+  validateNonNegativeInteger(metrics.referenceCharacterCount, `${label}.referenceCharacterCount`);
+  validateNonNegativeInteger(metrics.characterErrorCount, `${label}.characterErrorCount`);
+  if (metrics.wordErrorCount > metrics.referenceWordCount) {
+    throw new Error(`${label}.wordErrorCount cannot exceed referenceWordCount.`);
+  }
+  if (metrics.characterErrorCount > metrics.referenceCharacterCount) {
+    throw new Error(`${label}.characterErrorCount cannot exceed referenceCharacterCount.`);
+  }
+  validateOptionalNonNegativeInteger(metrics.switchBoundaryCount, `${label}.switchBoundaryCount`);
+  validateOptionalNonNegativeInteger(
+    metrics.switchBoundaryErrorCount,
+    `${label}.switchBoundaryErrorCount`,
+  );
+  if (
+    metrics.switchBoundaryCount !== undefined &&
+    metrics.switchBoundaryErrorCount !== undefined &&
+    metrics.switchBoundaryErrorCount > metrics.switchBoundaryCount
+  ) {
+    throw new Error(`${label}.switchBoundaryErrorCount cannot exceed switchBoundaryCount.`);
+  }
+  validateOptionalNonNegativeInteger(
+    metrics.expectedCustomTermCount,
+    `${label}.expectedCustomTermCount`,
+  );
+  validateOptionalNonNegativeInteger(
+    metrics.recalledCustomTermCount,
+    `${label}.recalledCustomTermCount`,
+  );
+  if (
+    metrics.expectedCustomTermCount !== undefined &&
+    metrics.recalledCustomTermCount !== undefined &&
+    metrics.recalledCustomTermCount > metrics.expectedCustomTermCount
+  ) {
+    throw new Error(`${label}.recalledCustomTermCount cannot exceed expectedCustomTermCount.`);
+  }
+  validateOptionalNonNegativeInteger(
+    metrics.expectedAliasTriggerCount,
+    `${label}.expectedAliasTriggerCount`,
+  );
+  validateOptionalNonNegativeInteger(
+    metrics.recalledAliasTriggerCount,
+    `${label}.recalledAliasTriggerCount`,
+  );
+  if (
+    metrics.expectedAliasTriggerCount !== undefined &&
+    metrics.recalledAliasTriggerCount !== undefined &&
+    metrics.recalledAliasTriggerCount > metrics.expectedAliasTriggerCount
+  ) {
+    throw new Error(`${label}.recalledAliasTriggerCount cannot exceed expectedAliasTriggerCount.`);
+  }
+  validateOptionalNonNegativeInteger(
+    metrics.falseCustomTermInsertionCount,
+    `${label}.falseCustomTermInsertionCount`,
+  );
+  validateOptionalNonNegativeFinite(
+    metrics.firstPartialLatencyMs,
+    `${label}.firstPartialLatencyMs`,
+  );
+  validateOptionalNonNegativeFinite(
+    metrics.finalizationLatencyMs,
+    `${label}.finalizationLatencyMs`,
+  );
+  validateOptionalNonNegativeFinite(metrics.realTimeFactor, `${label}.realTimeFactor`);
+}
+
+function validateNoExpectedCustomTargets(
+  metrics: HeldOutProfileEvaluationCaseMetricsInputV1,
+  label: string,
+): void {
+  if ((metrics.expectedCustomTermCount ?? 0) > 0 || (metrics.expectedAliasTriggerCount ?? 0) > 0) {
+    throw new Error(`${label} cannot declare expected custom-term targets on a non-target case.`);
+  }
+}
+
+function validateActivationGateOptions(
+  options: HeldOutProfileEvaluationActivationGateOptions,
+): void {
+  validateNonNegativeFinite(options.minRelativeErrorImprovement, 'minRelativeErrorImprovement');
+  validateNonNegativeFinite(
+    options.minCustomTermRecallAbsoluteImprovement,
+    'minCustomTermRecallAbsoluteImprovement',
+  );
+  validateNonNegativeFinite(
+    options.maxRelativeRealTimeFactorRegression,
+    'maxRelativeRealTimeFactorRegression',
+  );
+  validateNonNegativeFinite(
+    options.maxFalseInsertionPer100Regression,
+    'maxFalseInsertionPer100Regression',
+  );
+}
+
+function createHeldOutSlices(
+  cases: readonly HeldOutProfileEvaluationCaseInputV1[],
+): HeldOutProfileEvaluationSliceV1[] {
+  const slices: HeldOutProfileEvaluationSliceV1[] = [];
+  for (const language of ['vi', 'en', 'mixed'] satisfies readonly EnrollmentSentenceLanguage[]) {
+    const filtered = cases.filter((testCase) => testCase.language === language);
+    if (filtered.length > 0) {
+      slices.push(
+        createHeldOutSlice(`language:${language}`, `Language ${language}`, { language }, filtered),
+      );
+    }
+  }
+  for (const voiceCondition of [
+    'whisper',
+    'normal',
+    'projected',
+  ] satisfies readonly EnrollmentVoiceCondition[]) {
+    const filtered = cases.filter((testCase) => testCase.voiceCondition === voiceCondition);
+    if (filtered.length > 0) {
+      slices.push(
+        createHeldOutSlice(
+          `voice-condition:${voiceCondition}`,
+          `Voice condition ${voiceCondition}`,
+          { voiceCondition },
+          filtered,
+        ),
+      );
+    }
+  }
+  return slices;
+}
+
+function createHeldOutSlice(
+  id: string,
+  label: string,
+  filters: HeldOutCaseFilter,
+  cases: readonly HeldOutProfileEvaluationCaseInputV1[],
+): HeldOutProfileEvaluationSliceV1 {
+  return {
+    id,
+    label,
+    filters: { ...filters },
+    caseCount: cases.length,
+    metrics: [
+      createRateComparison('wordErrorRate', 'ratio', 'lower-is-better', cases, (metrics) => ({
+        numerator: metrics.wordErrorCount,
+        denominator: metrics.referenceWordCount,
+      })),
+      createRateComparison('characterErrorRate', 'ratio', 'lower-is-better', cases, (metrics) => ({
+        numerator: metrics.characterErrorCount,
+        denominator: metrics.referenceCharacterCount,
+      })),
+      createRateComparison(
+        'switchBoundaryErrorRate',
+        'ratio',
+        'lower-is-better',
+        cases,
+        (metrics) => ({
+          numerator: metrics.switchBoundaryErrorCount ?? 0,
+          denominator: metrics.switchBoundaryCount ?? 0,
+        }),
+      ),
+      createRateComparison('customTermRecall', 'ratio', 'higher-is-better', cases, (metrics) => ({
+        numerator: metrics.recalledCustomTermCount ?? 0,
+        denominator: metrics.expectedCustomTermCount ?? 0,
+      })),
+      createRateComparison('aliasTriggerRecall', 'ratio', 'higher-is-better', cases, (metrics) => ({
+        numerator: metrics.recalledAliasTriggerCount ?? 0,
+        denominator: metrics.expectedAliasTriggerCount ?? 0,
+      })),
+      createFalseInsertionComparison(cases),
+      createSummaryComparison(
+        'firstPartialLatencyMs',
+        'ms',
+        'lower-is-better',
+        cases,
+        (metrics) => metrics.firstPartialLatencyMs,
+      ),
+      createSummaryComparison(
+        'finalizationLatencyMs',
+        'ms',
+        'lower-is-better',
+        cases,
+        (metrics) => metrics.finalizationLatencyMs,
+      ),
+      createSummaryComparison(
+        'realTimeFactor',
+        'x-real-time',
+        'lower-is-better',
+        cases,
+        (metrics) => metrics.realTimeFactor,
+      ),
+    ],
+  };
+}
+
+function createRateComparison(
+  name: HeldOutProfileEvaluationMetricName,
+  unit: HeldOutProfileEvaluationMetricUnit,
+  direction: HeldOutProfileEvaluationMetricDirection,
+  cases: readonly HeldOutProfileEvaluationCaseInputV1[],
+  select: (
+    metrics: HeldOutProfileEvaluationCaseMetricsInputV1,
+    testCase: HeldOutProfileEvaluationCaseInputV1,
+  ) => { readonly numerator: number; readonly denominator: number },
+): HeldOutProfileEvaluationMetricComparisonV1 {
+  const base = aggregateRate({ cases, variant: 'base' }, select);
+  const profile = aggregateRate({ cases, variant: 'profile' }, select);
+  return createMetricComparison(name, unit, direction, base, profile);
+}
+
+function createFalseInsertionComparison(
+  cases: readonly HeldOutProfileEvaluationCaseInputV1[],
+): HeldOutProfileEvaluationMetricComparisonV1 {
+  const base = aggregateFalseInsertionPer100({ cases, variant: 'base' });
+  const profile = aggregateFalseInsertionPer100({ cases, variant: 'profile' });
+  return createMetricComparison(
+    'falseCustomTermInsertionsPer100NonTargetUtterances',
+    'count-per-100-utterances',
+    'lower-is-better',
+    base,
+    profile,
+  );
+}
+
+function createSummaryComparison(
+  name: HeldOutProfileEvaluationMetricName,
+  unit: HeldOutProfileEvaluationMetricUnit,
+  direction: HeldOutProfileEvaluationMetricDirection,
+  cases: readonly HeldOutProfileEvaluationCaseInputV1[],
+  select: (metrics: HeldOutProfileEvaluationCaseMetricsInputV1) => number | undefined,
+): HeldOutProfileEvaluationMetricComparisonV1 {
+  const base = aggregateSummary({ cases, variant: 'base' }, select);
+  const profile = aggregateSummary({ cases, variant: 'profile' }, select);
+  return createMetricComparison(name, unit, direction, base, profile);
+}
+
+function createMetricComparison(
+  name: HeldOutProfileEvaluationMetricName,
+  unit: HeldOutProfileEvaluationMetricUnit,
+  direction: HeldOutProfileEvaluationMetricDirection,
+  base: HeldOutProfileEvaluationRateScoreV1 | HeldOutProfileEvaluationSummaryScoreV1,
+  profile: HeldOutProfileEvaluationRateScoreV1 | HeldOutProfileEvaluationSummaryScoreV1,
+): HeldOutProfileEvaluationMetricComparisonV1 {
+  const baseValue = scoreValue(base);
+  const profileValue = scoreValue(profile);
+  const delta =
+    baseValue === null || profileValue === null ? null : roundMetric(profileValue - baseValue);
+  const relativeChange =
+    baseValue === null || profileValue === null || baseValue === 0
+      ? null
+      : roundMetric((profileValue - baseValue) / baseValue);
+  return {
+    name,
+    unit,
+    direction,
+    base,
+    profile,
+    delta,
+    relativeChange,
+    status: compareMetricStatus(baseValue, profileValue, direction),
+  };
+}
+
+function aggregateRate(
+  aggregate: HeldOutAggregate,
+  select: (
+    metrics: HeldOutProfileEvaluationCaseMetricsInputV1,
+    testCase: HeldOutProfileEvaluationCaseInputV1,
+  ) => { readonly numerator: number; readonly denominator: number },
+): HeldOutProfileEvaluationRateScoreV1 {
+  let numerator = 0;
+  let denominator = 0;
+  for (const testCase of aggregate.cases) {
+    const selected = select(testCase[aggregate.variant], testCase);
+    numerator += selected.numerator;
+    denominator += selected.denominator;
+  }
+  return createRateScore(numerator, denominator);
+}
+
+function createRateScore(
+  numerator: number,
+  denominator: number,
+  scale = 1,
+): HeldOutProfileEvaluationRateScoreV1 {
+  validateNonNegativeFinite(numerator, 'metric numerator');
+  validateNonNegativeFinite(denominator, 'metric denominator');
+  validateNonNegativeFinite(scale, 'metric scale');
+  return {
+    numerator,
+    denominator,
+    rate: denominator === 0 ? null : roundMetric((numerator / denominator) * scale),
+  };
+}
+
+function aggregateFalseInsertionPer100(
+  aggregate: HeldOutAggregate,
+): HeldOutProfileEvaluationRateScoreV1 {
+  let numerator = 0;
+  let denominator = 0;
+  for (const testCase of aggregate.cases) {
+    if (!isNonTargetCustomTermUtterance(testCase)) continue;
+    numerator += testCase[aggregate.variant].falseCustomTermInsertionCount ?? 0;
+    denominator += 1;
+  }
+  return createRateScore(numerator, denominator, 100);
+}
+
+function aggregateSummary(
+  aggregate: HeldOutAggregate,
+  select: (metrics: HeldOutProfileEvaluationCaseMetricsInputV1) => number | undefined,
+): HeldOutProfileEvaluationSummaryScoreV1 {
+  const values = aggregate.cases
+    .map((testCase) => select(testCase[aggregate.variant]))
+    .filter((value): value is number => value !== undefined && Number.isFinite(value));
+  if (values.length === 0) {
+    return { count: 0, mean: null, median: null, p95: null };
+  }
+  return {
+    count: values.length,
+    mean: roundMetric(mean(values)),
+    median: roundMetric(percentile(values, 0.5)),
+    p95: roundMetric(percentile(values, 0.95)),
+  };
+}
+
+function scoreValue(
+  score: HeldOutProfileEvaluationRateScoreV1 | HeldOutProfileEvaluationSummaryScoreV1 | undefined,
+): number | null {
+  if (score === undefined) return null;
+  if ('rate' in score) return score.rate;
+  return score.mean;
+}
+
+function compareMetricStatus(
+  base: number | null,
+  profile: number | null,
+  direction: HeldOutProfileEvaluationMetricDirection,
+): HeldOutProfileEvaluationComparisonStatus {
+  if (base === null || profile === null) return 'not-applicable';
+  if (Math.abs(profile - base) < 0.000001) return 'unchanged';
+  const improved = direction === 'lower-is-better' ? profile < base : profile > base;
+  return improved ? 'improved' : 'regressed';
+}
+
+function summarizeHeldOutCases(
+  cases: readonly HeldOutProfileEvaluationCaseInputV1[],
+): HeldOutProfileEvaluationSummaryV1 {
+  const languageCounts = createLanguageCounts();
+  const voiceConditionCounts = createVoiceConditionCounts();
+  for (const testCase of cases) {
+    languageCounts[testCase.language] += 1;
+    voiceConditionCounts[testCase.voiceCondition] += 1;
+  }
+  return { caseCount: cases.length, languageCounts, voiceConditionCounts };
+}
+
+function evaluateHeldOutActivationGate(
+  overall: HeldOutProfileEvaluationSliceV1,
+  options: HeldOutProfileEvaluationActivationGateOptions,
+): HeldOutProfileEvaluationActivationGateV1 {
+  const metrics = new Map(overall.metrics.map((metric) => [metric.name, metric]));
+  const wordErrorRelativeImprovement = relativeImprovement(
+    scoreValue(metrics.get('wordErrorRate')?.base),
+    scoreValue(metrics.get('wordErrorRate')?.profile),
+    'lower-is-better',
+  );
+  const characterErrorRelativeImprovement = relativeImprovement(
+    scoreValue(metrics.get('characterErrorRate')?.base),
+    scoreValue(metrics.get('characterErrorRate')?.profile),
+    'lower-is-better',
+  );
+  const customTermRecallAbsoluteImprovement = absoluteImprovement(
+    scoreValue(metrics.get('customTermRecall')?.base),
+    scoreValue(metrics.get('customTermRecall')?.profile),
+    'higher-is-better',
+  );
+  const realTimeFactorRelativeRegression = relativeRegression(
+    scoreValue(metrics.get('realTimeFactor')?.base),
+    scoreValue(metrics.get('realTimeFactor')?.profile),
+    'lower-is-better',
+  );
+  const falseInsertionPer100Regression = absoluteRegression(
+    scoreValue(metrics.get('falseCustomTermInsertionsPer100NonTargetUtterances')?.base),
+    scoreValue(metrics.get('falseCustomTermInsertionsPer100NonTargetUtterances')?.profile),
+    'lower-is-better',
+  );
+  const qualityImproved =
+    (wordErrorRelativeImprovement ?? Number.NEGATIVE_INFINITY) >=
+      options.minRelativeErrorImprovement ||
+    (characterErrorRelativeImprovement ?? Number.NEGATIVE_INFINITY) >=
+      options.minRelativeErrorImprovement ||
+    (customTermRecallAbsoluteImprovement ?? Number.NEGATIVE_INFINITY) >=
+      options.minCustomTermRecallAbsoluteImprovement;
+  const rtfWithinBudget =
+    realTimeFactorRelativeRegression === null ||
+    realTimeFactorRelativeRegression <= options.maxRelativeRealTimeFactorRegression;
+  const falseInsertionWithinBudget =
+    falseInsertionPer100Regression === null ||
+    falseInsertionPer100Regression <= options.maxFalseInsertionPer100Regression;
+  const reasons: string[] = [];
+  if (!qualityImproved) {
+    reasons.push('Profile did not meet the held-out quality improvement threshold.');
+  }
+  if (!rtfWithinBudget) {
+    reasons.push('Profile real-time-factor regression exceeded the configured budget.');
+  }
+  if (!falseInsertionWithinBudget) {
+    reasons.push('Profile custom-term false-insertion regression exceeded the configured budget.');
+  }
+  return {
+    passed: qualityImproved && rtfWithinBudget && falseInsertionWithinBudget,
+    options,
+    criteria: {
+      wordErrorRelativeImprovement,
+      characterErrorRelativeImprovement,
+      customTermRecallAbsoluteImprovement,
+      realTimeFactorRelativeRegression,
+      falseInsertionPer100Regression,
+    },
+    reasons,
+  };
+}
+
+function relativeImprovement(
+  base: number | null,
+  profile: number | null,
+  direction: HeldOutProfileEvaluationMetricDirection,
+): number | null {
+  if (base === null || profile === null || base === 0) return null;
+  const raw = direction === 'lower-is-better' ? (base - profile) / base : (profile - base) / base;
+  return roundMetric(raw);
+}
+
+function absoluteImprovement(
+  base: number | null,
+  profile: number | null,
+  direction: HeldOutProfileEvaluationMetricDirection,
+): number | null {
+  if (base === null || profile === null) return null;
+  const raw = direction === 'lower-is-better' ? base - profile : profile - base;
+  return roundMetric(raw);
+}
+
+function relativeRegression(
+  base: number | null,
+  profile: number | null,
+  direction: HeldOutProfileEvaluationMetricDirection,
+): number | null {
+  const improvement = relativeImprovement(base, profile, direction);
+  return improvement === null ? null : roundMetric(Math.max(0, -improvement));
+}
+
+function absoluteRegression(
+  base: number | null,
+  profile: number | null,
+  direction: HeldOutProfileEvaluationMetricDirection,
+): number | null {
+  const improvement = absoluteImprovement(base, profile, direction);
+  return improvement === null ? null : roundMetric(Math.max(0, -improvement));
+}
+
+function isNonTargetCustomTermUtterance(testCase: HeldOutProfileEvaluationCaseInputV1): boolean {
+  return (
+    testCase.nonTargetCustomTermUtterance ??
+    ((testCase.base.expectedCustomTermCount ?? 0) === 0 &&
+      (testCase.profile.expectedCustomTermCount ?? 0) === 0)
+  );
+}
+
+function removeUnsetEvaluationMetrics(
+  metrics: Readonly<Record<keyof EvaluationMetrics, number | null | undefined>>,
+): EvaluationMetrics {
+  return Object.fromEntries(
+    Object.entries(metrics).filter(([, value]) => value !== undefined && value !== null),
+  ) as EvaluationMetrics;
+}
+
+function validateNonNegativeInteger(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative integer.`);
+  }
+}
+
+function validateOptionalNonNegativeInteger(value: number | undefined, label: string): void {
+  if (value === undefined) return;
+  validateNonNegativeInteger(value, label);
+}
+
+function validateNonNegativeFinite(value: number, label: string): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative finite number.`);
+  }
+}
+
+function validateOptionalNonNegativeFinite(value: number | undefined, label: string): void {
+  if (value === undefined) return;
+  validateNonNegativeFinite(value, label);
+}
+
+function roundMetric(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
 
 interface PcmLevelStatistics {
   readonly durationMs: number;

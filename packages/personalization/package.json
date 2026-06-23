@@ -14,7 +14,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@speech/enrollment": "workspace:*"
+    "@speech/enrollment": "workspace:*",
+    "@speech/protocol": "workspace:*"
   },
   "devDependencies": {}
 }
