@@ -75,6 +75,14 @@ function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {
           <dt>WASM threads</dt>
           <dd>{status.wasmThreads ?? 'unknown'}</dd>
         </div>
+        <div>
+          <dt>Language mode</dt>
+          <dd>{formatLanguageModeDiagnostics(status.languageDiagnostics)}</dd>
+        </div>
+        <div>
+          <dt>Language spans</dt>
+          <dd>{formatLanguageSpanDiagnostics(status.languageDiagnostics)}</dd>
+        </div>
       </dl>
       {status.warnings.length > 0 ? (
         <ul className="runtime-warnings" aria-label="Provider fallback warnings">
@@ -85,4 +93,21 @@ function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {
       ) : null}
     </>
   );
+}
+
+function formatLanguageModeDiagnostics(
+  diagnostics: AsrWorkerRuntimeCheckResult['languageDiagnostics'],
+): string {
+  if (diagnostics === undefined) return 'unknown';
+  if (diagnostics.requestedMode === diagnostics.effectiveMode) return diagnostics.effectiveMode;
+  return `${diagnostics.effectiveMode} (${diagnostics.requestedMode} requested)`;
+}
+
+function formatLanguageSpanDiagnostics(
+  diagnostics: AsrWorkerRuntimeCheckResult['languageDiagnostics'],
+): string {
+  if (diagnostics === undefined) return 'pending';
+  const { spanSummary } = diagnostics;
+  if (spanSummary.spanCount === 0) return 'no spans yet';
+  return `${spanSummary.spanCount.toString()} spans · ${spanSummary.switchCount.toString()} switches`;
 }

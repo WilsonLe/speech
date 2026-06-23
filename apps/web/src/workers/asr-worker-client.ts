@@ -1,9 +1,15 @@
-import type { AsrWorkerToMain, MainToAsrWorker, RuntimeMetrics } from '@speech/protocol';
+import type {
+  AsrWorkerToMain,
+  LanguageModeDiagnostics,
+  MainToAsrWorker,
+  RuntimeMetrics,
+} from '@speech/protocol';
 import asrWorkerUrl from './asr.worker.ts?worker&url';
 
 export interface AsrWorkerRuntimeCheckResult {
   readonly provider: RuntimeMetrics['provider'];
   readonly wasmThreads?: number;
+  readonly languageDiagnostics?: LanguageModeDiagnostics;
   readonly warnings: readonly string[];
 }
 
@@ -30,6 +36,7 @@ export function checkAsrWorkerRuntime(
 
   return new Promise((resolve, reject) => {
     let latestMetrics: RuntimeMetrics | undefined;
+    let latestLanguageDiagnostics: LanguageModeDiagnostics | undefined;
     const warnings: string[] = [];
     const timeout = globalThis.setTimeout(() => {
       worker.terminate();
@@ -46,6 +53,10 @@ export function checkAsrWorkerRuntime(
         warnings.push(message.message);
         return;
       }
+      if (message.type === 'LANGUAGE_MODE_READY') {
+        latestLanguageDiagnostics = message.diagnostics;
+        return;
+      }
       if (message.type === 'READY') {
         globalThis.clearTimeout(timeout);
         worker.postMessage({ type: 'DISPOSE' } satisfies MainToAsrWorker);
@@ -56,6 +67,9 @@ export function checkAsrWorkerRuntime(
           ...(latestMetrics?.wasmThreads === undefined
             ? {}
             : { wasmThreads: latestMetrics.wasmThreads }),
+          ...(latestLanguageDiagnostics === undefined
+            ? {}
+            : { languageDiagnostics: latestLanguageDiagnostics }),
         });
         return;
       }

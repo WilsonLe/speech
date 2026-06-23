@@ -1,4 +1,6 @@
 import type { ErrorCode, WarningCode } from './errors';
+import type { LanguageModeDiagnostics, LanguageSpan } from './language-diagnostics';
+import type { SpeechLanguageMode } from './model-manifest';
 import type { ModelIdentity, AdaptationType } from './profile';
 import type { VocabularyEntryV1, VocabularyError } from './vocabulary';
 
@@ -34,11 +36,7 @@ export interface RuntimeMetrics {
   readonly wasmThreads?: number;
 }
 
-export interface LanguageSpan {
-  readonly startToken: number;
-  readonly endToken: number;
-  readonly language: 'vi' | 'en' | 'mixed';
-}
+export type { LanguageSpan };
 
 export type MainToAsrWorker =
   | {
@@ -46,7 +44,7 @@ export type MainToAsrWorker =
       readonly modelId: string;
       readonly preferredProvider: 'auto' | 'webgpu' | 'wasm';
     }
-  | { readonly type: 'SET_LANGUAGE_MODE'; readonly mode: 'vi' | 'en' | 'auto' | 'mixed' }
+  | { readonly type: 'SET_LANGUAGE_MODE'; readonly mode: SpeechLanguageMode }
   | {
       readonly type: 'SET_VOCABULARY';
       readonly revision: number;
@@ -72,6 +70,7 @@ export type MainToAsrWorker =
 
 export type AsrWorkerToMain =
   | { readonly type: 'READY'; readonly capabilities: RuntimeCapabilities }
+  | { readonly type: 'LANGUAGE_MODE_READY'; readonly diagnostics: LanguageModeDiagnostics }
   | {
       readonly type: 'MODEL_PROGRESS';
       readonly phase: string;

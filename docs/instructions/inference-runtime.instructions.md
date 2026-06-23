@@ -14,3 +14,4 @@ applyTo: 'packages/inference/**,apps/web/src/workers/**,apps/web/src/app/ModelRu
 - Session creation must use manifest graph contracts for tensor names and provider options; never rely on undocumented tensor ordering.
 - Streaming encoder cache adapters must feed and update recurrent state only through manifest `stateRelationships`; reset utterance-scoped caches at utterance boundaries.
 - Provider benchmark/fallback must preserve a working WASM path, benchmark only explicit candidate providers, cache choices by model/browser/device key, and surface fallback warnings in diagnostics.
+- ASR workers must accept `SET_LANGUAGE_MODE` as a state update and emit local `LANGUAGE_MODE_READY` diagnostics; unsupported-mode fallback must be visible and must not fetch network resources.

@@ -17,26 +17,28 @@ import {
   initialTranscriptWorkspaceState,
   markTranscriptStopping,
   recordTranscriptAudioChunk,
+  setTranscriptLanguageMode,
   startTranscriptRequest,
   startTranscriptUtterance,
   type TranscriptWorkspaceState,
 } from './transcript-state';
 
+import type { LanguageModeDiagnostics, SpeechLanguageMode } from '@speech/protocol';
+
 const pushToTalkKeyLabel = 'Space';
 
-type TranscriptLanguageMode = 'vi' | 'en' | 'auto';
-
 interface TranscriptSettingsState {
-  readonly languageMode: TranscriptLanguageMode;
+  readonly languageMode: SpeechLanguageMode;
   readonly formattingEnabled: boolean;
   readonly spokenCommandsEnabled: boolean;
   readonly includeTimingMetadataInDownload: boolean;
 }
 
-const languageModeLabels: Record<TranscriptLanguageMode, string> = {
+const languageModeLabels: Record<SpeechLanguageMode, string> = {
   vi: 'Vietnamese',
   en: 'English',
   auto: 'Auto/code-switch',
+  mixed: 'Mixed/code-switch',
 };
 
 const defaultTranscriptSettings: TranscriptSettingsState = {
@@ -269,8 +271,8 @@ export function TranscriptPanel() {
           />
           <StatusPill
             label="Mode"
-            value={languageModeLabels[settings.languageMode]}
-            tone="neutral"
+            value={formatModeStatus(workspace.languageDiagnostics)}
+            tone={workspace.languageDiagnostics.fallbackReason ? 'warn' : 'neutral'}
           />
         </div>
       </div>
@@ -370,7 +372,10 @@ export function TranscriptPanel() {
         {copyStatus}
       </p>
 
-      <div className="transcript-settings-privacy" aria-label="Transcript settings and privacy">
+      <div
+        className="transcript-settings-privacy"
+        aria-label="Transcript settings, language diagnostics, and privacy"
+      >
         <fieldset className="transcript-settings-card">
           <legend>Transcript settings</legend>
           <label htmlFor="language-mode-select">
@@ -379,13 +384,15 @@ export function TranscriptPanel() {
               id="language-mode-select"
               value={settings.languageMode}
               onChange={(event) => {
-                const value = event.currentTarget.value as TranscriptLanguageMode;
+                const value = event.currentTarget.value as SpeechLanguageMode;
                 setSettings((current) => ({ ...current, languageMode: value }));
+                updateWorkspace((current) => setTranscriptLanguageMode(current, value));
               }}
             >
               <option value="vi">Vietnamese</option>
               <option value="en">English</option>
               <option value="auto">Auto/code-switch</option>
+              <option value="mixed">Mixed/code-switch</option>
             </select>
           </label>
           <label>
@@ -425,6 +432,31 @@ export function TranscriptPanel() {
             Include local timing metadata in downloaded .txt files
           </label>
         </fieldset>
+
+        <article
+          className="transcript-language-card"
+          aria-labelledby="transcript-language-diagnostics-title"
+        >
+          <h3 id="transcript-language-diagnostics-title">Language-span diagnostics</h3>
+          <dl aria-label="Language-span diagnostics">
+            <div>
+              <dt>Requested mode</dt>
+              <dd>{languageModeLabels[workspace.languageDiagnostics.requestedMode]}</dd>
+            </div>
+            <div>
+              <dt>Effective mode</dt>
+              <dd>{languageModeLabels[workspace.languageDiagnostics.effectiveMode]}</dd>
+            </div>
+            <div>
+              <dt>Spans</dt>
+              <dd>{formatLanguageSpanSummary(workspace.languageDiagnostics)}</dd>
+            </div>
+          </dl>
+          <p>
+            {workspace.languageDiagnostics.fallbackReason ??
+              'No ASR language spans have been emitted yet. Future partial/final events will update this local diagnostic without telemetry.'}
+          </p>
+        </article>
 
         <article className="transcript-privacy-card" aria-labelledby="transcript-privacy-title">
           <h3 id="transcript-privacy-title">Privacy and export</h3>
@@ -517,6 +549,18 @@ function statusTone(
     case 'error':
       return 'error';
   }
+}
+
+function formatModeStatus(diagnostics: LanguageModeDiagnostics): string {
+  const effective = languageModeLabels[diagnostics.effectiveMode];
+  if (diagnostics.requestedMode === diagnostics.effectiveMode) return effective;
+  return `${effective} fallback`;
+}
+
+function formatLanguageSpanSummary(diagnostics: LanguageModeDiagnostics): string {
+  const { spanSummary } = diagnostics;
+  if (spanSummary.spanCount === 0) return 'No spans yet';
+  return `${spanSummary.spanCount.toString()} spans · ${spanSummary.switchCount.toString()} switches · vi ${spanSummary.tokenCounts.vi.toString()} / en ${spanSummary.tokenCounts.en.toString()} / mixed ${spanSummary.tokenCounts.mixed.toString()}`;
 }
 
 function formatLatency(value: number | null): string {
