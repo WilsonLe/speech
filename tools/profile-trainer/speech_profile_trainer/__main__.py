@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .dataset import load_profile_dataset
+from .evaluation import evaluate_adapter_activation_from_files, write_evaluation_report
 from .training import train_frozen_base_adapter_from_files, write_training_outputs
 from .validation import load_json_file, validate_profile_package
 
@@ -42,6 +43,21 @@ def main(argv: list[str] | None = None) -> int:
         "--output-dir", required=True, help="directory for adapter.bin and metadata"
     )
     train_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    evaluate_parser = subparsers.add_parser(
+        "evaluate", help="evaluate adapter metrics and apply the activation gate"
+    )
+    evaluate_parser.add_argument(
+        "--evaluation", required=True, help="path to aggregate evaluation input JSON"
+    )
+    evaluate_parser.add_argument(
+        "--training-metadata", required=True, help="path to training-metadata.json"
+    )
+    evaluate_parser.add_argument(
+        "--gate-config", required=True, help="path to activation gate JSON"
+    )
+    evaluate_parser.add_argument("--output", help="optional path for aggregate evaluation report")
+    evaluate_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
     args = parser.parse_args(argv)
     if args.command == "validate":
@@ -88,6 +104,24 @@ def main(argv: list[str] | None = None) -> int:
         }
         _emit(payload, json_output=args.json)
         return 0
+    if args.command == "evaluate":
+        result = evaluate_adapter_activation_from_files(
+            evaluation_path=args.evaluation,
+            training_metadata_path=args.training_metadata,
+            gate_config_path=args.gate_config,
+        )
+        output_path = None
+        if args.output:
+            output_path = str(write_evaluation_report(result, args.output))
+        payload = {
+            "activationGatePassed": result.activation_gate["passed"],
+            "automaticActivationAllowed": result.activation_gate["automaticActivationAllowed"],
+            "summary": result.activation_gate["summary"],
+            "checks": result.activation_gate["checks"],
+            "outputPath": output_path,
+        }
+        _emit(payload, json_output=args.json)
+        return 0 if result.activation_gate["passed"] else 2
     raise AssertionError(f"Unhandled command {args.command}")
 
 
@@ -123,6 +157,15 @@ def _emit(payload: dict[str, Any], *, json_output: bool) -> None:
             f"adapter training complete for {payload['profileId']}: "
             f"{payload['adapterPath']} ({payload['adapterSha256']})"
         )
+        return
+    if "activationGatePassed" in payload:
+        status = "passed" if payload["activationGatePassed"] else "failed"
+        print(f"adapter activation gate {status}")
+        for check in payload.get("checks", []):
+            check_status = "pass" if check["passed"] else "fail"
+            print(f"{check_status}: {check['name']}")
+        if payload.get("outputPath"):
+            print(f"report: {payload['outputPath']}")
         return
     print(
         f"profile dataset {payload['profileId']}: {payload['records']} records "

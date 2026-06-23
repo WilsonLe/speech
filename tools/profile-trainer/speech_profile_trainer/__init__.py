@@ -9,6 +9,17 @@ from .dataset import (
     load_profile_dataset,
     split_prompt_ids,
 )
+from .evaluation import (
+    ActivationGateConfig,
+    AdapterEvaluationResult,
+    EvaluationCase,
+    evaluate_adapter_activation,
+    evaluate_adapter_activation_from_files,
+    load_activation_gate_config,
+    parse_activation_gate_config,
+    parse_evaluation_case,
+    write_evaluation_report,
+)
 from .training import (
     AdapterTrainingConfig,
     FrozenBaseAdapterTrainingConfig,
@@ -31,9 +42,12 @@ from .validation import (
 )
 
 __all__ = [
+    "ActivationGateConfig",
+    "AdapterEvaluationResult",
     "AdapterTrainingConfig",
     "BaseModelIdentity",
     "DatasetSplitConfig",
+    "EvaluationCase",
     "FrozenBaseAdapterTrainingConfig",
     "FrozenBaseAdapterTrainingResult",
     "ProfileDataset",
@@ -45,13 +59,19 @@ __all__ = [
     "build_profile_dataset",
     "config_to_json",
     "compute_base_model_identity",
+    "evaluate_adapter_activation",
+    "evaluate_adapter_activation_from_files",
+    "load_activation_gate_config",
     "load_json_file",
     "load_profile_dataset",
     "load_training_config",
+    "parse_activation_gate_config",
+    "parse_evaluation_case",
     "parse_training_config",
     "split_prompt_ids",
     "train_frozen_base_adapter",
     "train_frozen_base_adapter_from_files",
     "validate_profile_package",
+    "write_evaluation_report",
     "write_training_outputs",
 ]
