@@ -15,25 +15,42 @@ describe('model catalog v1', () => {
     const catalogText = await readFile(catalogPath, 'utf8');
     const catalog = parseModelCatalogV1(JSON.parse(catalogText));
 
-    expect(catalog.models).toHaveLength(1);
-    const [entry] = catalog.models;
-    if (entry === undefined) throw new Error('Expected at least one catalog entry.');
-    expect(entry.id).toBe('vietasr-iter3-int8');
-    expect(entry.runtime.status).toBe('candidate');
-    expect(entry.runtime.streamingReady).toBe(false);
+    expect(catalog.models.length).toBeGreaterThanOrEqual(2);
+    const vietasr = catalog.models.find((entry) => entry.id === 'vietasr-iter3-int8');
+    if (vietasr === undefined) throw new Error('Expected VietASR catalog entry.');
+    expect(vietasr.runtime.status).toBe('candidate');
+    expect(vietasr.runtime.streamingReady).toBe(false);
+    expect(vietasr.manifestUrl).toBeDefined();
+    expect(vietasr.manifestSha256).toBeDefined();
 
-    const manifestPath = resolveCatalogUrl(entry.manifestUrl);
+    const manifestPath = resolveCatalogUrl(vietasr.manifestUrl);
     const manifestBytes = await readFile(manifestPath);
-    expect(createHash('sha256').update(manifestBytes).digest('hex')).toBe(entry.manifestSha256);
+    expect(createHash('sha256').update(manifestBytes).digest('hex')).toBe(vietasr.manifestSha256);
 
     const manifest = parseSpeechModelManifestV2(JSON.parse(manifestBytes.toString('utf8')));
-    expect(manifest.id).toBe(entry.id);
-    expect(manifest.version).toBe(entry.version);
-    expect(manifest.displayName).toBe(entry.displayName);
-    expect(manifest.languages).toEqual(entry.languages);
-    expect(manifest.license.spdx).toBe(entry.license.spdx);
-    expect(manifest.license.redistributionAllowed).toBe(entry.license.redistributionAllowed);
+    expect(manifest.id).toBe(vietasr.id);
+    expect(manifest.version).toBe(vietasr.version);
+    expect(manifest.displayName).toBe(vietasr.displayName);
+    expect(manifest.languages).toEqual(vietasr.languages);
+    expect(manifest.license.spdx).toBe(vietasr.license.spdx);
+    expect(manifest.license.redistributionAllowed).toBe(vietasr.license.redistributionAllowed);
     expect(manifest.graphs.encoder.stateRelationships).toBeUndefined();
+  });
+
+  it('allows blocked non-installable research candidates without manifests', async () => {
+    const catalogText = await readFile(catalogPath, 'utf8');
+    const catalog = parseModelCatalogV1(JSON.parse(catalogText));
+    const blockedCandidate = catalog.models.find(
+      (entry) => entry.id === 'nvidia-parakeet-ctc-vietnamese-research',
+    );
+
+    if (blockedCandidate === undefined) throw new Error('Expected blocked research candidate.');
+    expect(blockedCandidate.runtime.status).toBe('blocked');
+    expect(blockedCandidate.runtime.installable).toBe(false);
+    expect(blockedCandidate.runtime.streamingReady).toBe(false);
+    expect(blockedCandidate.manifestUrl).toBeUndefined();
+    expect(blockedCandidate.manifestSha256).toBeUndefined();
+    expect(blockedCandidate.license.redistributionAllowed).toBe(false);
   });
 
   it('reports invalid catalog entries', () => {
@@ -76,12 +93,71 @@ describe('model catalog v1', () => {
     expect(result.ok).toBe(false);
     expect(result.errors).toContain('models[1].id must be unique');
   });
+
+  it('requires manifest pointers for installable entries', () => {
+    const result = validateModelCatalogV1({
+      schemaVersion: 1,
+      models: [minimalEntryWithoutManifest('missing-manifest')],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain('models[0].manifestUrl must be a non-empty string');
+    expect(result.errors).toContain('models[0].manifestSha256 must be a non-empty string');
+  });
+
+  it('rejects non-blocked entries without manifest pointers', () => {
+    const candidateWithoutManifest = minimalEntryWithoutManifest('candidate-without-manifest');
+    candidateWithoutManifest.runtime.installable = false;
+
+    const result = validateModelCatalogV1({
+      schemaVersion: 1,
+      models: [candidateWithoutManifest],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      'models[0].manifestUrl is required unless runtime.status is blocked',
+    );
+  });
+
+  it('rejects blocked entries that are marked installable or streaming-ready', () => {
+    const blocked = minimalEntry('bad-blocked');
+    blocked.runtime.status = 'blocked';
+    blocked.runtime.streamingReady = true;
+
+    const result = validateModelCatalogV1({ schemaVersion: 1, models: [blocked] });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      'models[0].runtime.installable must be false when status is blocked',
+    );
+    expect(result.errors).toContain(
+      'models[0].runtime.streamingReady must be false when status is blocked',
+    );
+  });
 });
 
-function resolveCatalogUrl(manifestUrl: string): string {
-  if (!manifestUrl.startsWith('/'))
-    throw new Error(`Expected same-origin manifest URL: ${manifestUrl}`);
+function resolveCatalogUrl(manifestUrl: string | undefined): string {
+  if (manifestUrl === undefined || !manifestUrl.startsWith('/')) {
+    throw new Error(`Expected same-origin manifest URL: ${String(manifestUrl)}`);
+  }
   return resolve(publicRoot, manifestUrl.slice(1));
+}
+
+function minimalEntryWithoutManifest(id: string) {
+  return {
+    id,
+    version: '1.0.0',
+    displayName: 'Test Model',
+    languages: ['vi'],
+    license: { name: 'Test License', redistributionAllowed: true },
+    runtime: {
+      status: 'candidate',
+      installable: true,
+      streamingReady: false,
+      notes: ['test only'],
+    },
+  };
 }
 
 function minimalEntry(id: string) {
@@ -95,7 +171,7 @@ function minimalEntry(id: string) {
     license: { name: 'Test License', redistributionAllowed: true },
     runtime: {
       status: 'candidate',
-      installable: false,
+      installable: true,
       streamingReady: false,
       notes: ['test only'],
     },

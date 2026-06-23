@@ -74,10 +74,11 @@ async function handleInspectModel(modelId: string): Promise<void> {
 
 async function handleInstallModel(modelId: string): Promise<void> {
   const storage = await getStorage();
-  const { catalogEntry, manifest } = await getCatalogEntryAndManifest(modelId);
+  const catalogEntry = await getCatalogEntry(modelId);
   if (!catalogEntry.runtime.installable) {
     throw new Error(`Model ${modelId} is not marked installable in the public catalog.`);
   }
+  const { manifest } = await getCatalogEntryAndManifest(modelId);
   const record = await installModelPack(manifest, {
     storage,
     requestPersistentStorage,
@@ -94,27 +95,43 @@ async function handleDeleteActiveModel(modelId: string): Promise<void> {
 }
 
 async function getCatalogEntryAndManifest(modelId: string): Promise<{
-  readonly catalogEntry: ModelCatalogEntryV1;
+  readonly catalogEntry: ModelCatalogEntryV1 & {
+    readonly manifestUrl: string;
+    readonly manifestSha256: string;
+  };
   readonly manifest: SpeechModelManifestV2;
   readonly manifestBytes: ArrayBuffer;
 }> {
+  const catalogEntry = await getCatalogEntry(modelId);
+  if (catalogEntry.manifestUrl === undefined || catalogEntry.manifestSha256 === undefined) {
+    throw new Error(`Model ${modelId} does not provide an installable browser manifest.`);
+  }
+  const manifestCatalogEntry = {
+    ...catalogEntry,
+    manifestUrl: catalogEntry.manifestUrl,
+    manifestSha256: catalogEntry.manifestSha256,
+  };
+  const cachedManifest = manifestCache.get(modelId);
+  if (cachedManifest !== undefined) {
+    const manifestBytes = await fetchManifestBytes(manifestCatalogEntry.manifestUrl);
+    return { catalogEntry: manifestCatalogEntry, manifest: cachedManifest, manifestBytes };
+  }
+
+  const manifestBytes = await fetchManifestBytes(manifestCatalogEntry.manifestUrl);
+  const manifest = parseSpeechModelManifestV2(
+    JSON.parse(textDecoder.decode(manifestBytes)) as unknown,
+  );
+  manifestCache = new Map(manifestCache).set(modelId, manifest);
+  return { catalogEntry: manifestCatalogEntry, manifest, manifestBytes };
+}
+
+async function getCatalogEntry(modelId: string): Promise<ModelCatalogEntryV1> {
   const catalog = await getCatalog();
   const catalogEntry = catalog.models.find((model) => model.id === modelId);
   if (catalogEntry === undefined) {
     throw new Error(`Model ${modelId} was not found in the public catalog.`);
   }
-  const cachedManifest = manifestCache.get(modelId);
-  if (cachedManifest !== undefined) {
-    const manifestBytes = await fetchManifestBytes(catalogEntry.manifestUrl);
-    return { catalogEntry, manifest: cachedManifest, manifestBytes };
-  }
-
-  const manifestBytes = await fetchManifestBytes(catalogEntry.manifestUrl);
-  const manifest = parseSpeechModelManifestV2(
-    JSON.parse(textDecoder.decode(manifestBytes)) as unknown,
-  );
-  manifestCache = new Map(manifestCache).set(modelId, manifest);
-  return { catalogEntry, manifest, manifestBytes };
+  return catalogEntry;
 }
 
 async function fetchManifestBytes(manifestUrl: string): Promise<ArrayBuffer> {
