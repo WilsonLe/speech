@@ -11,5 +11,6 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**,MODEL_LICENSES
 - Enrollment recordings, speaker embeddings, adapters, and exported profiles are sensitive voice-biometric-like personal data.
 - Never place private audio/transcripts/profile artifacts in logs, screenshots, fixtures, support bundles, or CI artifacts.
 - Code license, model license, dataset license, and fixture license are separate release gates.
+- Catalog research leads with unclear or `other` license metadata must stay blocked/non-installable and must not be downloaded by the PWA until redistribution and runtime compatibility are documented.
 - Data-governance docs must state source, license/consent, speaker/source split policy, and redistribution rights before adding training audio, pseudo-labels, corpora, or derived weights.
 - A few minutes of enrollment adapts a pretrained model; never describe it as training a new ASR base model from scratch.

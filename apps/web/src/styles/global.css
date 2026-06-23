@@ -565,6 +565,18 @@ h2 {
   margin-bottom: 0;
 }
 
+.model-card-notes {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #cbd5e1;
+}
+
+.model-card-notes li::marker {
+  color: #38bdf8;
+}
+
 .model-card-meta {
   display: grid;
   gap: 0.5rem;
