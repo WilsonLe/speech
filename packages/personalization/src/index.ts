@@ -1,3 +1,4 @@
+export * from './adapter-comparison';
 export * from './browser-training';
 
 import type {
@@ -528,7 +529,8 @@ export interface PersonalizationPackageInfo {
 export const packageInfo: PersonalizationPackageInfo = {
   name: '@speech/personalization',
   status: 'active',
-  description: 'Speaker profile, held-out evaluation, and adapter runtime contracts.',
+  description:
+    'Speaker profile, held-out evaluation, adapter runtime, and browser-vs-Python comparison contracts.',
 };
 
 type HeldOutCaseVariant = 'base' | 'profile';

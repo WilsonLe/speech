@@ -40,6 +40,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 | Debug/support leakage                | Do not include raw audio, transcript text, profile JSON, embeddings, adapter weights, or exported packages in logs, screenshots, fixtures, support bundles, or benchmark exports.                                                         |
 | Docker image layer leakage           | Build local trainer images from code/config/license only, exclude speech/profile/model artifacts through `.dockerignore`, and mount user-approved inputs at runtime instead of copying them into layers.                                  |
 | Browser-training data leakage        | Keep private frozen features/checkpoints in the dedicated training worker or private profile storage, expose only aggregate loss/progress/artifact metadata to UI, and require normal import/checksum/regression gates before activation. |
+| Browser-vs-Python comparison leakage | Compare only aggregate quality/performance metrics, adapter size/checksum, activation-gate flags, and base-model identity; omit raw prompts, case IDs, frozen-feature values, adapter weights, profile JSON, audio, and transcript text.  |
 
 ## Review checklist for voice-profile changes
 
@@ -52,6 +53,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 - If a trainer is added, does it split by prompt identity, keep held-out prompts separate, validate exported profile checksums/base-model identity before reading audio, keep base graphs frozen by default, omit raw audio/transcript text/case IDs from metadata and evaluation reports, and refuse automatic activation when regression gates fail?
 - If a trainer Docker image is added, does the guide use `--network none`, narrow bind mounts, host UID/GID mapping, and a publication checklist that records the base image digest without committing user data?
 - If browser training is prototyped, is it isolated to a dedicated training worker, does it avoid UI/AudioWorklet/ASR-worker ownership, does the UI receive only aggregate progress/results rather than private frozen-feature matrices, and do pause/cancel/reload-recovery checkpoints leave the previous active profile intact?
+- If browser-vs-Python adapter comparison is added, does it mark missing browser held-out quality as insufficient evidence and keep all exported comparison data aggregate-only with no prompt text, case IDs, frozen features, adapter weights, or profile JSON?
 
 ## Validation evidence
 

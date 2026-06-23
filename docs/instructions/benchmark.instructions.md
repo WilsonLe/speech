@@ -1,6 +1,6 @@
 ---
 description: 'Benchmark report, diagnostics export, and performance measurement rules.'
-applyTo: 'packages/benchmark/**,packages/inference/src/personal-adapter.ts,apps/web/src/app/BenchmarkPanel.tsx,apps/web/src/app/ModelRuntimePanel.tsx,apps/web/src/workers/benchmark*.ts,apps/web/e2e/benchmark-diagnostics.spec.ts'
+applyTo: 'packages/benchmark/**,packages/personalization/src/adapter-comparison.ts,packages/inference/src/personal-adapter.ts,apps/web/src/app/BenchmarkPanel.tsx,apps/web/src/app/ModelRuntimePanel.tsx,apps/web/src/workers/benchmark*.ts,apps/web/e2e/benchmark-diagnostics.spec.ts'
 ---
 
 # Benchmark and diagnostics export rules
@@ -14,3 +14,4 @@ applyTo: 'packages/benchmark/**,packages/inference/src/personal-adapter.ts,apps/
 - Custom-term benchmark exports must report recall and false insertion separately with explicit numerator/denominator scores. Recall uses recalled expected custom-term matches over expected custom-term matches; false insertion uses unexpected custom-term matches over emitted custom-term matches. Keep fixtures synthetic and export aggregate counts/case IDs only, not transcript text, phrases, aliases, or private vocabulary.
 - Held-out base-vs-profile profile-evaluation reports should use explicit numerator/denominator rates for WER, CER, switch-boundary error, custom-term recall, alias recall, and false insertions per 100 non-target utterances; latency and RTF values should remain aggregate summaries and never include raw prompt text, audio, or profile artifacts.
 - Adapter runtime benchmarks should report only aggregate timing/RTF overhead, provider/thread metadata, adapter size/checksum, and privacy flags; never export adapter weights, raw profile JSON, enrollment audio, transcripts, or private vocabulary.
+- Browser-vs-Python adapter comparison reports should compare only aggregate quality/performance metrics such as WER/CER/custom-term/false-insertion/RTF, training duration, adapter size, activation-gate status, and base-model compatibility. Treat missing browser held-out quality as insufficient evidence rather than parity.
