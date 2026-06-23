@@ -32,6 +32,60 @@ def enabled_context_biasing() -> dict[str, object]:
     }
 
 
+def enabled_residual_adapter() -> dict[str, object]:
+    return {
+        "supported": True,
+        "contractVersion": 1,
+        "insertionPoints": [
+            {
+                "id": "encoder-block-11",
+                "targetGraph": "encoder",
+                "inputTensor": "encoder.block11.input",
+                "outputTensor": "encoder.block11.output",
+                "application": "residual-add",
+            }
+        ],
+        "maxParameters": 500_000,
+        "maxAdapterSizeBytes": 10_000_000,
+        "allowedPrecisions": ["float32", "float16", "int8"],
+        "activationSwap": "utterance-boundary",
+    }
+
+
+def add_adapter_graph(manifest: dict[str, object]) -> None:
+    files = deepcopy(manifest["files"])
+    assert isinstance(files, dict)
+    files["adapter"] = {
+        "url": "/models/mock/adapter.onnx",
+        "sha256": "3" * 64,
+        "sizeBytes": 1,
+        "mediaType": "application/octet-stream",
+    }
+    graphs = deepcopy(manifest["graphs"])
+    assert isinstance(graphs, dict)
+    graphs["adapter"] = {
+        "fileKey": "adapter",
+        "inputs": [
+            {
+                "name": "encoder.block11.input",
+                "dataType": "float16",
+                "shape": ["batch", "frames", 256],
+                "description": "Frozen base encoder activation.",
+            }
+        ],
+        "outputs": [
+            {
+                "name": "encoder.block11.output",
+                "dataType": "float16",
+                "shape": ["batch", "frames", 256],
+                "description": "Adapter residual output.",
+            }
+        ],
+    }
+    manifest["files"] = files
+    manifest["graphs"] = graphs
+
+
 def test_validate_manifest_v2_accepts_example_manifest() -> None:
     assert validate_manifest_v2(load_example_manifest()) == []
     assert validate_manifest_minimum(load_example_manifest()) == []
@@ -150,6 +204,82 @@ def test_validate_manifest_v2_rejects_context_biasing_scoring_and_language_limit
     assert (
         "contextBiasing.diagnostics.emitMatchedVocabularyIds must be true when supported" in errors
     )
+
+
+def test_validate_manifest_v2_accepts_residual_adapter_contract() -> None:
+    manifest = load_example_manifest()
+    add_adapter_graph(manifest)
+    manifest["personalization"] = {"residualAdapter": enabled_residual_adapter()}
+
+    assert validate_manifest_v2(manifest) == []
+
+
+def test_validate_manifest_v2_rejects_residual_adapter_graph_binding_mismatch() -> None:
+    manifest = load_example_manifest()
+    add_adapter_graph(manifest)
+    graphs = manifest["graphs"]
+    assert isinstance(graphs, dict)
+    adapter = graphs["adapter"]
+    assert isinstance(adapter, dict)
+    adapter["inputs"] = [
+        {
+            "name": "actual.input",
+            "dataType": "float16",
+            "shape": ["batch", "frames", 256],
+            "description": "Actual adapter input.",
+        }
+    ]
+    adapter["outputs"] = [
+        {
+            "name": "actual.output",
+            "dataType": "float16",
+            "shape": ["batch", "frames", 256],
+            "description": "Actual adapter output.",
+        }
+    ]
+    manifest["personalization"] = {"residualAdapter": enabled_residual_adapter()}
+
+    errors = validate_manifest_v2(manifest)
+
+    assert (
+        "personalization.residualAdapter.insertionPoints[0].inputTensor "
+        "must reference graphs.adapter.inputs"
+    ) in errors
+    assert (
+        "personalization.residualAdapter.insertionPoints[0].outputTensor "
+        "must reference graphs.adapter.outputs"
+    ) in errors
+
+
+def test_validate_manifest_v2_rejects_residual_adapter_runtime_bounds() -> None:
+    manifest = load_example_manifest()
+    manifest["personalization"] = {
+        "residualAdapter": {
+            **enabled_residual_adapter(),
+            "insertionPoints": [],
+            "maxParameters": 0,
+            "maxAdapterSizeBytes": 0,
+            "allowedPrecisions": [],
+            "activationSwap": "while-listening",
+        }
+    }
+
+    errors = validate_manifest_v2(manifest)
+
+    assert "graphs.adapter is required when residual adapters are supported" in errors
+    assert (
+        "personalization.residualAdapter.insertionPoints must not be empty when supported" in errors
+    )
+    assert (
+        "personalization.residualAdapter.allowedPrecisions must not be empty when supported"
+        in errors
+    )
+    assert "personalization.residualAdapter.maxParameters must be positive when supported" in errors
+    assert (
+        "personalization.residualAdapter.maxAdapterSizeBytes must be positive when supported"
+        in errors
+    )
+    assert "personalization.residualAdapter.activationSwap must be utterance-boundary" in errors
 
 
 def test_validate_manifest_v2_rejects_bad_state_relationships() -> None:
