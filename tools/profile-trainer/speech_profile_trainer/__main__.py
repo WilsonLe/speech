@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .dataset import load_profile_dataset
+from .training import train_frozen_base_adapter_from_files, write_training_outputs
 from .validation import load_json_file, validate_profile_package
 
 
@@ -28,6 +29,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     dataset_parser.add_argument("--base-model-manifest", help="path to model manifest JSON")
     dataset_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    train_parser = subparsers.add_parser(
+        "train", help="run the frozen-base residual-adapter trainer"
+    )
+    train_parser.add_argument("--profile", required=True, help="path to .speechprofile.json export")
+    train_parser.add_argument(
+        "--base-model-manifest", required=True, help="path to model manifest JSON"
+    )
+    train_parser.add_argument("--config", required=True, help="path to trainer config JSON")
+    train_parser.add_argument(
+        "--output-dir", required=True, help="directory for adapter.bin and metadata"
+    )
+    train_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
     args = parser.parse_args(argv)
     if args.command == "validate":
@@ -55,6 +69,22 @@ def main(argv: list[str] | None = None) -> int:
                 "test": len(dataset.test),
             },
             "promptSplits": [entry.__dict__ for entry in dataset.prompt_splits],
+        }
+        _emit(payload, json_output=args.json)
+        return 0
+    if args.command == "train":
+        result = train_frozen_base_adapter_from_files(
+            profile_path=args.profile,
+            base_model_manifest_path=args.base_model_manifest,
+            config_path=args.config,
+        )
+        paths = write_training_outputs(result, args.output_dir)
+        payload = {
+            "profileId": result.metadata["dataset"]["profileId"],
+            "adapterPath": str(paths.adapter_path),
+            "metadataPath": str(paths.metadata_path),
+            "adapterSha256": result.metadata["adapter"]["sha256"],
+            "baseModelModified": result.metadata["baseModel"]["modified"],
         }
         _emit(payload, json_output=args.json)
         return 0
@@ -87,6 +117,12 @@ def _emit(payload: dict[str, Any], *, json_output: bool) -> None:
             print(f"error: {issue['path']}: {issue['message']}")
         for issue in payload.get("warnings", []):
             print(f"warning: {issue['path']}: {issue['message']}")
+        return
+    if "adapterPath" in payload:
+        print(
+            f"adapter training complete for {payload['profileId']}: "
+            f"{payload['adapterPath']} ({payload['adapterSha256']})"
+        )
         return
     print(
         f"profile dataset {payload['profileId']}: {payload['records']} records "
