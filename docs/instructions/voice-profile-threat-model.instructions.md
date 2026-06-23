@@ -47,7 +47,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 - Are package/import paths safe, checksummed, size-checked, and schema-versioned?
 - Does the UI expose actionable recovery for permission, storage, quota, checksum, base-model mismatch, and quality-review failures?
 - Does documentation distinguish local speaker profiles, vocabulary steering, residual adapters, and full base-model training?
-- If a trainer is added, does it split by prompt identity, keep held-out prompts separate, validate exported profile checksums/base-model identity before reading audio, keep base graphs frozen by default, omit raw audio/transcript text from metadata, and refuse automatic activation when regression gates fail?
+- If a trainer is added, does it split by prompt identity, keep held-out prompts separate, validate exported profile checksums/base-model identity before reading audio, keep base graphs frozen by default, omit raw audio/transcript text/case IDs from metadata and evaluation reports, and refuse automatic activation when regression gates fail?
 
 ## Validation evidence
 
