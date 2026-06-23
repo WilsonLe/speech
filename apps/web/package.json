@@ -20,6 +20,7 @@
     "@speech/enrollment": "workspace:*",
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
+    "@speech/personalization": "workspace:*",
     "@speech/profile-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
     "@vitejs/plugin-react": "^4.5.2",

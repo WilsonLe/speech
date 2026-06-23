@@ -10,7 +10,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 ## Assets and boundaries
 
 - **In-memory only:** live dictation PCM, provisional transcripts, calibration RMS/peak/clipping metrics, and unsaved enrollment takes.
-- **Private profile storage:** accepted WAV files, utterance JSON, profile manifests, checksums, derived speaker embeddings/statistics, adapter files, evaluations, and active/previous profile pointers under `@speech/profile-manager` paths.
+- **Private profile storage:** accepted WAV files, utterance JSON, profile manifests, checksums, derived speaker embeddings/statistics, adapter files, evaluations, browser-training frozen features/checkpoints when enabled, and active/previous profile pointers under `@speech/profile-manager` paths.
 - **User-controlled exports:** `.speechprofile.json` packages and future adapter/trainer packages. Exports can contain raw recordings and prompt text and are no longer protected by origin storage once downloaded.
 - **Out of scope by default:** account sync, telemetry, crash uploads, support bundles, server-side training, and automatic model/profile uploads.
 
@@ -26,19 +26,20 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 
 ## Threats and required mitigations
 
-| Threat                               | Required mitigation                                                                                                                                                                                      |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Accidental cloud disclosure          | No telemetry/crash uploads by default; active transcription/enrollment tests must assert no fetch/XHR/websocket requests during capture windows.                                                         |
-| Persistent raw audio without consent | Save accepted takes only after explicit user action; unsaved takes stay in memory and are cleared on retry/skip/dispose.                                                                                 |
-| Profile or adapter package tampering | Verify schema, safe paths, size, checksum, top-level vs embedded metadata consistency, adapter-byte metadata match, and base-model identity before import/enable.                                        |
-| Wrong-model activation               | Store and compare base model ID, version, manifest SHA-256, and graph-contract SHA-256 whenever the active model identity is known.                                                                      |
-| Stale or partial writes              | Use atomic temporary files and checksum indexes; never overwrite active profile files in place without validation.                                                                                       |
-| Over-broad deletion claims           | Deletion copy and tests must state exactly which local profile files/pointers are cleared; downloaded exports remain the user's responsibility.                                                          |
-| Sensitive prompt/vocabulary leakage  | Generated custom-vocabulary prompts and prompt text stay local, require review before recording, and must not become release fixtures.                                                                   |
-| UI-thread exposure or jank           | Profile analysis, hashing, packaging, and storage remain worker-owned; UI renders status and user controls only.                                                                                         |
-| Misleading training claims           | Short enrollment creates/adapts a profile for a pretrained model; never describe it as training a new base ASR model from scratch.                                                                       |
-| Debug/support leakage                | Do not include raw audio, transcript text, profile JSON, embeddings, adapter weights, or exported packages in logs, screenshots, fixtures, support bundles, or benchmark exports.                        |
-| Docker image layer leakage           | Build local trainer images from code/config/license only, exclude speech/profile/model artifacts through `.dockerignore`, and mount user-approved inputs at runtime instead of copying them into layers. |
+| Threat                               | Required mitigation                                                                                                                                                                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Accidental cloud disclosure          | No telemetry/crash uploads by default; active transcription/enrollment tests must assert no fetch/XHR/websocket requests during capture windows.                                                                                          |
+| Persistent raw audio without consent | Save accepted takes only after explicit user action; unsaved takes stay in memory and are cleared on retry/skip/dispose.                                                                                                                  |
+| Profile or adapter package tampering | Verify schema, safe paths, size, checksum, top-level vs embedded metadata consistency, adapter-byte metadata match, and base-model identity before import/enable.                                                                         |
+| Wrong-model activation               | Store and compare base model ID, version, manifest SHA-256, and graph-contract SHA-256 whenever the active model identity is known.                                                                                                       |
+| Stale or partial writes              | Use atomic temporary files and checksum indexes; never overwrite active profile files in place without validation.                                                                                                                        |
+| Over-broad deletion claims           | Deletion copy and tests must state exactly which local profile files/pointers are cleared; downloaded exports remain the user's responsibility.                                                                                           |
+| Sensitive prompt/vocabulary leakage  | Generated custom-vocabulary prompts and prompt text stay local, require review before recording, and must not become release fixtures.                                                                                                    |
+| UI-thread exposure or jank           | Profile analysis, hashing, packaging, and storage remain worker-owned; UI renders status and user controls only.                                                                                                                          |
+| Misleading training claims           | Short enrollment creates/adapts a profile for a pretrained model; never describe it as training a new base ASR model from scratch.                                                                                                        |
+| Debug/support leakage                | Do not include raw audio, transcript text, profile JSON, embeddings, adapter weights, or exported packages in logs, screenshots, fixtures, support bundles, or benchmark exports.                                                         |
+| Docker image layer leakage           | Build local trainer images from code/config/license only, exclude speech/profile/model artifacts through `.dockerignore`, and mount user-approved inputs at runtime instead of copying them into layers.                                  |
+| Browser-training data leakage        | Keep private frozen features/checkpoints in the dedicated training worker or private profile storage, expose only aggregate loss/progress/artifact metadata to UI, and require normal import/checksum/regression gates before activation. |
 
 ## Review checklist for voice-profile changes
 
@@ -50,6 +51,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 - Does documentation distinguish local speaker profiles, vocabulary steering, residual adapters, and full base-model training?
 - If a trainer is added, does it split by prompt identity, keep held-out prompts separate, validate exported profile checksums/base-model identity before reading audio, keep base graphs frozen by default, omit raw audio/transcript text/case IDs from metadata and evaluation reports, and refuse automatic activation when regression gates fail?
 - If a trainer Docker image is added, does the guide use `--network none`, narrow bind mounts, host UID/GID mapping, and a publication checklist that records the base image digest without committing user data?
+- If browser training is prototyped, is it isolated to a dedicated training worker, does it avoid UI/AudioWorklet/ASR-worker ownership, and does the UI receive only aggregate progress/results rather than private frozen-feature matrices?
 
 ## Validation evidence
 

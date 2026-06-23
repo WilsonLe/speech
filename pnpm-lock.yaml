@@ -59,6 +59,9 @@ importers:
       '@speech/model-manager':
         specifier: workspace:*
         version: link:../../packages/model-manager
+      '@speech/personalization':
+        specifier: workspace:*
+        version: link:../../packages/personalization
       '@speech/profile-manager':
         specifier: workspace:*
         version: link:../../packages/profile-manager
