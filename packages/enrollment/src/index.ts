@@ -1,3 +1,4 @@
+export * from './coverage';
 export * from './sentence-bank';
 
 export interface EnrollmentPackageInfo {
