@@ -47,6 +47,9 @@ importers:
       '@speech/benchmark':
         specifier: workspace:*
         version: link:../../packages/benchmark
+      '@speech/context-bias':
+        specifier: workspace:*
+        version: link:../../packages/context-bias
       '@speech/inference':
         specifier: workspace:*
         version: link:../../packages/inference
