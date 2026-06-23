@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { VocabularyEntryLanguage, VocabularyEntryV1 } from '@speech/protocol';
 import { validateVocabularyStoreSnapshot } from '@speech/context-bias';
+import { scheduleCustomVocabularyPrompts } from '@speech/enrollment';
 import {
   createDefaultVocabularyStore,
   createVocabularySet,
@@ -69,6 +70,15 @@ export function VocabularyPanel() {
     0,
   );
   const storeValidation = useMemo(() => validateStoreMessage(snapshot), [snapshot]);
+  const customPromptPreview = useMemo(
+    () =>
+      scheduleCustomVocabularyPrompts({
+        entries: selectedSet?.entries ?? [],
+        maxEntries: 3,
+        maxPromptsPerEntry: 3,
+      }),
+    [selectedSet?.entries],
+  );
 
   function applyResult(result: {
     readonly ok: boolean;
@@ -428,6 +438,43 @@ export function VocabularyPanel() {
         ) : (
           <p className="status-message">No terms yet. Add a name, acronym, or product phrase.</p>
         )}
+      </article>
+
+      <article className="vocabulary-card" aria-labelledby="vocabulary-custom-prompts-title">
+        <h3 id="vocabulary-custom-prompts-title">Enrollment prompt preview</h3>
+        <p>
+          High-priority enabled terms are expanded into deterministic Vietnamese, English, or mixed
+          prompt templates. Review every generated sentence before recording; terms remain active
+          through vocabulary steering even when they are not selected for recording.
+        </p>
+        {customPromptPreview.prompts.length > 0 ? (
+          <div className="vocabulary-entry-list" aria-label="Custom vocabulary prompt preview">
+            {customPromptPreview.prompts.map((prompt) => (
+              <article className="vocabulary-entry" key={prompt.id}>
+                <div>
+                  <h4>{prompt.text}</h4>
+                  <p>
+                    {languageLabels[prompt.customVocabulary.language]} term · prompt language{' '}
+                    {prompt.language} · {prompt.customVocabulary.voiceCondition} ·{' '}
+                    {prompt.customVocabulary.position}
+                  </p>
+                  <p>
+                    Entry {prompt.customVocabulary.vocabularyEntryId} · review required before
+                    recording
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="status-message">
+            Add and enable vocabulary entries to preview local enrollment prompts.
+          </p>
+        )}
+        <p className="status-message">
+          Selected entries: {customPromptPreview.selectedEntryIds.length}. Skipped entries:{' '}
+          {customPromptPreview.skippedEntryIds.length}. {customPromptPreview.warnings[0]}
+        </p>
       </article>
 
       <div className="vocabulary-layout">
