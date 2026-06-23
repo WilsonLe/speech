@@ -13,7 +13,8 @@ The project is tagged as the v0.1.0 PWA/runtime foundation release:
 - streaming resampler, log-Mel feature extraction, RNN-T decoder primitives, stable-prefix/finalization controllers, and deterministic transcript parity fixtures;
 - ONNX Runtime Web loading in a dedicated worker with WebGPU/WASM provider benchmark and fallback reporting;
 - model catalog, manifest validation, OPFS/Cache-backed model storage, checksum verification, and atomic activation contracts;
-- offline app shell, model lifecycle UI, local benchmark/diagnostics exports, and release-validation E2E checks.
+- offline app shell, model lifecycle UI, local benchmark/diagnostics exports, and release-validation E2E checks;
+- guided-personalization contracts, local profile storage/import/export controls, and a Dockerized local profile-trainer workflow for browser-compatible residual-adapter packages.
 
 Production ASR weights, private recordings, speech corpora, and personal profiles are intentionally not committed. The current VietASR catalog entry is a metadata-only external candidate; it is not yet advertised as a low-latency streaming model because its inspected ONNX encoder does not expose streaming cache tensors.
 
@@ -64,6 +65,7 @@ Start with:
 - `docs/instructions/voice-profile-threat-model.instructions.md` — threat model and review checklist for guided enrollment, profile storage, export/import, activation, and future adapters.
 - `docs/instructions/deployment-vercel.instructions.md` — Vercel deployment and required security headers.
 - `docs/instructions/model-format.instructions.md` — model-pack manifest, graph-contract, checksum, and activation rules.
+- `docs/instructions/profile-trainer-docker.instructions.md` — local Docker image and end-to-end workflow for the personal adapter trainer.
 - `docs/instructions/model-card-vietasr-iter3-int8.instructions.md` — current external VietASR candidate model card.
 - `docs/instructions/benchmark.instructions.md` — diagnostics export and performance methodology.
 - `docs/instructions/release-validation.instructions.md` — accessibility, soak/stress, network-privacy, and performance evidence rules.
@@ -90,7 +92,7 @@ Current catalog:
 - Audio and transcripts remain local unless the user explicitly exports them.
 - No telemetry, analytics, remote logging, or crash uploads are enabled by default.
 - During active transcription, the app must not call remote services; model downloads and app updates are explicit lifecycle events outside active dictation.
-- Enrollment recordings, speaker embeddings, adapters, exported profiles, and future trainer packages are sensitive personal data.
+- Enrollment recordings, speaker embeddings, adapters, exported profiles, and local trainer packages are sensitive personal data.
 - Code is licensed under Apache-2.0. Model weights, datasets, pseudo-labels, and fixtures require separate license notices and redistribution review.
 
 ## Known limitations
@@ -98,7 +100,7 @@ Current catalog:
 - The v0.1.0 release validates the browser runtime and model-pack contracts; it does not yet publish a production bilingual streaming ASR accuracy benchmark.
 - The VietASR candidate is Vietnamese-only and its inspected ONNX encoder is full-sequence/length based, not streaming-cache based.
 - The benchmark panel runs synthetic worker timing for export plumbing and methodology; headline latency/RTF numbers require real model packs on declared reference hardware.
-- Global OS hotkeys, cross-application insertion, vocabulary steering, guided voice enrollment, and personal adapter training are roadmap items for later milestones.
+- Global OS hotkeys and cross-application insertion are roadmap items for later milestones. Bilingual vocabulary steering, guided enrollment, and local adapter training currently use deterministic contract/tooling slices until production model-quality data supports user-facing accuracy claims.
 
 ## Roadmap
 
