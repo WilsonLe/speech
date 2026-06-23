@@ -55,7 +55,7 @@ Release-validation coverage includes accessibility naming/section checks, keyboa
 
 ## Documentation map
 
-Durable project documentation lives under `docs/instructions/*.instructions.md`. Troubleshooting notes are only added after real debugging work and must use `docs/troubleshooting/troubleshoot-*.instructions.md`.
+Durable project documentation lives under `docs/instructions/*.instructions.md`. Architecture decision records live under `docs/adr/*.md`. Troubleshooting notes are only added after real debugging work and must use `docs/troubleshooting/troubleshoot-*.instructions.md`.
 
 Start with:
 
@@ -66,6 +66,7 @@ Start with:
 - `docs/instructions/deployment-vercel.instructions.md` — Vercel deployment and required security headers.
 - `docs/instructions/model-format.instructions.md` — model-pack manifest, graph-contract, checksum, and activation rules.
 - `docs/instructions/profile-trainer-docker.instructions.md` — local Docker image and end-to-end workflow for the personal adapter trainer.
+- `docs/adr/0001-defer-browser-training-path.md` — decision to defer browser-only adapter training as a shipping path.
 - `docs/instructions/model-card-vietasr-iter3-int8.instructions.md` — current external VietASR candidate model card.
 - `docs/instructions/benchmark.instructions.md` — diagnostics export and performance methodology.
 - `docs/instructions/release-validation.instructions.md` — accessibility, soak/stress, network-privacy, and performance evidence rules.
@@ -100,7 +101,7 @@ Current catalog:
 - The v0.1.0 release validates the browser runtime and model-pack contracts; it does not yet publish a production bilingual streaming ASR accuracy benchmark.
 - The VietASR candidate is Vietnamese-only and its inspected ONNX encoder is full-sequence/length based, not streaming-cache based.
 - The benchmark panel runs synthetic worker timing for export plumbing and methodology; headline latency/RTF numbers require real model packs on declared reference hardware.
-- Browser-only adapter training is currently deferred: the pinned `onnxruntime-web@1.27.0` package exposes inference bundles and no public training artifact/API, so the local Python/Docker trainer remains the supported adapter path.
+- Browser-only adapter training is currently deferred by ADR: the pinned `onnxruntime-web@1.27.0` package exposes inference bundles and no public training artifact/API, so the local Python/Docker trainer remains the supported adapter path.
 - Global OS hotkeys and cross-application insertion are roadmap items for later milestones. Bilingual vocabulary steering, guided enrollment, and local adapter training currently use deterministic contract/tooling slices until production model-quality data supports user-facing accuracy claims.
 
 ## Roadmap
