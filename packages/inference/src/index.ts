@@ -1,5 +1,6 @@
 export * from './encoder-cache';
 export * from './onnx-runtime';
+export * from './personal-adapter';
 export * from './provider-benchmark';
 
 export interface InferencePackageInfo {
@@ -11,5 +12,5 @@ export interface InferencePackageInfo {
 export const packageInfo: InferencePackageInfo = {
   name: '@speech/inference',
   status: 'active',
-  description: 'ONNX Runtime Web session adapters and provider selection.',
+  description: 'ONNX Runtime Web session, personal-adapter, and provider selection helpers.',
 };

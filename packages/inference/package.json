@@ -6,7 +6,8 @@
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./mock-adapter-fixture": "./src/mock-adapter-fixture.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

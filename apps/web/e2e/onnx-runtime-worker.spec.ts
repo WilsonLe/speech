@@ -14,4 +14,8 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(runtimeStatus.getByText('auto', { exact: true })).toBeVisible();
   await expect(runtimeStatus.getByText('Language spans', { exact: true })).toBeVisible();
   await expect(runtimeStatus.getByText('no spans yet', { exact: true })).toBeVisible();
+  await expect(runtimeStatus.getByText('Adapter profile', { exact: true })).toBeVisible();
+  await expect(runtimeStatus.getByText(/profile-local-adapter-smoke/)).toBeVisible();
+  await expect(runtimeStatus.getByText('Adapter median run', { exact: true })).toBeVisible();
+  await expect(runtimeStatus.getByText('Adapter RTF overhead', { exact: true })).toBeVisible();
 });

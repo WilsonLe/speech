@@ -2,6 +2,7 @@
 
 import {
   InMemoryProviderPreferenceStore,
+  loadAndBenchmarkPersonalAdapterRuntime,
   loadOnnxRuntimeWeb,
   providerBenchmarkCacheKey,
   selectProviderWithBenchmark,
@@ -31,6 +32,7 @@ const supportedLanguageModes = [
 ] as const satisfies readonly SpeechLanguageMode[];
 
 let disposed = false;
+let currentRuntime: LoadedOnnxRuntimeWeb | undefined;
 let providerPreferenceStore: ProviderPreferenceStore | undefined;
 let languageModeDiagnostics: LanguageModeDiagnostics = createLanguageModeDiagnostics({
   requestedMode: 'auto',
@@ -59,9 +61,11 @@ async function handleMessage(message: MainToAsrWorker): Promise<void> {
     case 'SET_LANGUAGE_MODE':
       setLanguageMode(message.mode);
       return;
+    case 'LOAD_PROFILE':
+      await loadProfileAdapter(message);
+      return;
     case 'RESET':
     case 'SET_VOCABULARY':
-    case 'LOAD_PROFILE':
     case 'UNLOAD_PROFILE':
     case 'START_UTTERANCE':
     case 'AUDIO_AVAILABLE':
@@ -119,6 +123,7 @@ async function initializeRuntime(
     const runtime =
       loadedRuntimes.get(selection.selectedProvider) ??
       (await loadOnnxRuntimeWeb({ preferredProvider: selection.selectedProvider, capabilities }));
+    currentRuntime = runtime;
     postMessage({ type: 'MODEL_PROGRESS', phase: 'onnx-runtime-loaded', completed: 1, total: 1 });
     postMessage({
       type: 'METRICS',
@@ -136,6 +141,74 @@ async function initializeRuntime(
     });
   } catch (error) {
     postError('INFERENCE_FAILED', true, errorMessage(error));
+  }
+}
+
+async function loadProfileAdapter(
+  message: Extract<MainToAsrWorker, { readonly type: 'LOAD_PROFILE' }>,
+): Promise<void> {
+  if (currentRuntime === undefined) {
+    postError(
+      'PROFILE_BASE_MODEL_MISMATCH',
+      true,
+      'Initialize the ASR worker before loading a profile.',
+    );
+    return;
+  }
+  if (
+    message.profileManifest === undefined ||
+    message.baseModelManifest === undefined ||
+    message.adapterGraphBytes === undefined
+  ) {
+    postError(
+      'INFERENCE_FAILED',
+      true,
+      'LOAD_PROFILE requires a residual-adapter profile manifest, base model manifest, and adapter graph bytes.',
+    );
+    return;
+  }
+  try {
+    postMessage({
+      type: 'MODEL_PROGRESS',
+      phase: 'loading-adapter-profile',
+      completed: 0,
+      total: 1,
+    });
+    const benchmark = await loadAndBenchmarkPersonalAdapterRuntime({
+      loadedRuntime: currentRuntime,
+      baseModelManifest: message.baseModelManifest,
+      activeBaseModel: message.expectedBaseModel,
+      profileManifest: message.profileManifest,
+      adapterBytes: message.adapterGraphBytes,
+      runs: message.adapterBenchmark?.runs ?? 3,
+      warmupRuns: message.adapterBenchmark?.warmupRuns ?? 1,
+      audioChunkDurationMs: message.adapterBenchmark?.audioChunkDurationMs ?? 160,
+    });
+    postMessage({
+      type: 'MODEL_PROGRESS',
+      phase: 'loading-adapter-profile',
+      completed: 1,
+      total: 1,
+    });
+    postMessage({
+      type: 'METRICS',
+      metrics: {
+        queueDepthFrames: 0,
+        audioOverruns: 0,
+        provider: benchmark.provider,
+        wasmThreads: benchmark.wasmThreads,
+        adapterRunMedianMs: benchmark.medianRunMs,
+        adapterRtfOverheadRatio: benchmark.adapterRtfOverheadRatio,
+        adapterSizeBytes: benchmark.adapterSizeBytes,
+      },
+    });
+    postMessage({
+      type: 'PROFILE_READY',
+      profileId: benchmark.profileId,
+      adaptationType: benchmark.adaptationType,
+    });
+  } catch (error) {
+    postError('PROFILE_CHECKSUM_MISMATCH', true, errorMessage(error));
   }
 }
 
