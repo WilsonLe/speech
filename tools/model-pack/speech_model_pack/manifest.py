@@ -11,6 +11,9 @@ TOKENIZER_TYPES = {"sentencepiece", "tokens"}
 CONTEXT_BIASING_ALGORITHMS = {"token-trie", "aho-corasick"}
 CONTEXT_BIASING_BOUNDARY_MODES = {"none", "token", "unicode-word"}
 CONTEXT_BIASING_REVISION_SWAPS = {"utterance-boundary"}
+RESIDUAL_ADAPTER_GRAPH_ROLES = {"encoder", "predictor", "joiner"}
+RESIDUAL_ADAPTER_PRECISIONS = {"float32", "float16", "int8"}
+RESIDUAL_ADAPTER_APPLICATIONS = {"residual-add", "lhuc-scale", "film-affine"}
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
@@ -48,8 +51,9 @@ def validate_manifest_v2(manifest: Mapping[str, Any]) -> list[str]:
         errors,
     )
     file_keys = _files(manifest.get("files"), errors)
-    _graphs(manifest.get("graphs"), file_keys, errors)
-    _personalization(manifest.get("personalization"), file_keys, errors)
+    graphs = manifest.get("graphs")
+    _graphs(graphs, file_keys, errors)
+    _personalization(manifest.get("personalization"), file_keys, graphs, errors)
     _recommended(manifest.get("recommended"), errors)
 
     if vocabulary_size is not None:
@@ -562,7 +566,12 @@ def _state_relationships(
             errors.append(f"{path}.output must reference a graph output tensor")
 
 
-def _personalization(value: Any, file_keys: set[str], errors: list[str]) -> None:
+def _personalization(
+    value: Any,
+    file_keys: set[str],
+    graphs: Any,
+    errors: list[str],
+) -> None:
     if value is None:
         return
     if not isinstance(value, Mapping):
@@ -596,26 +605,125 @@ def _personalization(value: Any, file_keys: set[str], errors: list[str]) -> None
                 )
     residual_adapter = value.get("residualAdapter")
     if residual_adapter is not None:
-        if not isinstance(residual_adapter, Mapping):
-            errors.append("personalization.residualAdapter must be an object")
-        else:
-            if not isinstance(residual_adapter.get("supported"), bool):
-                errors.append("personalization.residualAdapter.supported must be boolean")
-            _positive_int(
-                residual_adapter.get("contractVersion"),
-                "personalization.residualAdapter.contractVersion",
-                errors,
+        _residual_adapter_contract(residual_adapter, graphs, errors)
+
+
+def _residual_adapter_contract(value: Any, graphs: Any, errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("personalization.residualAdapter must be an object")
+        return
+    supported = value.get("supported")
+    if not isinstance(supported, bool):
+        errors.append("personalization.residualAdapter.supported must be boolean")
+    _positive_int(
+        value.get("contractVersion"),
+        "personalization.residualAdapter.contractVersion",
+        errors,
+    )
+    max_parameters = _non_negative_int(
+        value.get("maxParameters"),
+        "personalization.residualAdapter.maxParameters",
+        errors,
+    )
+    max_adapter_size_bytes = _non_negative_int(
+        value.get("maxAdapterSizeBytes"),
+        "personalization.residualAdapter.maxAdapterSizeBytes",
+        errors,
+    )
+    insertion_points = _residual_adapter_insertion_points(value.get("insertionPoints"), errors)
+    allowed_precisions = _enum_array_allow_empty(
+        value.get("allowedPrecisions"),
+        "personalization.residualAdapter.allowedPrecisions",
+        RESIDUAL_ADAPTER_PRECISIONS,
+        errors,
+    )
+    if value.get("activationSwap") != "utterance-boundary":
+        errors.append("personalization.residualAdapter.activationSwap must be utterance-boundary")
+
+    adapter_graph = graphs.get("adapter") if isinstance(graphs, Mapping) else None
+    if isinstance(adapter_graph, Mapping):
+        _residual_adapter_graph_bindings(adapter_graph, insertion_points, errors)
+
+    if supported is True:
+        if not isinstance(adapter_graph, Mapping):
+            errors.append("graphs.adapter is required when residual adapters are supported")
+        if len(insertion_points) == 0:
+            errors.append(
+                "personalization.residualAdapter.insertionPoints must not be empty when supported"
             )
-            _string_array(
-                residual_adapter.get("insertionPoints"),
-                "personalization.residualAdapter.insertionPoints",
-                errors,
+        if allowed_precisions is not None and len(allowed_precisions) == 0:
+            errors.append(
+                "personalization.residualAdapter.allowedPrecisions must not be empty when supported"
             )
-            _positive_int(
-                residual_adapter.get("maxParameters"),
-                "personalization.residualAdapter.maxParameters",
-                errors,
+        if max_parameters is not None and max_parameters <= 0:
+            errors.append(
+                "personalization.residualAdapter.maxParameters must be positive when supported"
             )
+        if max_adapter_size_bytes is not None and max_adapter_size_bytes <= 0:
+            errors.append(
+                "personalization.residualAdapter.maxAdapterSizeBytes must be positive when "
+                "supported"
+            )
+
+
+def _residual_adapter_insertion_points(
+    value: Any,
+    errors: list[str],
+) -> list[tuple[int, str, str, str]]:
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        errors.append("personalization.residualAdapter.insertionPoints must be an array")
+        return []
+    seen: set[str] = set()
+    insertion_points: list[tuple[int, str, str, str]] = []
+    for index, entry in enumerate(value):
+        path = f"personalization.residualAdapter.insertionPoints[{index}]"
+        if not isinstance(entry, Mapping):
+            errors.append(f"{path} must be an object")
+            continue
+        insertion_id = _non_empty_string(entry.get("id"), f"{path}.id", errors)
+        if insertion_id is not None:
+            if insertion_id in seen:
+                errors.append(f"{path}.id must be unique")
+            seen.add(insertion_id)
+        _enum_value(
+            entry.get("targetGraph"), f"{path}.targetGraph", RESIDUAL_ADAPTER_GRAPH_ROLES, errors
+        )
+        input_tensor = _non_empty_string(entry.get("inputTensor"), f"{path}.inputTensor", errors)
+        output_tensor = _non_empty_string(entry.get("outputTensor"), f"{path}.outputTensor", errors)
+        _enum_value(
+            entry.get("application"),
+            f"{path}.application",
+            RESIDUAL_ADAPTER_APPLICATIONS,
+            errors,
+        )
+        if insertion_id is not None and input_tensor is not None and output_tensor is not None:
+            insertion_points.append((index, insertion_id, input_tensor, output_tensor))
+    return insertion_points
+
+
+def _residual_adapter_graph_bindings(
+    graph: Mapping[str, Any],
+    insertion_points: list[tuple[int, str, str, str]],
+    errors: list[str],
+) -> None:
+    graph_inputs = _tensor_names(graph.get("inputs"))
+    graph_outputs = _tensor_names(graph.get("outputs"))
+    for index, _insertion_id, input_tensor, output_tensor in insertion_points:
+        path = f"personalization.residualAdapter.insertionPoints[{index}]"
+        if input_tensor not in graph_inputs:
+            errors.append(f"{path}.inputTensor must reference graphs.adapter.inputs")
+        if output_tensor not in graph_outputs:
+            errors.append(f"{path}.outputTensor must reference graphs.adapter.outputs")
+
+
+def _tensor_names(value: Any) -> set[str]:
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        return set()
+    names: set[str] = set()
+    for tensor in value:
+        if isinstance(tensor, Mapping) and isinstance(tensor.get("name"), str):
+            names.add(tensor["name"])
+    return names
 
 
 def _recommended(value: Any, errors: list[str]) -> None:
