@@ -1,4 +1,4 @@
-export type BrowserTrainingPrototypeStatus = 'completed' | 'cancelled';
+export type BrowserTrainingPrototypeStatus = 'completed' | 'cancelled' | 'paused';
 
 export interface FrozenFeatureTinyAdapterExampleV1 {
   readonly id: string;
@@ -39,8 +39,12 @@ export interface FrozenFeatureTinyAdapterTrainingOptions {
   readonly maxParameterCount: number;
   readonly targetLoss?: number;
   readonly progressEveryEpochs?: number;
+  readonly checkpointEveryEpochs?: number;
+  readonly resumeFromCheckpoint?: FrozenFeatureTinyAdapterCheckpointV1;
   readonly shouldCancel?: (state: FrozenFeatureTinyAdapterProgressV1) => boolean;
+  readonly shouldPause?: (state: FrozenFeatureTinyAdapterProgressV1) => boolean;
   readonly onProgress?: (state: FrozenFeatureTinyAdapterProgressV1) => void;
+  readonly onCheckpoint?: (checkpoint: FrozenFeatureTinyAdapterCheckpointV1) => void;
 }
 
 export interface FrozenFeatureTinyAdapterProgressV1 {
@@ -48,7 +52,7 @@ export interface FrozenFeatureTinyAdapterProgressV1 {
   readonly epoch: number;
   readonly epochs: number;
   readonly loss: number;
-  readonly status: 'training' | 'completed' | 'cancelled';
+  readonly status: 'training' | 'completed' | 'cancelled' | 'paused';
 }
 
 export interface FrozenFeatureTinyAdapterArtifactV1 {
@@ -64,12 +68,45 @@ export interface FrozenFeatureTinyAdapterArtifactV1 {
   readonly checksum: string;
 }
 
+export interface FrozenFeatureTinyAdapterCheckpointV1 {
+  readonly schemaVersion: 1;
+  readonly checkpointType: 'frozen-feature-tiny-adapter-checkpoint';
+  readonly checkpointId: string;
+  readonly datasetId: string;
+  readonly epoch: number;
+  readonly epochs: number;
+  readonly loss: number;
+  readonly initialLoss: number;
+  readonly artifact: FrozenFeatureTinyAdapterArtifactV1;
+  readonly compatibility: FrozenFeatureTinyAdapterCompatibilityV1;
+  readonly privacy: BrowserTrainingPrivacyV1;
+}
+
+export interface FrozenFeatureTinyAdapterCompatibilityV1 {
+  readonly baseModelId: string;
+  readonly baseModelVersion: string;
+  readonly graphContractSha256: string;
+  readonly trainableScope: 'top-residual-adapter';
+  readonly activationGateRequired: true;
+  readonly importChecksumRequired: true;
+}
+
+export interface FrozenFeatureTinyAdapterRecoveryV1 {
+  readonly checkpointId: string;
+  readonly checkpointEpoch: number;
+  readonly resumable: boolean;
+  readonly reloadRecoverySupported: true;
+  readonly previousActiveProfileIntact: true;
+  readonly activationGateRequired: true;
+}
+
 export interface FrozenFeatureTinyAdapterTrainingResultV1 {
   readonly schemaVersion: 1;
   readonly status: BrowserTrainingPrototypeStatus;
   readonly workerOwner: 'dedicated-training-worker';
   readonly datasetId: string;
   readonly artifact: FrozenFeatureTinyAdapterArtifactV1;
+  readonly checkpoint: FrozenFeatureTinyAdapterCheckpointV1;
   readonly metrics: {
     readonly examples: number;
     readonly epochsCompleted: number;
@@ -77,14 +114,8 @@ export interface FrozenFeatureTinyAdapterTrainingResultV1 {
     readonly finalLoss: number;
     readonly lossReduction: number;
   };
-  readonly compatibility: {
-    readonly baseModelId: string;
-    readonly baseModelVersion: string;
-    readonly graphContractSha256: string;
-    readonly trainableScope: 'top-residual-adapter';
-    readonly activationGateRequired: true;
-    readonly importChecksumRequired: true;
-  };
+  readonly compatibility: FrozenFeatureTinyAdapterCompatibilityV1;
+  readonly recovery: FrozenFeatureTinyAdapterRecoveryV1;
   readonly privacy: BrowserTrainingPrivacyV1;
 }
 
@@ -96,6 +127,7 @@ export const defaultFrozenFeatureTinyAdapterTrainingOptions: FrozenFeatureTinyAd
     maxParameterCount: 1_024,
     targetLoss: 0.0005,
     progressEveryEpochs: 10,
+    checkpointEveryEpochs: 10,
   };
 
 export function createSyntheticFrozenFeatureTinyAdapterDataset(): FrozenFeatureTinyAdapterDatasetV1 {
@@ -129,86 +161,208 @@ export function trainFrozenFeatureTinyAdapter(
   dataset: FrozenFeatureTinyAdapterDatasetV1,
   optionsInput: Partial<FrozenFeatureTinyAdapterTrainingOptions> = {},
 ): FrozenFeatureTinyAdapterTrainingResultV1 {
-  validateFrozenFeatureTinyAdapterDataset(dataset);
-  const options = normalizeTrainingOptions(optionsInput);
-  const parameterCount =
-    dataset.featureDimension * dataset.outputDimension + dataset.outputDimension;
-  if (parameterCount > options.maxParameterCount) {
-    throw new Error(
-      `Frozen-feature adapter parameter count ${parameterCount.toString()} exceeds limit ${options.maxParameterCount.toString()}.`,
-    );
-  }
-
-  const weights = new Array<number>(dataset.featureDimension * dataset.outputDimension).fill(0);
-  const bias = new Array<number>(dataset.outputDimension).fill(0);
-  const initialLoss = calculateLoss(dataset, weights, bias, options.l2Regularization);
-  let finalLoss = initialLoss;
-  let epochsCompleted = 0;
+  const session = createFrozenFeatureTinyAdapterTrainingSession(dataset, optionsInput);
   let status: BrowserTrainingPrototypeStatus = 'completed';
 
-  for (let epoch = 1; epoch <= options.epochs; epoch += 1) {
-    runSgdEpoch(dataset, weights, bias, options.learningRate, options.l2Regularization);
-    finalLoss = calculateLoss(dataset, weights, bias, options.l2Regularization);
-    epochsCompleted = epoch;
-    const progress = createProgress(epoch, options.epochs, finalLoss, 'training');
-    if (shouldEmitProgress(epoch, options) || finalLoss <= (options.targetLoss ?? -1)) {
-      options.onProgress?.(progress);
+  while (session.epoch < session.options.epochs) {
+    const progress = session.runEpoch();
+    if (shouldEmitProgress(progress.epoch, session.options) || session.hasReachedTargetLoss()) {
+      session.options.onProgress?.(progress);
     }
-    if (options.shouldCancel?.(progress) === true) {
+    if (session.shouldCheckpoint()) {
+      session.options.onCheckpoint?.(session.createCheckpoint());
+    }
+    if (session.options.shouldCancel?.(progress) === true) {
       status = 'cancelled';
-      options.onProgress?.(createProgress(epoch, options.epochs, finalLoss, 'cancelled'));
+      const cancelled = session.createProgress('cancelled');
+      session.options.onProgress?.(cancelled);
+      session.options.onCheckpoint?.(session.createCheckpoint());
       break;
     }
-    if (finalLoss <= (options.targetLoss ?? -1)) {
+    if (session.options.shouldPause?.(progress) === true) {
+      status = 'paused';
+      const paused = session.createProgress('paused');
+      session.options.onProgress?.(paused);
+      session.options.onCheckpoint?.(session.createCheckpoint());
+      break;
+    }
+    if (session.hasReachedTargetLoss()) {
       break;
     }
   }
 
   if (status === 'completed') {
-    options.onProgress?.(createProgress(epochsCompleted, options.epochs, finalLoss, 'completed'));
+    session.options.onProgress?.(session.createProgress('completed'));
   }
 
-  const roundedWeights = weights.map(roundFloat);
-  const roundedBias = bias.map(roundFloat);
-  const artifact: FrozenFeatureTinyAdapterArtifactV1 = {
-    schemaVersion: 1,
-    artifactType: 'frozen-feature-affine-adapter',
-    trainableScope: 'top-residual-adapter',
-    featureDimension: dataset.featureDimension,
-    outputDimension: dataset.outputDimension,
-    parameterCount,
-    precision: 'float32',
-    weights: roundedWeights,
-    bias: roundedBias,
-    checksum: checksumTinyAdapter(roundedWeights, roundedBias),
-  };
+  return session.finish(status);
+}
 
-  return {
-    schemaVersion: 1,
-    status,
-    workerOwner: 'dedicated-training-worker',
-    datasetId: dataset.datasetId,
-    artifact,
-    metrics: {
-      examples: dataset.examples.length,
-      epochsCompleted,
-      initialLoss: roundFloat(initialLoss),
-      finalLoss: roundFloat(finalLoss),
-      lossReduction: roundFloat(initialLoss - finalLoss),
-    },
-    compatibility: {
-      baseModelId: dataset.source.baseModelId,
-      baseModelVersion: dataset.source.baseModelVersion,
-      graphContractSha256: dataset.source.graphContractSha256,
-      trainableScope: 'top-residual-adapter',
-      activationGateRequired: true,
-      importChecksumRequired: true,
-    },
-    privacy: createBrowserTrainingPrivacy({
-      containsPrivateFrozenFeatureValues: dataset.privacy.containsPrivateFrozenFeatureValues,
-      containsProfileData: dataset.privacy.containsProfileData,
-    }),
-  };
+export function createFrozenFeatureTinyAdapterTrainingSession(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  optionsInput: Partial<FrozenFeatureTinyAdapterTrainingOptions> = {},
+): FrozenFeatureTinyAdapterTrainingSession {
+  return new FrozenFeatureTinyAdapterTrainingSession(dataset, optionsInput);
+}
+
+export class FrozenFeatureTinyAdapterTrainingSession {
+  readonly dataset: FrozenFeatureTinyAdapterDatasetV1;
+  readonly options: FrozenFeatureTinyAdapterTrainingOptions;
+  readonly parameterCount: number;
+  readonly initialLoss: number;
+
+  private readonly weights: number[];
+  private readonly bias: number[];
+  private currentEpoch: number;
+  private currentLoss: number;
+
+  constructor(
+    dataset: FrozenFeatureTinyAdapterDatasetV1,
+    optionsInput: Partial<FrozenFeatureTinyAdapterTrainingOptions> = {},
+  ) {
+    validateFrozenFeatureTinyAdapterDataset(dataset);
+    this.options = normalizeTrainingOptions(optionsInput);
+    this.dataset = dataset;
+    this.parameterCount =
+      dataset.featureDimension * dataset.outputDimension + dataset.outputDimension;
+    if (this.parameterCount > this.options.maxParameterCount) {
+      throw new Error(
+        `Frozen-feature adapter parameter count ${this.parameterCount.toString()} exceeds limit ${this.options.maxParameterCount.toString()}.`,
+      );
+    }
+
+    const checkpoint = this.options.resumeFromCheckpoint;
+    if (checkpoint !== undefined) {
+      validateFrozenFeatureTinyAdapterCheckpoint(dataset, checkpoint);
+      if (checkpoint.epochs > this.options.epochs) {
+        throw new Error(
+          'Frozen-feature checkpoint epoch budget exceeds requested training epochs.',
+        );
+      }
+      this.weights = [...checkpoint.artifact.weights];
+      this.bias = [...checkpoint.artifact.bias];
+      this.currentEpoch = checkpoint.epoch;
+      this.initialLoss = checkpoint.initialLoss;
+      this.currentLoss = checkpoint.loss;
+      return;
+    }
+
+    this.weights = new Array<number>(dataset.featureDimension * dataset.outputDimension).fill(0);
+    this.bias = new Array<number>(dataset.outputDimension).fill(0);
+    this.currentEpoch = 0;
+    this.initialLoss = calculateLoss(
+      dataset,
+      this.weights,
+      this.bias,
+      this.options.l2Regularization,
+    );
+    this.currentLoss = this.initialLoss;
+  }
+
+  get epoch(): number {
+    return this.currentEpoch;
+  }
+
+  get loss(): number {
+    return this.currentLoss;
+  }
+
+  runEpoch(): FrozenFeatureTinyAdapterProgressV1 {
+    if (this.currentEpoch >= this.options.epochs) {
+      return this.createProgress('completed');
+    }
+    runSgdEpoch(
+      this.dataset,
+      this.weights,
+      this.bias,
+      this.options.learningRate,
+      this.options.l2Regularization,
+    );
+    this.currentEpoch += 1;
+    this.currentLoss = calculateLoss(
+      this.dataset,
+      this.weights,
+      this.bias,
+      this.options.l2Regularization,
+    );
+    return this.createProgress('training');
+  }
+
+  hasReachedTargetLoss(): boolean {
+    return this.options.targetLoss !== undefined && this.currentLoss <= this.options.targetLoss;
+  }
+
+  shouldCheckpoint(): boolean {
+    return (
+      this.options.checkpointEveryEpochs !== undefined &&
+      this.currentEpoch > 0 &&
+      this.currentEpoch % this.options.checkpointEveryEpochs === 0
+    );
+  }
+
+  createProgress(
+    status: FrozenFeatureTinyAdapterProgressV1['status'],
+  ): FrozenFeatureTinyAdapterProgressV1 {
+    return createProgress(this.currentEpoch, this.options.epochs, this.currentLoss, status);
+  }
+
+  createCheckpoint(): FrozenFeatureTinyAdapterCheckpointV1 {
+    const artifact = createArtifact(this.dataset, this.weights, this.bias, this.parameterCount);
+    const checkpoint: FrozenFeatureTinyAdapterCheckpointV1 = {
+      schemaVersion: 1,
+      checkpointType: 'frozen-feature-tiny-adapter-checkpoint',
+      checkpointId: createCheckpointId(
+        this.dataset.datasetId,
+        this.currentEpoch,
+        artifact.checksum,
+      ),
+      datasetId: this.dataset.datasetId,
+      epoch: this.currentEpoch,
+      epochs: this.options.epochs,
+      loss: roundFloat(this.currentLoss),
+      initialLoss: roundFloat(this.initialLoss),
+      artifact,
+      compatibility: createCompatibility(this.dataset),
+      privacy: createBrowserTrainingPrivacy({
+        containsPrivateFrozenFeatureValues: this.dataset.privacy.containsPrivateFrozenFeatureValues,
+        containsProfileData: this.dataset.privacy.containsProfileData,
+      }),
+    };
+    return validateFrozenFeatureTinyAdapterCheckpoint(this.dataset, checkpoint);
+  }
+
+  finish(status: BrowserTrainingPrototypeStatus): FrozenFeatureTinyAdapterTrainingResultV1 {
+    const artifact = createArtifact(this.dataset, this.weights, this.bias, this.parameterCount);
+    const checkpoint = this.createCheckpoint();
+    return {
+      schemaVersion: 1,
+      status,
+      workerOwner: 'dedicated-training-worker',
+      datasetId: this.dataset.datasetId,
+      artifact,
+      checkpoint,
+      metrics: {
+        examples: this.dataset.examples.length,
+        epochsCompleted: this.currentEpoch,
+        initialLoss: roundFloat(this.initialLoss),
+        finalLoss: roundFloat(this.currentLoss),
+        lossReduction: roundFloat(this.initialLoss - this.currentLoss),
+      },
+      compatibility: createCompatibility(this.dataset),
+      recovery: {
+        checkpointId: checkpoint.checkpointId,
+        checkpointEpoch: checkpoint.epoch,
+        resumable: status !== 'completed' && checkpoint.epoch < this.options.epochs,
+        reloadRecoverySupported: true,
+        previousActiveProfileIntact: true,
+        activationGateRequired: true,
+      },
+      privacy: createBrowserTrainingPrivacy({
+        containsPrivateFrozenFeatureValues: this.dataset.privacy.containsPrivateFrozenFeatureValues,
+        containsProfileData: this.dataset.privacy.containsProfileData,
+      }),
+    };
+  }
 }
 
 export function validateFrozenFeatureTinyAdapterDataset(
@@ -247,6 +401,15 @@ export function validateFrozenFeatureTinyAdapterDataset(
       throw new Error(`Example ${example.id} weight must be a positive finite number.`);
     }
   }
+  if (
+    dataset.source.kind !== 'synthetic-ci-fixture' &&
+    dataset.source.kind !== 'profile-frozen-features'
+  ) {
+    throw new Error('Frozen-feature dataset source kind is unsupported.');
+  }
+  if (!dataset.source.baseModelId.trim() || !dataset.source.baseModelVersion.trim()) {
+    throw new Error('Frozen-feature dataset base model identity is required.');
+  }
   if (!/^[a-f0-9]{64}$/i.test(dataset.source.graphContractSha256)) {
     throw new Error('Frozen-feature dataset graphContractSha256 must be a SHA-256 hex string.');
   }
@@ -258,7 +421,59 @@ export function validateFrozenFeatureTinyAdapterDataset(
       'Frozen-feature tiny-adapter dataset must not include raw audio or transcript text.',
     );
   }
+
   return dataset;
+}
+
+export function validateFrozenFeatureTinyAdapterCheckpoint(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  checkpoint: FrozenFeatureTinyAdapterCheckpointV1,
+): FrozenFeatureTinyAdapterCheckpointV1 {
+  validateFrozenFeatureTinyAdapterDataset(dataset);
+  if (checkpoint.schemaVersion !== 1) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint schemaVersion must be 1.');
+  }
+  if (checkpoint.checkpointType !== 'frozen-feature-tiny-adapter-checkpoint') {
+    throw new Error('Frozen-feature tiny-adapter checkpoint type is invalid.');
+  }
+  if (!checkpoint.checkpointId.trim()) {
+    throw new Error('Frozen-feature tiny-adapter checkpointId is required.');
+  }
+  if (checkpoint.datasetId !== dataset.datasetId) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint datasetId does not match dataset.');
+  }
+  assertNonNegativeInteger(checkpoint.epoch, 'checkpoint epoch');
+  assertPositiveInteger(checkpoint.epochs, 'checkpoint epochs');
+  if (checkpoint.epoch > checkpoint.epochs) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint epoch exceeds epoch budget.');
+  }
+  assertFiniteNumber(checkpoint.loss, 'checkpoint loss');
+  assertFiniteNumber(checkpoint.initialLoss, 'checkpoint initialLoss');
+  validateArtifact(dataset, checkpoint.artifact);
+  if (
+    checkpoint.checkpointId !==
+    createCheckpointId(dataset.datasetId, checkpoint.epoch, checkpoint.artifact.checksum)
+  ) {
+    throw new Error('Frozen-feature tiny-adapter checkpointId does not match checkpoint artifact.');
+  }
+  validateCompatibility(dataset, checkpoint.compatibility);
+  if (
+    checkpoint.privacy.containsRawAudio ||
+    checkpoint.privacy.containsTranscriptText ||
+    checkpoint.privacy.networkUpload !== false ||
+    checkpoint.privacy.telemetry !== false ||
+    checkpoint.privacy.localOnly !== true
+  ) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint privacy flags must remain local-only.');
+  }
+  if (
+    checkpoint.privacy.containsPrivateFrozenFeatureValues !==
+      dataset.privacy.containsPrivateFrozenFeatureValues ||
+    checkpoint.privacy.containsProfileData !== dataset.privacy.containsProfileData
+  ) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint privacy flags do not match dataset.');
+  }
+  return checkpoint;
 }
 
 export function createBrowserTrainingPrivacy(
@@ -284,17 +499,110 @@ function normalizeTrainingOptions(
   const options = { ...defaultFrozenFeatureTinyAdapterTrainingOptions, ...input };
   assertPositiveInteger(options.epochs, 'epochs');
   assertPositiveFinite(options.learningRate, 'learningRate');
-  assertPositiveFinite(options.maxParameterCount, 'maxParameterCount');
+  assertPositiveInteger(options.maxParameterCount, 'maxParameterCount');
   if (options.l2Regularization < 0 || !Number.isFinite(options.l2Regularization)) {
     throw new Error('l2Regularization must be a finite non-negative number.');
   }
-  if (options.targetLoss !== undefined && options.targetLoss < 0) {
+  if (
+    options.targetLoss !== undefined &&
+    (!Number.isFinite(options.targetLoss) || options.targetLoss < 0)
+  ) {
     throw new Error('targetLoss must be non-negative when provided.');
   }
   if (options.progressEveryEpochs !== undefined) {
     assertPositiveInteger(options.progressEveryEpochs, 'progressEveryEpochs');
   }
+  if (options.checkpointEveryEpochs !== undefined) {
+    assertPositiveInteger(options.checkpointEveryEpochs, 'checkpointEveryEpochs');
+  }
   return options;
+}
+
+function createArtifact(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  weights: readonly number[],
+  bias: readonly number[],
+  parameterCount: number,
+): FrozenFeatureTinyAdapterArtifactV1 {
+  const roundedWeights = weights.map(roundFloat);
+  const roundedBias = bias.map(roundFloat);
+  return {
+    schemaVersion: 1,
+    artifactType: 'frozen-feature-affine-adapter',
+    trainableScope: 'top-residual-adapter',
+    featureDimension: dataset.featureDimension,
+    outputDimension: dataset.outputDimension,
+    parameterCount,
+    precision: 'float32',
+    weights: roundedWeights,
+    bias: roundedBias,
+    checksum: checksumTinyAdapter(roundedWeights, roundedBias),
+  };
+}
+
+function validateArtifact(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  artifact: FrozenFeatureTinyAdapterArtifactV1,
+): void {
+  if (artifact.schemaVersion !== 1 || artifact.artifactType !== 'frozen-feature-affine-adapter') {
+    throw new Error('Frozen-feature tiny-adapter artifact type is invalid.');
+  }
+  if (artifact.trainableScope !== 'top-residual-adapter' || artifact.precision !== 'float32') {
+    throw new Error('Frozen-feature tiny-adapter artifact scope or precision is invalid.');
+  }
+  if (
+    artifact.featureDimension !== dataset.featureDimension ||
+    artifact.outputDimension !== dataset.outputDimension
+  ) {
+    throw new Error('Frozen-feature tiny-adapter artifact dimensions do not match dataset.');
+  }
+  const expectedParameterCount =
+    dataset.featureDimension * dataset.outputDimension + dataset.outputDimension;
+  if (artifact.parameterCount !== expectedParameterCount) {
+    throw new Error('Frozen-feature tiny-adapter artifact parameter count is invalid.');
+  }
+  if (artifact.weights.length !== dataset.featureDimension * dataset.outputDimension) {
+    throw new Error('Frozen-feature tiny-adapter artifact weights have the wrong length.');
+  }
+  if (artifact.bias.length !== dataset.outputDimension) {
+    throw new Error('Frozen-feature tiny-adapter artifact bias has the wrong length.');
+  }
+  for (const value of [...artifact.weights, ...artifact.bias]) {
+    assertFiniteNumber(value, 'frozen-feature tiny-adapter artifact value');
+  }
+  if (artifact.checksum !== checksumTinyAdapter(artifact.weights, artifact.bias)) {
+    throw new Error('Frozen-feature tiny-adapter artifact checksum does not match weights.');
+  }
+}
+
+function createCompatibility(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+): FrozenFeatureTinyAdapterCompatibilityV1 {
+  return {
+    baseModelId: dataset.source.baseModelId,
+    baseModelVersion: dataset.source.baseModelVersion,
+    graphContractSha256: dataset.source.graphContractSha256,
+    trainableScope: 'top-residual-adapter',
+    activationGateRequired: true,
+    importChecksumRequired: true,
+  };
+}
+
+function validateCompatibility(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  compatibility: FrozenFeatureTinyAdapterCompatibilityV1,
+): void {
+  const expected = createCompatibility(dataset);
+  if (
+    compatibility.baseModelId !== expected.baseModelId ||
+    compatibility.baseModelVersion !== expected.baseModelVersion ||
+    compatibility.graphContractSha256 !== expected.graphContractSha256 ||
+    compatibility.trainableScope !== expected.trainableScope ||
+    compatibility.activationGateRequired !== true ||
+    compatibility.importChecksumRequired !== true
+  ) {
+    throw new Error('Frozen-feature tiny-adapter compatibility does not match dataset.');
+  }
 }
 
 function runSgdEpoch(
@@ -385,6 +693,10 @@ function createProgress(
   };
 }
 
+function createCheckpointId(datasetId: string, epoch: number, checksum: string): string {
+  return `${datasetId}:epoch-${epoch.toString()}:${checksum}`;
+}
+
 function checksumTinyAdapter(weights: readonly number[], bias: readonly number[]): string {
   const payload = JSON.stringify({ weights, bias });
   let hash = 0x811c9dc5;
@@ -398,6 +710,13 @@ function checksumTinyAdapter(weights: readonly number[], bias: readonly number[]
 function assertPositiveInteger(value: number, name: string): number {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
+function assertNonNegativeInteger(value: number, name: string): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative integer.`);
   }
   return value;
 }

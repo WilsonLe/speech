@@ -3,12 +3,19 @@ import type {
   FrozenFeatureTinyAdapterProgressV1,
   FrozenFeatureTinyAdapterTrainingResultV1,
 } from '@speech/personalization';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   checkAsrWorkerRuntime,
   type AsrWorkerRuntimeCheckResult,
 } from '../workers/asr-worker-client';
-import { runBrowserTrainingPrototype } from '../workers/browser-training-client';
+import {
+  clearBrowserTrainingRecovery,
+  readBrowserTrainingRecovery,
+  startBrowserTrainingPrototype,
+  type BrowserTrainingPrototypeRunController,
+  type BrowserTrainingRecoveryRecordV1,
+  type BrowserTrainingRuntimeWarningV1,
+} from '../workers/browser-training-client';
 
 const browserTrainingSpikeReport = createPinnedOnnxRuntimeWebTrainingSpikeReport();
 
@@ -20,13 +27,27 @@ type RuntimeStatus =
 
 type BrowserTrainingStatus =
   | { readonly state: 'idle' }
-  | { readonly state: 'training'; readonly latestProgress?: FrozenFeatureTinyAdapterProgressV1 }
+  | {
+      readonly state: 'training';
+      readonly latestProgress?: FrozenFeatureTinyAdapterProgressV1;
+    }
   | { readonly state: 'complete'; readonly result: FrozenFeatureTinyAdapterTrainingResultV1 }
   | { readonly state: 'error'; readonly message: string };
 
 export function ModelRuntimePanel() {
   const [status, setStatus] = useState<RuntimeStatus>({ state: 'idle' });
   const [trainingStatus, setTrainingStatus] = useState<BrowserTrainingStatus>({ state: 'idle' });
+  const [trainingWarnings, setTrainingWarnings] = useState<
+    readonly BrowserTrainingRuntimeWarningV1[]
+  >([]);
+  const [trainingRecovery, setTrainingRecovery] = useState<BrowserTrainingRecoveryRecordV1 | null>(
+    null,
+  );
+  const trainingRun = useRef<BrowserTrainingPrototypeRunController | null>(null);
+
+  useEffect(() => {
+    setTrainingRecovery(readBrowserTrainingRecovery());
+  }, []);
 
   async function handleCheckRuntime() {
     setStatus({ state: 'loading' });
@@ -44,20 +65,52 @@ export function ModelRuntimePanel() {
     }
   }
 
-  async function handleRunBrowserTrainingPrototype() {
+  async function handleRunBrowserTrainingPrototype(resume: boolean = false) {
     setTrainingStatus({ state: 'training' });
+    setTrainingWarnings([]);
+    const checkpoint = resume ? trainingRecovery?.checkpoint : undefined;
+    const resumeOptions = checkpoint === undefined ? {} : { resumeFromCheckpoint: checkpoint };
     try {
-      const result = await runBrowserTrainingPrototype({
-        training: { epochs: 60, progressEveryEpochs: 15 },
+      const run = startBrowserTrainingPrototype({
+        ...resumeOptions,
+        training: {
+          epochs: 160,
+          progressEveryEpochs: 20,
+          checkpointEveryEpochs: 20,
+          targetLoss: 0,
+          epochDelayMs: 5,
+        },
         onProgress: (latestProgress) => setTrainingStatus({ state: 'training', latestProgress }),
+        onCheckpoint: () => setTrainingRecovery(readBrowserTrainingRecovery()),
+        onWarning: setTrainingWarnings,
+        onRecoveryChange: setTrainingRecovery,
       });
+      trainingRun.current = run;
+      const result = await run.result;
       setTrainingStatus({ state: 'complete', result });
+      setTrainingRecovery(readBrowserTrainingRecovery());
     } catch (error) {
       setTrainingStatus({
         state: 'error',
         message: error instanceof Error ? error.message : String(error),
       });
+      setTrainingRecovery(readBrowserTrainingRecovery());
+    } finally {
+      trainingRun.current = null;
     }
+  }
+
+  function handlePauseBrowserTrainingPrototype() {
+    trainingRun.current?.pause();
+  }
+
+  function handleCancelBrowserTrainingPrototype() {
+    trainingRun.current?.cancel();
+  }
+
+  function handleClearBrowserTrainingRecovery() {
+    clearBrowserTrainingRecovery();
+    setTrainingRecovery(null);
   }
 
   return (
@@ -85,15 +138,47 @@ export function ModelRuntimePanel() {
         </button>
         <button
           type="button"
-          onClick={() => void handleRunBrowserTrainingPrototype()}
+          onClick={() => void handleRunBrowserTrainingPrototype(false)}
           disabled={trainingStatus.state === 'training'}
         >
           {trainingStatus.state === 'training'
             ? 'Training tiny adapter…'
             : 'Run browser training prototype'}
         </button>
+        <button
+          type="button"
+          onClick={handlePauseBrowserTrainingPrototype}
+          disabled={trainingStatus.state !== 'training'}
+        >
+          Pause browser training
+        </button>
+        <button
+          type="button"
+          onClick={handleCancelBrowserTrainingPrototype}
+          disabled={trainingStatus.state !== 'training'}
+        >
+          Cancel browser training
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleRunBrowserTrainingPrototype(true)}
+          disabled={trainingStatus.state === 'training' || trainingRecovery === null}
+        >
+          Resume browser training prototype
+        </button>
+        <button
+          type="button"
+          onClick={handleClearBrowserTrainingRecovery}
+          disabled={trainingStatus.state === 'training' || trainingRecovery === null}
+        >
+          Clear browser training recovery
+        </button>
         <TrainingSpikeStatus />
-        <BrowserTrainingStatusMessage status={trainingStatus} />
+        <BrowserTrainingStatusMessage
+          status={trainingStatus}
+          recovery={trainingRecovery}
+          warnings={trainingWarnings}
+        />
         <RuntimeStatusMessage status={status} />
       </div>
     </section>
@@ -127,64 +212,160 @@ function TrainingSpikeStatus() {
   );
 }
 
-function BrowserTrainingStatusMessage({ status }: { readonly status: BrowserTrainingStatus }) {
+function BrowserTrainingStatusMessage({
+  status,
+  recovery,
+  warnings,
+}: {
+  readonly status: BrowserTrainingStatus;
+  readonly recovery: BrowserTrainingRecoveryRecordV1 | null;
+  readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
+}) {
+  const recoverySummary = formatBrowserTrainingRecovery(recovery);
   if (status.state === 'idle') {
     return (
-      <p className="status-message">
-        Browser-training worker prototype has not run yet. It uses synthetic frozen features and
-        does not touch the active ASR worker or profile.
-      </p>
+      <>
+        <p className="status-message">
+          Browser-training worker prototype has not run yet. It uses synthetic frozen features and
+          does not touch the active ASR worker or profile.
+        </p>
+        <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+      </>
     );
   }
   if (status.state === 'training') {
     const progress = status.latestProgress;
     return (
-      <p className="status-message">
-        Training tiny adapter in a dedicated worker…{' '}
-        {progress === undefined
-          ? 'starting'
-          : `epoch ${progress.epoch.toString()}/${progress.epochs.toString()}, loss ${progress.loss.toFixed(6)}`}
-      </p>
+      <>
+        <p className="status-message">
+          Training tiny adapter in a dedicated worker…{' '}
+          {progress === undefined
+            ? 'starting'
+            : `epoch ${progress.epoch.toString()}/${progress.epochs.toString()}, loss ${progress.loss.toFixed(6)}`}
+        </p>
+        <dl className="microphone-settings" aria-label="Browser training prototype status">
+          <div>
+            <dt>Prototype status</dt>
+            <dd>training</dd>
+          </div>
+          <div>
+            <dt>Checkpoint recovery</dt>
+            <dd>{recoverySummary}</dd>
+          </div>
+        </dl>
+        <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+      </>
     );
   }
   if (status.state === 'error') {
-    return <p className="status-message error-message">{status.message}</p>;
+    return (
+      <>
+        <p className="status-message error-message">{status.message}</p>
+        <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+      </>
+    );
   }
   const { result } = status;
   return (
-    <dl className="microphone-settings" aria-label="Browser training prototype status">
-      <div>
-        <dt>Training worker</dt>
-        <dd>{result.workerOwner}</dd>
-      </div>
-      <div>
-        <dt>Prototype status</dt>
-        <dd>{result.status}</dd>
-      </div>
-      <div>
-        <dt>Training examples</dt>
-        <dd>{result.metrics.examples.toString()}</dd>
-      </div>
-      <div>
-        <dt>Epochs completed</dt>
-        <dd>{result.metrics.epochsCompleted.toString()}</dd>
-      </div>
-      <div>
-        <dt>Loss reduction</dt>
-        <dd>{result.metrics.lossReduction.toFixed(6)}</dd>
-      </div>
-      <div>
-        <dt>Adapter parameters</dt>
-        <dd>{result.artifact.parameterCount.toString()}</dd>
-      </div>
-      <div>
-        <dt>Activation gate</dt>
-        <dd>
-          {result.compatibility.activationGateRequired ? 'required before activation' : 'missing'}
-        </dd>
-      </div>
-    </dl>
+    <>
+      <dl className="microphone-settings" aria-label="Browser training prototype status">
+        <div>
+          <dt>Training worker</dt>
+          <dd>{result.workerOwner}</dd>
+        </div>
+        <div>
+          <dt>Prototype status</dt>
+          <dd>{result.status}</dd>
+        </div>
+        <div>
+          <dt>Training examples</dt>
+          <dd>{result.metrics.examples.toString()}</dd>
+        </div>
+        <div>
+          <dt>Epochs completed</dt>
+          <dd>{result.metrics.epochsCompleted.toString()}</dd>
+        </div>
+        <div>
+          <dt>Checkpoint epoch</dt>
+          <dd>{result.checkpoint.epoch.toString()}</dd>
+        </div>
+        <div>
+          <dt>Checkpoint recovery</dt>
+          <dd>{recoverySummary}</dd>
+        </div>
+        <div>
+          <dt>Loss reduction</dt>
+          <dd>{result.metrics.lossReduction.toFixed(6)}</dd>
+        </div>
+        <div>
+          <dt>Adapter parameters</dt>
+          <dd>{result.artifact.parameterCount.toString()}</dd>
+        </div>
+        <div>
+          <dt>Activation gate</dt>
+          <dd>
+            {result.compatibility.activationGateRequired ? 'required before activation' : 'missing'}
+          </dd>
+        </div>
+      </dl>
+      <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+    </>
   );
+}
+
+function BrowserTrainingRecoveryDetails({
+  recovery,
+  warnings,
+}: {
+  readonly recovery: BrowserTrainingRecoveryRecordV1 | null;
+  readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
+}) {
+  const visibleWarnings = uniqueBrowserTrainingWarnings([
+    ...warnings,
+    ...(recovery?.warnings ?? []),
+  ]);
+  return (
+    <>
+      <dl className="microphone-settings" aria-label="Browser training recovery status">
+        <div>
+          <dt>Recovery checkpoint</dt>
+          <dd>{formatBrowserTrainingRecovery(recovery)}</dd>
+        </div>
+        <div>
+          <dt>Recovery status</dt>
+          <dd>{recovery?.status ?? 'none'}</dd>
+        </div>
+        <div>
+          <dt>Recovery epoch</dt>
+          <dd>{recovery === null ? 'none' : recovery.checkpoint.epoch.toString()}</dd>
+        </div>
+      </dl>
+      {visibleWarnings.length > 0 ? (
+        <ul className="runtime-warnings" aria-label="Browser training runtime warnings">
+          {visibleWarnings.map((warning) => (
+            <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
+function formatBrowserTrainingRecovery(recovery: BrowserTrainingRecoveryRecordV1 | null): string {
+  if (recovery === null) return 'none';
+  return `available at epoch ${recovery.checkpoint.epoch.toString()}`;
+}
+
+function uniqueBrowserTrainingWarnings(
+  warnings: readonly BrowserTrainingRuntimeWarningV1[],
+): readonly BrowserTrainingRuntimeWarningV1[] {
+  const seen = new Set<string>();
+  return warnings.filter((warning) => {
+    const key = `${warning.code}:${warning.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {

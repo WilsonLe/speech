@@ -18,7 +18,27 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Run browser training prototype' }).click();
-  const browserTrainingStatus = page.getByLabel('Browser training prototype status');
+  let browserTrainingStatus = page.getByLabel('Browser training prototype status');
+  let browserTrainingRecovery = page.getByLabel('Browser training recovery status');
+  await expect(browserTrainingStatus.getByText('training', { exact: true })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByRole('button', { name: 'Cancel browser training' }).click();
+  await expect(browserTrainingStatus.getByText('cancelled', { exact: true })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(browserTrainingRecovery.getByText('cancelled', { exact: true })).toBeVisible();
+
+  await page.reload({ waitUntil: 'networkidle' });
+  browserTrainingRecovery = page.getByLabel('Browser training recovery status');
+  await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByRole('button', { name: 'Resume browser training prototype' }).click();
+  browserTrainingStatus = page.getByLabel('Browser training prototype status');
   await expect(browserTrainingStatus.getByText('Training worker', { exact: true })).toBeVisible({
     timeout: 10_000,
   });
@@ -28,6 +48,7 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(browserTrainingStatus.getByText('Prototype status', { exact: true })).toBeVisible();
   await expect(browserTrainingStatus.getByText('completed', { exact: true })).toBeVisible();
   await expect(browserTrainingStatus.getByText('Training examples', { exact: true })).toBeVisible();
+  await expect(browserTrainingStatus.getByText('Checkpoint epoch', { exact: true })).toBeVisible();
   await expect(browserTrainingStatus.getByText('Loss reduction', { exact: true })).toBeVisible();
   await expect(
     browserTrainingStatus.getByText('required before activation', { exact: true }),
