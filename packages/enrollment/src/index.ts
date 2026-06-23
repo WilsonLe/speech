@@ -1,3 +1,5 @@
+export * from './sentence-bank';
+
 export interface EnrollmentPackageInfo {
   readonly name: '@speech/enrollment';
   readonly status: 'planned' | 'active';
@@ -6,6 +8,6 @@ export interface EnrollmentPackageInfo {
 
 export const packageInfo: EnrollmentPackageInfo = {
   name: '@speech/enrollment',
-  status: 'planned',
+  status: 'active',
   description: 'Guided enrollment scheduling, quality reporting, and coverage accounting.',
 };
