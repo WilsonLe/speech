@@ -18,6 +18,7 @@ test('manages local vocabulary entries and imports/exports JSON and CSV', async 
   await page.locator('#vocabulary-aliases').fill('pangea dashboard');
   await page.locator('#vocabulary-weight').fill('7');
   await page.locator('#vocabulary-category').fill('Work');
+  await page.locator('#vocabulary-priority').fill('10');
   await panel.getByRole('button', { name: 'Add entry' }).click();
 
   const entry = panel.getByRole('article', { name: /vocabulary entry pangea chat/i });
@@ -30,6 +31,9 @@ test('manages local vocabulary entries and imports/exports JSON and CSV', async 
   await expect(
     panel.getByRole('article', { name: /vocabulary entry pangea chat pro/i }),
   ).toBeVisible();
+  const promptPreview = panel.getByLabel(/custom vocabulary prompt preview/i);
+  await expect(promptPreview.getByText(/Pangea Chat Pro/).first()).toBeVisible();
+  await expect(promptPreview.getByText(/review required before recording/i).first()).toBeVisible();
 
   const [jsonDownload] = await Promise.all([
     page.waitForEvent('download'),
