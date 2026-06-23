@@ -306,9 +306,37 @@ h2 {
   text-align: right;
 }
 
-.enrollment-calibration {
+.enrollment-calibration,
+.enrollment-recorder,
+.quality-report {
   margin-top: 1rem;
   border: 1px solid rgba(56, 189, 248, 0.24);
+}
+
+.text-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.text-field textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.8);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.text-field textarea:focus-visible,
+.select-field select:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 3px;
 }
 
 .select-field {
