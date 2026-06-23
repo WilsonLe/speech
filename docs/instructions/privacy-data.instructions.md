@@ -12,6 +12,7 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**,MODEL_LICENSES
 - Persist enrollment audio only after explicit user acceptance/save into private profile storage; never use localStorage/IndexedDB for raw voice data, and keep delete-all voice-data flows local and deterministic.
 - Never place private audio/transcripts/profile artifacts in logs, screenshots, fixtures, support bundles, or CI artifacts.
 - Base-vs-profile evaluation reports may be exported only as aggregate local metrics with privacy flags; omit prompt text, raw audio, raw embeddings, profile files, and model weights.
+- Profile export/import must be explicit user action, local-only, checksummed, and visibly sensitive because exported packages can include enrollment recordings, prompt text, microphone metadata, and derived profile files; deletion must clear stored raw and derived files plus active-profile pointers.
 - Code license, model license, dataset license, and fixture license are separate release gates.
 - Catalog research leads with unclear or `other` license metadata must stay blocked/non-installable and must not be downloaded by the PWA until redistribution and runtime compatibility are documented.
 - Data-governance docs must state source, license/consent, speaker/source split policy, and redistribution rights before adding training audio, pseudo-labels, corpora, or derived weights.

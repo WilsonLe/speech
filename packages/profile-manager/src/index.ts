@@ -83,6 +83,50 @@ export interface EnrollmentProfileSummaryV1 {
   readonly checksums: EnrollmentProfileChecksumsV1;
 }
 
+export interface ActiveEnrollmentProfileStateV1 {
+  readonly schemaVersion: 1;
+  readonly activeProfileId?: string;
+  readonly previousProfileId?: string;
+  readonly updatedAt: string;
+}
+
+export interface ProfileExportFileV1 {
+  readonly path: string;
+  readonly sha256: string;
+  readonly sizeBytes: number;
+  readonly mediaType: string;
+  readonly base64: string;
+}
+
+export interface EnrollmentProfileExportPackageV1 {
+  readonly schemaVersion: 1;
+  readonly packageType: 'speech-enrollment-profile-export';
+  readonly exportedAt: string;
+  readonly profileId: string;
+  readonly profile: EnrollmentProfileManifestV1;
+  readonly utterances: readonly EnrollmentUtteranceV1[];
+  readonly checksums: EnrollmentProfileChecksumsV1;
+  readonly files: Readonly<Record<string, ProfileExportFileV1>>;
+  readonly privacy: {
+    readonly containsRawAudio: boolean;
+    readonly containsTranscriptText: boolean;
+    readonly containsRawProfileData: true;
+    readonly exportEncrypted: false;
+    readonly localOnly: true;
+  };
+  readonly warnings: readonly string[];
+}
+
+export interface EnableEnrollmentProfileInput {
+  readonly profileId: string;
+  readonly expectedBaseModel?: ProfileBaseModelIdentity;
+}
+
+export interface ImportEnrollmentProfileInput {
+  readonly profilePackage: EnrollmentProfileExportPackageV1;
+  readonly overwriteExisting?: boolean;
+}
+
 export interface SaveEnrollmentUtteranceInput {
   readonly profileId: string;
   readonly profileDisplayName: string;
@@ -415,8 +459,176 @@ export class EnrollmentProfileStore {
     return this.backend.getFile(portablePathToSegments(utterance.audio.path));
   }
 
+  async getActiveProfileState(): Promise<ActiveEnrollmentProfileStateV1> {
+    const bytes = await this.backend.getFile(profileLifecyclePath('active-profile.json'));
+    if (bytes === undefined) {
+      return { schemaVersion: 1, updatedAt: this.options.now?.() ?? new Date().toISOString() };
+    }
+    return parseJson<ActiveEnrollmentProfileStateV1>(bytes);
+  }
+
+  async enableProfile(
+    input: EnableEnrollmentProfileInput,
+  ): Promise<ActiveEnrollmentProfileStateV1> {
+    const profileId = normalizeSegment(input.profileId, 'profileId');
+    const summary = await this.getProfileSummary(profileId);
+    if (summary === undefined) {
+      throw new Error(`Cannot enable missing enrollment profile ${profileId}.`);
+    }
+    if (input.expectedBaseModel !== undefined) {
+      assertBaseModelCompatible(summary.profile.baseModel, input.expectedBaseModel, profileId);
+    }
+    const existing = await this.getActiveProfileState();
+    const previousProfileId =
+      existing.activeProfileId === undefined || existing.activeProfileId === profileId
+        ? existing.previousProfileId
+        : existing.activeProfileId;
+    const nextState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      activeProfileId: profileId,
+      ...(previousProfileId === undefined ? {} : { previousProfileId }),
+      updatedAt: this.options.now?.() ?? new Date().toISOString(),
+    };
+    await writeJsonAtomically(this.backend, profileLifecyclePath('active-profile.json'), nextState);
+    return nextState;
+  }
+
+  async rollbackActiveProfile(): Promise<ActiveEnrollmentProfileStateV1> {
+    const existing = await this.getActiveProfileState();
+    if (existing.previousProfileId === undefined) {
+      return existing;
+    }
+    const previousSummary = await this.getProfileSummary(existing.previousProfileId);
+    if (previousSummary === undefined) {
+      throw new Error(
+        `Cannot roll back to missing enrollment profile ${existing.previousProfileId}.`,
+      );
+    }
+    const nextState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      activeProfileId: existing.previousProfileId,
+      ...(existing.activeProfileId === undefined
+        ? {}
+        : { previousProfileId: existing.activeProfileId }),
+      updatedAt: this.options.now?.() ?? new Date().toISOString(),
+    };
+    await writeJsonAtomically(this.backend, profileLifecyclePath('active-profile.json'), nextState);
+    return nextState;
+  }
+
+  async exportProfile(profileId: string): Promise<EnrollmentProfileExportPackageV1> {
+    const normalizedProfileId = normalizeSegment(profileId, 'profileId');
+    const summary = await this.getProfileSummary(normalizedProfileId);
+    if (summary === undefined) {
+      throw new Error(`Cannot export missing enrollment profile ${normalizedProfileId}.`);
+    }
+    const files: Record<string, ProfileExportFileV1> = {};
+    for (const file of await this.backend.listFiles(profilePath(normalizedProfileId))) {
+      const bytes = await this.backend.getFile(file.path);
+      if (bytes === undefined) continue;
+      const path = pathToPortableString(file.path);
+      const sha256 = await this.digest(bytes);
+      files[path] = {
+        path,
+        sha256,
+        sizeBytes: bytes.byteLength,
+        mediaType: mediaTypeForProfilePath(path),
+        base64: bytesToBase64(new Uint8Array(bytes)),
+      };
+    }
+    return {
+      schemaVersion: 1,
+      packageType: 'speech-enrollment-profile-export',
+      exportedAt: this.options.now?.() ?? new Date().toISOString(),
+      profileId: normalizedProfileId,
+      profile: summary.profile,
+      utterances: summary.utterances,
+      checksums: summary.checksums,
+      files,
+      privacy: {
+        containsRawAudio: summary.profile.privacy.containsRawAudio,
+        containsTranscriptText: true,
+        containsRawProfileData: true,
+        exportEncrypted: false,
+        localOnly: true,
+      },
+      warnings: [
+        'This export can contain enrollment recordings, prompt text, microphone metadata, and derived voice profile data. Store it as sensitive personal data.',
+      ],
+    };
+  }
+
+  async importProfile(input: ImportEnrollmentProfileInput): Promise<EnrollmentProfileSummaryV1> {
+    const profilePackage = input.profilePackage;
+    validateProfileExportPackageShape(profilePackage);
+    const profileId = normalizeSegment(profilePackage.profileId, 'profileId');
+    if (
+      profilePackage.profile.id !== profileId ||
+      profilePackage.checksums.profileId !== profileId
+    ) {
+      throw new Error('Profile export package id fields must match.');
+    }
+    const existing = await this.getProfileSummary(profileId);
+    if (existing !== undefined && input.overwriteExisting !== true) {
+      throw new Error(`Profile ${profileId} already exists. Set overwriteExisting to replace it.`);
+    }
+    const decodedFiles: Record<string, ArrayBuffer> = {};
+    for (const [path, file] of Object.entries(profilePackage.files)) {
+      if (path !== file.path) {
+        throw new Error(`Profile export file key ${path} does not match its path.`);
+      }
+      const segments = portablePathToSegments(file.path);
+      assertProfilePackagePath(profileId, segments);
+      const bytes = base64ToArrayBuffer(file.base64);
+      if (bytes.byteLength !== file.sizeBytes) {
+        throw new Error(`Profile export file ${file.path} size does not match metadata.`);
+      }
+      const sha256 = await this.digest(bytes);
+      if (sha256 !== file.sha256) {
+        throw new Error(`Profile export file ${file.path} checksum mismatch.`);
+      }
+      decodedFiles[file.path] = bytes;
+    }
+    validateProfilePackageConsistency(profileId, profilePackage, decodedFiles);
+    if (existing !== undefined) {
+      await this.deleteProfile(profileId);
+    }
+    for (const [path, bytes] of Object.entries(decodedFiles)) {
+      await writeFileAtomically(this.backend, portablePathToSegments(path), bytes);
+    }
+    const summary = await this.getProfileSummary(profileId);
+    if (summary === undefined) {
+      throw new Error(`Imported profile ${profileId} is missing profile metadata.`);
+    }
+    return summary;
+  }
+
   async deleteProfile(profileId: string): Promise<void> {
-    await this.backend.deleteDirectory(['profiles', normalizeSegment(profileId, 'profileId')]);
+    const normalizedProfileId = normalizeSegment(profileId, 'profileId');
+    await this.backend.deleteDirectory(['profiles', normalizedProfileId]);
+    const activeState = await this.getActiveProfileState();
+    if (
+      activeState.activeProfileId === normalizedProfileId ||
+      activeState.previousProfileId === normalizedProfileId
+    ) {
+      const nextState: ActiveEnrollmentProfileStateV1 = {
+        schemaVersion: 1,
+        ...(activeState.activeProfileId === normalizedProfileId ||
+        activeState.activeProfileId === undefined
+          ? {}
+          : { activeProfileId: activeState.activeProfileId }),
+        ...(activeState.previousProfileId === normalizedProfileId ||
+        activeState.previousProfileId === undefined
+          ? {}
+          : { previousProfileId: activeState.previousProfileId }),
+        updatedAt: this.options.now?.() ?? new Date().toISOString(),
+      };
+      await writeJsonAtomically(
+        this.backend,
+        profileLifecyclePath('active-profile.json'),
+        nextState,
+      );
+    }
   }
 
   private async rebuildProfileFiles(
@@ -648,6 +860,194 @@ function profilePath(profileId: string, ...segments: readonly string[]): string[
     normalizeSegment(profileId, 'profileId'),
     ...segments.map((segment) => normalizeSegment(segment, 'profilePath')),
   ];
+}
+
+function profileLifecyclePath(...segments: readonly string[]): string[] {
+  return [
+    'profile-lifecycle',
+    ...segments.map((segment) => normalizeSegment(segment, 'profilePath')),
+  ];
+}
+
+function assertBaseModelCompatible(
+  actual: ProfileBaseModelIdentity | undefined,
+  expected: ProfileBaseModelIdentity,
+  profileId: string,
+): void {
+  if (actual === undefined) {
+    throw new Error(`Profile ${profileId} does not declare a base-model identity.`);
+  }
+  if (
+    actual.id !== expected.id ||
+    actual.version !== expected.version ||
+    actual.manifestSha256 !== expected.manifestSha256 ||
+    actual.graphContractSha256 !== expected.graphContractSha256
+  ) {
+    throw new Error(`Profile ${profileId} base-model identity does not match the active model.`);
+  }
+}
+
+function validateProfileExportPackageShape(profilePackage: EnrollmentProfileExportPackageV1): void {
+  if (
+    profilePackage.schemaVersion !== 1 ||
+    profilePackage.packageType !== 'speech-enrollment-profile-export'
+  ) {
+    throw new Error('Unsupported enrollment profile export package.');
+  }
+  normalizeSegment(profilePackage.profileId, 'profileId');
+  if (Object.keys(profilePackage.files).length === 0) {
+    throw new Error('Profile export package must contain files.');
+  }
+}
+
+function assertProfilePackagePath(profileId: string, path: readonly string[]): void {
+  const normalizedPath = normalizePath(path);
+  const expectedPrefix = profilePath(profileId);
+  if (!expectedPrefix.every((segment, index) => normalizedPath[index] === segment)) {
+    throw new Error(
+      `Profile export file path ${pathToPortableString(path)} is outside profile ${profileId}.`,
+    );
+  }
+}
+
+function validateProfilePackageConsistency(
+  profileId: string,
+  profilePackage: EnrollmentProfileExportPackageV1,
+  decodedFiles: Readonly<Record<string, ArrayBuffer>>,
+): void {
+  const embeddedProfile = parseRequiredExportJson<EnrollmentProfileManifestV1>(
+    decodedFiles,
+    profilePath(profileId, 'profile.json'),
+  );
+  assertJsonEquivalent(
+    embeddedProfile,
+    profilePackage.profile,
+    'Profile export package profile metadata does not match embedded profile.json.',
+  );
+
+  const embeddedChecksums = parseRequiredExportJson<EnrollmentProfileChecksumsV1>(
+    decodedFiles,
+    profilePath(profileId, 'checksums.json'),
+  );
+  assertJsonEquivalent(
+    embeddedChecksums,
+    profilePackage.checksums,
+    'Profile export package checksum metadata does not match embedded checksums.json.',
+  );
+
+  const utterancePrefix = `${pathToPortableString(profilePath(profileId, 'utterances'))}/`;
+  const embeddedUtterances = Object.entries(decodedFiles)
+    .filter(([path]) => path.startsWith(utterancePrefix) && path.endsWith('.json'))
+    .map(([, bytes]) => parseJson<EnrollmentUtteranceV1>(bytes))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  assertJsonEquivalent(
+    embeddedUtterances,
+    profilePackage.utterances,
+    'Profile export package utterance metadata does not match embedded utterance files.',
+  );
+  assertChecksumIndexMatchesExportFiles(profilePackage.checksums, profilePackage.files);
+}
+
+function parseRequiredExportJson<T>(
+  decodedFiles: Readonly<Record<string, ArrayBuffer>>,
+  path: readonly string[],
+): T {
+  const portablePath = pathToPortableString(path);
+  const bytes = decodedFiles[portablePath];
+  if (bytes === undefined) {
+    throw new Error(`Profile export package is missing required file ${portablePath}.`);
+  }
+  return parseJson<T>(bytes);
+}
+
+function assertChecksumIndexMatchesExportFiles(
+  checksums: EnrollmentProfileChecksumsV1,
+  files: Readonly<Record<string, ProfileExportFileV1>>,
+): void {
+  for (const [path, checksum] of Object.entries(checksums.files)) {
+    const file = files[path];
+    if (file === undefined) {
+      throw new Error(`Profile export checksum references missing file ${path}.`);
+    }
+    if (file.sha256 !== checksum.sha256 || file.sizeBytes !== checksum.sizeBytes) {
+      throw new Error(`Profile export checksum metadata does not match file ${path}.`);
+    }
+  }
+  for (const path of Object.keys(files)) {
+    if (path.endsWith('/checksums.json')) continue;
+    if (checksums.files[path] === undefined) {
+      throw new Error(`Profile export file ${path} is missing from the checksum index.`);
+    }
+  }
+}
+
+function assertJsonEquivalent(actual: unknown, expected: unknown, message: string): void {
+  if (stableJson(actual) !== stableJson(expected)) {
+    throw new Error(message);
+  }
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  const entries = Object.entries(value as Readonly<Record<string, unknown>>).sort(
+    ([left], [right]) => left.localeCompare(right),
+  );
+  return `{${entries
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+    .join(',')}}`;
+}
+
+function mediaTypeForProfilePath(path: string): string {
+  if (path.endsWith('.wav')) return 'audio/wav';
+  if (path.endsWith('.json') || path.endsWith('.jsonl')) return 'application/json';
+  if (path.endsWith('.f32')) return 'application/octet-stream';
+  return 'application/octet-stream';
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let output = '';
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index] ?? 0;
+    const second = bytes[index + 1] ?? 0;
+    const third = bytes[index + 2] ?? 0;
+    const triplet = (first << 16) | (second << 8) | third;
+    output += alphabet[(triplet >> 18) & 0x3f] ?? '';
+    output += alphabet[(triplet >> 12) & 0x3f] ?? '';
+    output += index + 1 < bytes.length ? (alphabet[(triplet >> 6) & 0x3f] ?? '') : '=';
+    output += index + 2 < bytes.length ? (alphabet[triplet & 0x3f] ?? '') : '=';
+  }
+  return output;
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const normalized = base64.replace(/\s+/g, '');
+  if (normalized.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(normalized)) {
+    throw new Error('Profile export file is not valid base64.');
+  }
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
+  const output = new Uint8Array((normalized.length / 4) * 3 - padding);
+  let offset = 0;
+  for (let index = 0; index < normalized.length; index += 4) {
+    const chars = normalized.slice(index, index + 4);
+    const first = alphabet.indexOf(chars[0] ?? '');
+    const second = alphabet.indexOf(chars[1] ?? '');
+    const third = chars[2] === '=' ? 0 : alphabet.indexOf(chars[2] ?? '');
+    const fourth = chars[3] === '=' ? 0 : alphabet.indexOf(chars[3] ?? '');
+    if (first < 0 || second < 0 || third < 0 || fourth < 0) {
+      throw new Error('Profile export file is not valid base64.');
+    }
+    const triplet = (first << 18) | (second << 12) | (third << 6) | fourth;
+    if (offset < output.length) output[offset] = (triplet >> 16) & 0xff;
+    offset += 1;
+    if (offset < output.length) output[offset] = (triplet >> 8) & 0xff;
+    offset += 1;
+    if (offset < output.length) output[offset] = triplet & 0xff;
+    offset += 1;
+  }
+  return output.buffer;
 }
 
 function portablePathToSegments(path: string): string[] {

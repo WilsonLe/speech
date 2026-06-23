@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import pcmCaptureWorkletUrl from '../worklets/pcm-capture.worklet.ts?worker&url';
 import {
   MicrophoneCaptureController,
@@ -21,14 +21,20 @@ import {
   type EnrollmentVoiceCondition,
 } from '@speech/enrollment';
 import type {
+  ActiveEnrollmentProfileStateV1,
   EnrollmentCaptureMetadataV1,
+  EnrollmentProfileExportPackageV1,
   EnrollmentProfileSummaryV1,
   ProfileStorageBackendKind,
 } from '@speech/profile-manager';
 import { analyzeEnrollmentTakeInWorker } from '../workers/enrollment-quality-worker-client';
 import {
   deleteEnrollmentProfile,
+  enableEnrollmentProfile,
+  exportEnrollmentProfile,
+  importEnrollmentProfile,
   loadEnrollmentProfile,
+  rollbackEnrollmentProfile,
   saveAcceptedEnrollmentTake,
 } from '../workers/profile-store-client';
 
@@ -76,12 +82,21 @@ interface EnrollmentRecorderSummary {
   readonly message: string;
 }
 
-type ProfileStoreStatus = 'loading' | 'ready' | 'saving' | 'deleting' | 'error';
+type ProfileStoreStatus =
+  | 'loading'
+  | 'ready'
+  | 'saving'
+  | 'activating'
+  | 'exporting'
+  | 'importing'
+  | 'deleting'
+  | 'error';
 
 interface ProfileStoreUiState {
   readonly status: ProfileStoreStatus;
   readonly backendKind: ProfileStorageBackendKind | null;
   readonly persistentStorageGranted: boolean | null;
+  readonly activeState: ActiveEnrollmentProfileStateV1 | null;
   readonly summary: EnrollmentProfileSummaryV1 | null;
   readonly message: string;
 }
@@ -145,6 +160,7 @@ const initialProfileStoreState: ProfileStoreUiState = {
   status: 'loading',
   backendKind: null,
   persistentStorageGranted: null,
+  activeState: null,
   summary: null,
   message: 'Checking private enrollment profile storage…',
 };
@@ -200,6 +216,7 @@ export function MicrophonePanel() {
           status: 'ready',
           backendKind: result.backendKind,
           persistentStorageGranted: result.persistentStorageGranted,
+          activeState: result.activeState,
           summary: result.summary ?? null,
           message:
             result.summary === undefined
@@ -213,6 +230,7 @@ export function MicrophonePanel() {
           status: 'error',
           backendKind: null,
           persistentStorageGranted: null,
+          activeState: null,
           summary: null,
           message:
             storeError instanceof Error
@@ -491,6 +509,7 @@ export function MicrophonePanel() {
         status: 'ready',
         backendKind: result.backendKind,
         persistentStorageGranted: result.persistentStorageGranted,
+        activeState: result.activeState,
         summary: result.summary,
         message:
           result.backendKind === 'opfs'
@@ -522,6 +541,125 @@ export function MicrophonePanel() {
     }
   }
 
+  async function enableStoredProfile() {
+    if (!profileStore.summary) return;
+    setProfileStore((current) => ({
+      ...current,
+      status: 'activating',
+      message: 'Enabling this local profile for the next utterance boundary…',
+    }));
+    try {
+      const result = await enableEnrollmentProfile({ profileId: defaultProfileId });
+      setProfileStore((current) => ({
+        ...current,
+        status: 'ready',
+        backendKind: result.backendKind,
+        persistentStorageGranted: result.persistentStorageGranted,
+        activeState: result.activeState,
+        message: 'Profile enabled locally. Runtime workers may apply it only between utterances.',
+      }));
+    } catch (storeError) {
+      setProfileStore((current) => ({
+        ...current,
+        status: 'error',
+        message: storeError instanceof Error ? storeError.message : 'Profile could not be enabled.',
+      }));
+    }
+  }
+
+  async function rollbackStoredProfile() {
+    setProfileStore((current) => ({
+      ...current,
+      status: 'activating',
+      message: 'Rolling back to the previous active local profile…',
+    }));
+    try {
+      const result = await rollbackEnrollmentProfile();
+      setProfileStore((current) => ({
+        ...current,
+        status: 'ready',
+        backendKind: result.backendKind,
+        persistentStorageGranted: result.persistentStorageGranted,
+        activeState: result.activeState,
+        message:
+          result.activeState.activeProfileId === undefined
+            ? 'No previous profile was available to roll back to.'
+            : `Rolled back active profile to ${result.activeState.activeProfileId}.`,
+      }));
+    } catch (storeError) {
+      setProfileStore((current) => ({
+        ...current,
+        status: 'error',
+        message: storeError instanceof Error ? storeError.message : 'Profile rollback failed.',
+      }));
+    }
+  }
+
+  async function exportStoredProfile() {
+    if (!profileStore.summary) return;
+    setProfileStore((current) => ({
+      ...current,
+      status: 'exporting',
+      message: 'Preparing a sensitive local profile export package…',
+    }));
+    try {
+      const result = await exportEnrollmentProfile({
+        profileId: defaultProfileId,
+        timeoutMs: 15_000,
+      });
+      downloadProfilePackage(result.profilePackage);
+      setProfileStore((current) => ({
+        ...current,
+        status: 'ready',
+        backendKind: result.backendKind,
+        persistentStorageGranted: result.persistentStorageGranted,
+        activeState: result.activeState,
+        message:
+          'Profile export downloaded locally. Treat it as sensitive voice data; it includes accepted recordings and prompt metadata.',
+      }));
+    } catch (storeError) {
+      setProfileStore((current) => ({
+        ...current,
+        status: 'error',
+        message: storeError instanceof Error ? storeError.message : 'Profile export failed.',
+      }));
+    }
+  }
+
+  async function importStoredProfile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    setProfileStore((current) => ({
+      ...current,
+      status: 'importing',
+      message: 'Importing and verifying a local profile export package…',
+    }));
+    try {
+      const profilePackage = JSON.parse(await file.text()) as EnrollmentProfileExportPackageV1;
+      const result = await importEnrollmentProfile({
+        profilePackage,
+        overwriteExisting: true,
+        timeoutMs: 15_000,
+      });
+      setProfileStore({
+        status: 'ready',
+        backendKind: result.backendKind,
+        persistentStorageGranted: result.persistentStorageGranted,
+        activeState: result.activeState,
+        summary: result.summary,
+        message:
+          'Profile import verified checksums and restored local enrollment recordings. Review before enabling.',
+      });
+    } catch (storeError) {
+      setProfileStore((current) => ({
+        ...current,
+        status: 'error',
+        message: storeError instanceof Error ? storeError.message : 'Profile import failed.',
+      }));
+    }
+  }
+
   async function deleteStoredProfile() {
     setProfileStore((current) => ({
       ...current,
@@ -534,6 +672,7 @@ export function MicrophonePanel() {
         status: 'ready',
         backendKind: result.backendKind,
         persistentStorageGranted: result.persistentStorageGranted,
+        activeState: result.activeState,
         summary: null,
         message: 'Stored enrollment recordings and profile metadata were deleted locally.',
       });
@@ -968,6 +1107,14 @@ export function MicrophonePanel() {
               <dd>{formatPersistentStorage(profileStore.persistentStorageGranted)}</dd>
             </div>
             <div>
+              <dt>Active profile</dt>
+              <dd>{profileStore.activeState?.activeProfileId ?? 'none'}</dd>
+            </div>
+            <div>
+              <dt>Rollback profile</dt>
+              <dd>{profileStore.activeState?.previousProfileId ?? 'none'}</dd>
+            </div>
+            <div>
               <dt>Stored accepted takes</dt>
               <dd>{profileStore.summary?.profile.enrollment.acceptedUtterances ?? 0}</dd>
             </div>
@@ -983,18 +1130,58 @@ export function MicrophonePanel() {
             </div>
           </dl>
           <p className="status-message">{profileStore.message}</p>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void deleteStoredProfile()}
-            disabled={
-              profileStore.summary === null ||
-              profileStore.status === 'saving' ||
-              profileStore.status === 'deleting'
-            }
-          >
-            Delete stored enrollment profile
-          </button>
+          <div className="hero-actions" aria-label="Enrollment profile lifecycle controls">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void enableStoredProfile()}
+              disabled={!profileStore.summary || profileStore.status !== 'ready'}
+            >
+              Enable local profile
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void rollbackStoredProfile()}
+              disabled={
+                !profileStore.activeState?.previousProfileId || profileStore.status !== 'ready'
+              }
+            >
+              Roll back active profile
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void exportStoredProfile()}
+              disabled={!profileStore.summary || profileStore.status !== 'ready'}
+            >
+              Export sensitive profile package
+            </button>
+            <label className="secondary file-button">
+              Import profile package
+              <input
+                type="file"
+                accept="application/json,.json,.speechprofile"
+                onChange={(event) => void importStoredProfile(event)}
+                disabled={profileStore.status !== 'ready' && profileStore.status !== 'error'}
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void deleteStoredProfile()}
+              disabled={
+                profileStore.summary === null ||
+                profileStore.status === 'saving' ||
+                profileStore.status === 'activating' ||
+                profileStore.status === 'exporting' ||
+                profileStore.status === 'importing' ||
+                profileStore.status === 'deleting'
+              }
+            >
+              Delete stored enrollment profile
+            </button>
+          </div>
         </div>
         {qualityReport ? <QualityReportSummary report={qualityReport} /> : null}
       </div>
@@ -1123,6 +1310,20 @@ function buildCaptureMetadata(
 function toMetadataRecord(value: unknown): Readonly<Record<string, unknown>> {
   if (value === undefined || value === null) return {};
   return JSON.parse(JSON.stringify(value)) as Readonly<Record<string, unknown>>;
+}
+
+function downloadProfilePackage(profilePackage: EnrollmentProfileExportPackageV1): void {
+  const blob = new Blob([`${JSON.stringify(profilePackage, null, 2)}\n`], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${profilePackage.profileId}.speechprofile.json`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function getStoredProfileBytes(summary: EnrollmentProfileSummaryV1 | null): number {

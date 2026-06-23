@@ -20,6 +20,13 @@ const capture: EnrollmentCaptureMetadataV1 = {
   userMicrophoneLabel: 'Fake microphone',
 };
 
+const baseModel = {
+  id: 'mock-vi-en-rnnt',
+  version: '0.0.0-test',
+  manifestSha256: 'manifest-sha256',
+  graphContractSha256: 'graph-contract-sha256',
+};
+
 const quality = analyzeEnrollmentTakeQuality({
   pcm: makeTone(1_200, 0.1),
   sampleRateHz: 16_000,
@@ -123,18 +130,140 @@ describe('enrollment profile store', () => {
     expect(await backend.listFiles()).toEqual([]);
   });
 
-  it('deletes one profile without touching another profile', async () => {
+  it('deletes one profile without touching another profile or stale active state', async () => {
     const backend = new InMemoryProfileStorageBackend();
     const store = createStore(backend);
     await saveFixtureTake(store, 'profile-a', 'utt-a');
     await saveFixtureTake(store, 'profile-b', 'utt-b');
+    await store.enableProfile({ profileId: 'profile-a' });
+    await store.enableProfile({ profileId: 'profile-b' });
 
     await store.deleteProfile('profile-a');
 
     expect(await store.getProfileSummary('profile-a')).toBeUndefined();
     expect(await store.getProfileSummary('profile-b')).toBeDefined();
+    expect(await store.getActiveProfileState()).toMatchObject({ activeProfileId: 'profile-b' });
+    expect((await store.getActiveProfileState()).previousProfileId).toBeUndefined();
     expect(await backend.listFiles(['profiles', 'profile-a'])).toEqual([]);
     expect((await backend.listFiles(['profiles', 'profile-b'])).length).toBeGreaterThan(0);
+  });
+
+  it('enables and rolls back active profiles with base-model compatibility checks', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-a', 'utt-a', baseModel);
+    await saveFixtureTake(store, 'profile-b', 'utt-b', baseModel);
+
+    await expect(
+      store.enableProfile({
+        profileId: 'profile-a',
+        expectedBaseModel: { ...baseModel, graphContractSha256: 'different' },
+      }),
+    ).rejects.toThrow(/base-model/);
+
+    await expect(
+      store.enableProfile({ profileId: 'profile-a', expectedBaseModel: baseModel }),
+    ).resolves.toMatchObject({ activeProfileId: 'profile-a' });
+    await expect(
+      store.enableProfile({ profileId: 'profile-b', expectedBaseModel: baseModel }),
+    ).resolves.toMatchObject({ activeProfileId: 'profile-b', previousProfileId: 'profile-a' });
+    await expect(store.rollbackActiveProfile()).resolves.toMatchObject({
+      activeProfileId: 'profile-a',
+      previousProfileId: 'profile-b',
+    });
+  });
+
+  it('exports and imports a checksummed sensitive profile package', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-export', 'utt-export', baseModel);
+
+    const exported = await store.exportProfile('profile-export');
+
+    expect(exported).toMatchObject({
+      schemaVersion: 1,
+      packageType: 'speech-enrollment-profile-export',
+      profileId: 'profile-export',
+      privacy: {
+        containsRawAudio: true,
+        containsTranscriptText: true,
+        containsRawProfileData: true,
+        exportEncrypted: false,
+        localOnly: true,
+      },
+    });
+    expect(exported.warnings.join(' ')).toMatch(/sensitive personal data/i);
+    expect(exported.files['profiles/profile-export/recordings/utt-export.wav']).toMatchObject({
+      mediaType: 'audio/wav',
+      sha256: await digest(encodePcm16Wav(makeTone(1_200, 0.1), 16_000)),
+    });
+
+    const importedBackend = new InMemoryProfileStorageBackend();
+    const importedStore = createStore(importedBackend);
+    const summary = await importedStore.importProfile({ profilePackage: exported });
+
+    expect(summary.profile.id).toBe('profile-export');
+    expect(summary.utterances).toHaveLength(1);
+    expect(
+      await readBytes(importedBackend, [
+        'profiles',
+        'profile-export',
+        'recordings',
+        'utt-export.wav',
+      ]),
+    ).toEqual(
+      await readBytes(backend, ['profiles', 'profile-export', 'recordings', 'utt-export.wav']),
+    );
+    await expect(importedStore.importProfile({ profilePackage: exported })).rejects.toThrow(
+      /already exists/,
+    );
+  });
+
+  it('rejects tampered exported profile files during import', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-export', 'utt-export');
+    const exported = await store.exportProfile('profile-export');
+    const path = 'profiles/profile-export/profile.json';
+    const tampered = {
+      ...exported,
+      files: {
+        ...exported.files,
+        [path]: { ...exported.files[path]!, base64: 'AAAA' },
+      },
+    };
+
+    await expect(
+      createStore(new InMemoryProfileStorageBackend()).importProfile({ profilePackage: tampered }),
+    ).rejects.toThrow(/checksum mismatch|size does not match/);
+  });
+
+  it('rejects exports whose embedded metadata differs from the top-level package', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-export', 'utt-export');
+    const exported = await store.exportProfile('profile-export');
+    const path = 'profiles/profile-export/profile.json';
+    const tamperedProfileBytes = jsonBytes({
+      ...exported.profile,
+      displayName: 'Different embedded profile',
+    });
+    const tampered = {
+      ...exported,
+      files: {
+        ...exported.files,
+        [path]: {
+          ...exported.files[path]!,
+          sha256: await digest(tamperedProfileBytes),
+          sizeBytes: tamperedProfileBytes.byteLength,
+          base64: Buffer.from(tamperedProfileBytes).toString('base64'),
+        },
+      },
+    };
+
+    await expect(
+      createStore(new InMemoryProfileStorageBackend()).importProfile({ profilePackage: tampered }),
+    ).rejects.toThrow(/profile metadata does not match embedded profile\.json/);
   });
 
   it('stores files through an OPFS-compatible backend', async () => {
@@ -176,6 +305,7 @@ async function saveFixtureTake(
   store: EnrollmentProfileStore,
   profileId: string,
   utteranceId: string,
+  model: typeof baseModel | undefined = undefined,
 ): Promise<void> {
   await store.saveEnrollmentUtterance({
     profileId,
@@ -194,6 +324,7 @@ async function saveFixtureTake(
     quality,
     acceptedBy: 'manual',
     utteranceId,
+    ...(model === undefined ? {} : { baseModel: model }),
   });
 }
 
@@ -209,6 +340,11 @@ function makeTone(durationMs: number, amplitude: number): Float32Array {
 
 async function digest(bytes: ArrayBuffer): Promise<string> {
   return createHash('sha256').update(new Uint8Array(bytes)).digest('hex');
+}
+
+function jsonBytes(value: unknown): ArrayBuffer {
+  const bytes = new TextEncoder().encode(`${JSON.stringify(value, null, 2)}\n`);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
 async function readBytes(
