@@ -12,9 +12,17 @@ export interface TranscriptVocabulary {
   readonly ignoredTokenIds?: readonly number[];
 }
 
+export interface TranscriptDisplayReplacement {
+  readonly startTokenIndex: number;
+  readonly endTokenIndex: number;
+  readonly displayForm: string;
+  readonly vocabularyEntryId?: string;
+}
+
 export interface TranscriptRenderOptions {
   readonly vocabulary: TranscriptVocabulary;
   readonly tokenIds: readonly number[];
+  readonly displayReplacements?: readonly TranscriptDisplayReplacement[];
 }
 
 export interface TranscriptFormatOptions {
@@ -68,19 +76,95 @@ const digitPhrasePattern = `${digitWordPattern}(?:\\s+${digitWordPattern})*`;
 
 export function renderTranscriptFromTokenIds(options: TranscriptRenderOptions): string {
   const ignoredTokenIds = new Set(options.vocabulary.ignoredTokenIds ?? []);
-  const pieces: string[] = [];
-  for (const tokenId of options.tokenIds) {
-    validateTokenId(tokenId);
-    if (ignoredTokenIds.has(tokenId)) continue;
-    const piece = options.vocabulary.tokens[tokenId.toString()];
-    if (piece === undefined) {
-      throw new Error(`Missing transcript token piece for token id ${tokenId.toString()}.`);
+  const replacements = normalizeDisplayReplacements(
+    options.displayReplacements ?? [],
+    options.tokenIds.length,
+  );
+  const segments: string[] = [];
+  const pendingPieces: string[] = [];
+  let replacementIndex = 0;
+  let tokenIndex = 0;
+
+  while (tokenIndex < options.tokenIds.length) {
+    const replacement = replacements[replacementIndex];
+    if (replacement !== undefined && replacement.startTokenIndex === tokenIndex) {
+      flushTranscriptPieces(segments, pendingPieces, options.vocabulary.wordBoundaryMarker);
+      segments.push(normalizeVietnameseText(replacement.displayForm));
+      tokenIndex = replacement.endTokenIndex;
+      replacementIndex += 1;
+      continue;
     }
-    pieces.push(piece);
+
+    const tokenId = options.tokenIds[tokenIndex];
+    if (tokenId === undefined) {
+      throw new Error(`Missing transcript token id at index ${tokenIndex.toString()}.`);
+    }
+    validateTokenId(tokenId);
+    if (!ignoredTokenIds.has(tokenId)) {
+      const piece = options.vocabulary.tokens[tokenId.toString()];
+      if (piece === undefined) {
+        throw new Error(`Missing transcript token piece for token id ${tokenId.toString()}.`);
+      }
+      pendingPieces.push(piece);
+    }
+    tokenIndex += 1;
   }
-  return detokenizePieces(pieces, {
-    wordBoundaryMarker: options.vocabulary.wordBoundaryMarker ?? '▁',
+
+  flushTranscriptPieces(segments, pendingPieces, options.vocabulary.wordBoundaryMarker);
+  return joinTranscriptSegments(segments);
+}
+
+function normalizeDisplayReplacements(
+  replacements: readonly TranscriptDisplayReplacement[],
+  tokenCount: number,
+): readonly TranscriptDisplayReplacement[] {
+  const sorted = [...replacements].sort(
+    (left, right) =>
+      left.startTokenIndex - right.startTokenIndex || left.endTokenIndex - right.endTokenIndex,
+  );
+  let previousEnd = 0;
+  for (const replacement of sorted) {
+    if (
+      !Number.isInteger(replacement.startTokenIndex) ||
+      !Number.isInteger(replacement.endTokenIndex) ||
+      replacement.startTokenIndex < 0 ||
+      replacement.endTokenIndex <= replacement.startTokenIndex ||
+      replacement.endTokenIndex > tokenCount
+    ) {
+      throw new Error('displayReplacements must use valid non-empty token index spans.');
+    }
+    if (replacement.startTokenIndex < previousEnd) {
+      throw new Error('displayReplacements must not overlap.');
+    }
+    if (normalizeVietnameseText(replacement.displayForm).trim().length === 0) {
+      throw new Error('displayReplacements displayForm must not be empty.');
+    }
+    previousEnd = replacement.endTokenIndex;
+  }
+  return sorted;
+}
+
+function flushTranscriptPieces(
+  segments: string[],
+  pieces: string[],
+  wordBoundaryMarker: string | undefined,
+): void {
+  if (pieces.length === 0) return;
+  const text = detokenizePieces(pieces, {
+    wordBoundaryMarker: wordBoundaryMarker ?? '▁',
   });
+  if (text.length > 0) segments.push(text);
+  pieces.length = 0;
+}
+
+function joinTranscriptSegments(segments: readonly string[]): string {
+  return normalizeVietnameseText(
+    segments
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0)
+      .join(' ')
+      .replace(/\s+([,.;:!?%])/gu, '$1'),
+  );
 }
 
 export interface DetokenizePiecesOptions {

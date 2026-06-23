@@ -65,7 +65,18 @@ export interface VocabularyTokenCandidate {
   readonly text: string;
   readonly tokenIds: readonly number[];
   readonly weight: number;
+  readonly exactCase: boolean;
   readonly promptPriority?: number;
+}
+
+export interface VocabularyDisplayMatch {
+  readonly startTokenIndex: number;
+  readonly endTokenIndex: number;
+  readonly entryId: string;
+  readonly candidateId: string;
+  readonly displayForm: string;
+  readonly source: VocabularyCandidateSource;
+  readonly tokenIds: readonly number[];
 }
 
 export interface VocabularyScoreContext {
@@ -147,6 +158,7 @@ export function compileVocabularyTokenAutomaton(
         text: source.text,
         tokenIds,
         weight: entry.weight,
+        exactCase: entry.exactCase,
         ...(entry.promptPriority !== undefined ? { promptPriority: entry.promptPriority } : {}),
       });
     });
@@ -232,6 +244,79 @@ export function scoreVocabularyTokenAdjustments(
 export function createVocabularyScoreAdjuster(automaton: VocabularyTokenAutomaton) {
   return (context: VocabularyScoreContext): readonly VocabularyTokenScoreAdjustment[] =>
     scoreVocabularyTokenAdjustments(automaton, context);
+}
+
+export function findVocabularyDisplayMatches(
+  automaton: VocabularyTokenAutomaton,
+  tokenIds: readonly number[],
+): readonly VocabularyDisplayMatch[] {
+  const matches: VocabularyDisplayMatch[] = [];
+  let index = 0;
+  while (index < tokenIds.length) {
+    const match = bestDisplayMatchAt(automaton.candidates, tokenIds, index);
+    if (match === undefined) {
+      index += 1;
+      continue;
+    }
+    matches.push(match);
+    index = match.endTokenIndex;
+  }
+  return matches;
+}
+
+function bestDisplayMatchAt(
+  candidates: readonly VocabularyTokenCandidate[],
+  tokenIds: readonly number[],
+  startTokenIndex: number,
+): VocabularyDisplayMatch | undefined {
+  let best: VocabularyTokenCandidate | undefined;
+  for (const candidate of candidates) {
+    if (!candidateMatchesAt(candidate.tokenIds, tokenIds, startTokenIndex)) continue;
+    if (best === undefined || compareDisplayCandidates(candidate, best) < 0) {
+      best = candidate;
+    }
+  }
+  if (best === undefined) return undefined;
+  return {
+    startTokenIndex,
+    endTokenIndex: startTokenIndex + best.tokenIds.length,
+    entryId: best.entryId,
+    candidateId: best.id,
+    displayForm: best.displayForm,
+    source: best.source,
+    tokenIds: best.tokenIds,
+  };
+}
+
+function candidateMatchesAt(
+  candidateTokenIds: readonly number[],
+  tokenIds: readonly number[],
+  startTokenIndex: number,
+): boolean {
+  if (
+    candidateTokenIds.length === 0 ||
+    startTokenIndex + candidateTokenIds.length > tokenIds.length
+  ) {
+    return false;
+  }
+  for (let offset = 0; offset < candidateTokenIds.length; offset += 1) {
+    if (tokenIds[startTokenIndex + offset] !== candidateTokenIds[offset]) return false;
+  }
+  return true;
+}
+
+function compareDisplayCandidates(
+  left: VocabularyTokenCandidate,
+  right: VocabularyTokenCandidate,
+): number {
+  const lengthDelta = right.tokenIds.length - left.tokenIds.length;
+  if (lengthDelta !== 0) return lengthDelta;
+  const priorityDelta = (right.promptPriority ?? 0) - (left.promptPriority ?? 0);
+  if (priorityDelta !== 0) return priorityDelta;
+  const weightDelta = right.weight - left.weight;
+  if (weightDelta !== 0) return weightDelta;
+  if (left.source !== right.source) return left.source === 'phrase' ? -1 : 1;
+  return left.id.localeCompare(right.id);
 }
 
 function createCandidateSources(

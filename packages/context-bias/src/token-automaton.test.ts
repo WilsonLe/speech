@@ -5,6 +5,7 @@ import type { SpeechModelManifestV2, VocabularyRevisionV1 } from '@speech/protoc
 import {
   compileVocabularyTokenAutomaton,
   createVocabularyScoreAdjuster,
+  findVocabularyDisplayMatches,
   scoreVocabularyTokenAdjustments,
   type VocabularyTokenizer,
 } from './token-automaton';
@@ -105,6 +106,66 @@ describe('compileVocabularyTokenAutomaton', () => {
     expect(result.errors).toContainEqual(
       expect.objectContaining({ code: 'unsupported-context-biasing' }),
     );
+  });
+});
+
+describe('findVocabularyDisplayMatches', () => {
+  it('finds spoken aliases and returns canonical display forms over token spans', () => {
+    const automaton = compileVocabularyTokenAutomaton({
+      revision: createRevision(),
+      contextBiasing,
+      tokenizer,
+    }).automaton!;
+
+    expect(findVocabularyDisplayMatches(automaton, [3, 2, 4])).toEqual([
+      {
+        startTokenIndex: 0,
+        endTokenIndex: 2,
+        entryId: 'term-pangea',
+        candidateId: 'term-pangea:alias:1',
+        displayForm: 'Pangea Chat',
+        source: 'alias',
+        tokenIds: [3, 2],
+      },
+      {
+        startTokenIndex: 2,
+        endTokenIndex: 3,
+        entryId: 'term-wilson',
+        candidateId: 'term-wilson:phrase:0',
+        displayForm: 'Wilson',
+        source: 'phrase',
+        tokenIds: [4],
+      },
+    ]);
+  });
+
+  it('uses longest non-overlapping display matches before priority and weight', () => {
+    const automaton = compileVocabularyTokenAutomaton({
+      revision: {
+        revision: 3,
+        activeSetIds: ['set-work'],
+        entries: [
+          createEntry({ id: 'term-project', phrase: 'project', displayForm: 'Project' }),
+          createEntry({
+            id: 'term-project-alpha',
+            phrase: 'project alpha',
+            displayForm: 'Project Alpha',
+            weight: 3,
+          }),
+        ],
+      },
+      contextBiasing,
+      tokenizer,
+    }).automaton!;
+
+    expect(findVocabularyDisplayMatches(automaton, [6, 5])).toEqual([
+      expect.objectContaining({
+        startTokenIndex: 0,
+        endTokenIndex: 2,
+        entryId: 'term-project-alpha',
+        displayForm: 'Project Alpha',
+      }),
+    ]);
   });
 });
 
@@ -219,6 +280,7 @@ function createRevision(): VocabularyRevisionV1 {
         phrase: 'Pangea Chat',
         displayForm: 'Pangea Chat',
         spokenAliases: ['dashboard chat', 'dashboard chat'],
+        exactCase: true,
       }),
       createEntry({ id: 'term-wilson', phrase: 'Wilson', displayForm: 'Wilson', weight: 8 }),
     ],

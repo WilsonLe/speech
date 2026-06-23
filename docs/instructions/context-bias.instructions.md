@@ -12,5 +12,6 @@ applyTo: 'packages/context-bias/**,packages/protocol/src/vocabulary.ts,packages/
 - Produce worker-ready vocabulary revisions from active sets only and swap revisions only at utterance boundaries.
 - Compile token automata only after a model tokenizer is available. Token-length, unknown-token, and boundary decisions belong to automaton compilation, not structural schema validation.
 - Contextual score bonuses must be bounded by the active model `contextBiasing.maxCumulativeBonus`; aggregate overlapping candidates deterministically and keep diagnostics local to the worker/runtime.
+- Spoken aliases should compile as match candidates for the same entry and emit token-span display matches that preserve the entry's canonical `displayForm`.
 - Browser CRUD may persist vocabulary snapshots in origin-local storage; imports and exports must be explicit user actions and must warn that files may contain sensitive names or project terms.
 - Preserve canonical `displayForm` and Vietnamese diacritics; normalize matching phrases/aliases to NFC with collapsed whitespace without rewriting the display form.
