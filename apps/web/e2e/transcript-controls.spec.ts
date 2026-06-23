@@ -60,10 +60,16 @@ test('edits, copies, downloads, and clears committed transcript text locally', a
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe('Xin chào local-first speech.');
 
-  await transcript.getByLabel(/Recognition mode/i).selectOption('en');
+  const languageDiagnostics = transcript.getByLabel('Language-span diagnostics');
+  await expect(languageDiagnostics.getByText('No spans yet', { exact: true })).toBeVisible();
+
+  await transcript.getByLabel(/Recognition mode/i).selectOption('mixed');
   await expect(
-    transcript.getByLabel('Transcript runtime state').getByText('English', { exact: true }),
+    transcript
+      .getByLabel('Transcript runtime state')
+      .getByText('Mixed/code-switch', { exact: true }),
   ).toBeVisible();
+  await expect(languageDiagnostics.getByText('Mixed/code-switch', { exact: true })).toHaveCount(2);
   await transcript.getByLabel(/Enable final formatting/i).uncheck();
   await transcript.getByLabel(/Enable spoken commands/i).check();
   await transcript.getByLabel(/Include local timing metadata/i).check();
@@ -76,7 +82,9 @@ test('edits, copies, downloads, and clears committed transcript text locally', a
   expect(downloadPath).not.toBeNull();
   const downloadedText = await readFile(downloadPath!, 'utf8');
   expect(downloadedText).toContain('Xin chào local-first speech.');
-  expect(downloadedText).toContain('Language mode: English');
+  expect(downloadedText).toContain('Language mode: Mixed/code-switch');
+  expect(downloadedText).toContain('Effective language mode: mixed');
+  expect(downloadedText).toContain('Language spans: none');
   expect(downloadedText).toContain('Formatting: disabled');
   expect(downloadedText).toContain('Spoken commands: enabled');
 

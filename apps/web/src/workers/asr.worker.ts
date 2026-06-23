@@ -12,12 +12,30 @@ import {
   type ProviderBenchmarkWarning,
   type ProviderPreferenceStore,
 } from '@speech/inference';
-import type { AsrWorkerToMain, MainToAsrWorker, RuntimeCapabilities } from '@speech/protocol';
+import {
+  createLanguageModeDiagnostics,
+  type AsrWorkerToMain,
+  type LanguageModeDiagnostics,
+  type MainToAsrWorker,
+  type RuntimeCapabilities,
+  type SpeechLanguageMode,
+} from '@speech/protocol';
 
 const ctx = self as DedicatedWorkerGlobalScope;
 
+const supportedLanguageModes = [
+  'vi',
+  'en',
+  'auto',
+  'mixed',
+] as const satisfies readonly SpeechLanguageMode[];
+
 let disposed = false;
 let providerPreferenceStore: ProviderPreferenceStore | undefined;
+let languageModeDiagnostics: LanguageModeDiagnostics = createLanguageModeDiagnostics({
+  requestedMode: 'auto',
+  supportedLanguageModes,
+});
 
 ctx.addEventListener('message', (event: MessageEvent<MainToAsrWorker>) => {
   void handleMessage(event.data);
@@ -38,8 +56,10 @@ async function handleMessage(message: MainToAsrWorker): Promise<void> {
       disposed = true;
       ctx.close();
       return;
-    case 'RESET':
     case 'SET_LANGUAGE_MODE':
+      setLanguageMode(message.mode);
+      return;
+    case 'RESET':
     case 'SET_VOCABULARY':
     case 'LOAD_PROFILE':
     case 'UNLOAD_PROFILE':
@@ -109,6 +129,7 @@ async function initializeRuntime(
         wasmThreads: runtime.wasmThreads,
       },
     });
+    postLanguageModeReady();
     postMessage({
       type: 'READY',
       capabilities: runtimeCapabilities(runtime.importTarget === 'webgpu'),
@@ -116,6 +137,19 @@ async function initializeRuntime(
   } catch (error) {
     postError('INFERENCE_FAILED', true, errorMessage(error));
   }
+}
+
+function setLanguageMode(mode: SpeechLanguageMode): void {
+  languageModeDiagnostics = createLanguageModeDiagnostics({
+    requestedMode: mode,
+    supportedLanguageModes,
+    languageSpans: languageModeDiagnostics.spans,
+  });
+  postLanguageModeReady();
+}
+
+function postLanguageModeReady(): void {
+  postMessage({ type: 'LANGUAGE_MODE_READY', diagnostics: languageModeDiagnostics });
 }
 
 function detectWorkerCapabilities(): OrtRuntimeCapabilities {
