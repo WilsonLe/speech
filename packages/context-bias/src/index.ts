@@ -1,3 +1,4 @@
+export * from './token-automaton';
 export * from './vocabulary-schema';
 
 export interface ContextBiasPackageInfo {
