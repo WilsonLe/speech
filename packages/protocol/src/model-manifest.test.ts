@@ -65,6 +65,30 @@ function enabledContextBiasing(): ContextBiasingContract {
   };
 }
 
+type ResidualAdapterContract = NonNullable<
+  NonNullable<SpeechModelManifestV2['personalization']>['residualAdapter']
+>;
+
+function enabledResidualAdapter(): ResidualAdapterContract {
+  return {
+    supported: true,
+    contractVersion: 1,
+    insertionPoints: [
+      {
+        id: 'encoder-block-11',
+        targetGraph: 'encoder',
+        inputTensor: 'encoder.block11.input',
+        outputTensor: 'encoder.block11.output',
+        application: 'residual-add',
+      },
+    ],
+    maxParameters: 500_000,
+    maxAdapterSizeBytes: 10_000_000,
+    allowedPrecisions: ['float32', 'float16', 'int8'],
+    activationSwap: 'utterance-boundary',
+  };
+}
+
 function createManifest(overrides: Partial<SpeechModelManifestV2> = {}): SpeechModelManifestV2 {
   return {
     schemaVersion: 2,
@@ -313,6 +337,139 @@ describe('model manifest validation', () => {
     );
     expect(result.errors).toContain(
       'contextBiasing.diagnostics.emitMatchedVocabularyIds must be true when supported',
+    );
+  });
+
+  it('accepts a residual-adapter graph contract with explicit insertion points', () => {
+    const manifest = createManifest({
+      files: {
+        ...createManifest().files,
+        adapter: {
+          url: '/models/mock/adapter.onnx',
+          sha256: '3'.repeat(64),
+          sizeBytes: 1,
+          mediaType: 'application/octet-stream',
+        },
+      },
+      graphs: {
+        ...createManifest().graphs,
+        adapter: {
+          fileKey: 'adapter',
+          inputs: [
+            {
+              name: 'encoder.block11.input',
+              dataType: 'float16',
+              shape: ['batch', 'frames', 256],
+              description: 'Frozen base encoder activation before the adapter insertion point.',
+            },
+          ],
+          outputs: [
+            {
+              name: 'encoder.block11.output',
+              dataType: 'float16',
+              shape: ['batch', 'frames', 256],
+              description: 'Adapter residual output for the matching insertion point.',
+            },
+          ],
+        },
+      },
+      personalization: { residualAdapter: enabledResidualAdapter() },
+    });
+
+    expect(validateSpeechModelManifestV2(manifest)).toEqual({ ok: true, errors: [] });
+  });
+
+  it('rejects residual-adapter insertion points that do not bind to the adapter graph tensors', () => {
+    const manifest = createManifest({
+      files: {
+        ...createManifest().files,
+        adapter: {
+          url: '/models/mock/adapter.onnx',
+          sha256: '3'.repeat(64),
+          sizeBytes: 1,
+          mediaType: 'application/octet-stream',
+        },
+      },
+      graphs: {
+        ...createManifest().graphs,
+        adapter: {
+          fileKey: 'adapter',
+          inputs: [
+            {
+              name: 'actual.input',
+              dataType: 'float32',
+              shape: ['batch', 'frames', 256],
+              description: 'Actual adapter input tensor.',
+            },
+          ],
+          outputs: [
+            {
+              name: 'actual.output',
+              dataType: 'float32',
+              shape: ['batch', 'frames', 256],
+              description: 'Actual adapter output tensor.',
+            },
+          ],
+        },
+      },
+      personalization: { residualAdapter: enabledResidualAdapter() },
+    });
+
+    const result = validateSpeechModelManifestV2(manifest);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'personalization.residualAdapter.insertionPoints[0].inputTensor must reference graphs.adapter.inputs',
+        'personalization.residualAdapter.insertionPoints[0].outputTensor must reference graphs.adapter.outputs',
+      ]),
+    );
+  });
+
+  it('rejects residual-adapter contracts without graph/runtime safety bounds', () => {
+    const manifest = createManifest({
+      personalization: {
+        residualAdapter: {
+          ...enabledResidualAdapter(),
+          insertionPoints: [
+            {
+              id: 'encoder-block-11',
+              targetGraph: 'encoder',
+              inputTensor: '',
+              outputTensor: 'encoder.block11.output',
+              application: 'residual-add',
+            },
+            {
+              id: 'encoder-block-11',
+              targetGraph: 'frontend' as 'encoder',
+              inputTensor: 'encoder.block12.input',
+              outputTensor: 'encoder.block12.output',
+              application: 'magic' as 'residual-add',
+            },
+          ],
+          maxParameters: 0,
+          maxAdapterSizeBytes: 0,
+          allowedPrecisions: ['float64' as 'float32'],
+          activationSwap: 'while-listening' as 'utterance-boundary',
+        },
+      },
+    });
+
+    const result = validateSpeechModelManifestV2(manifest);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'graphs.adapter is required when residual adapters are supported',
+        'personalization.residualAdapter.insertionPoints[0].inputTensor must be a non-empty string',
+        'personalization.residualAdapter.insertionPoints[1].id must be unique',
+        'personalization.residualAdapter.insertionPoints[1].targetGraph is not supported',
+        'personalization.residualAdapter.insertionPoints[1].application is not supported',
+        'personalization.residualAdapter.maxParameters must be positive when supported',
+        'personalization.residualAdapter.maxAdapterSizeBytes must be positive when supported',
+        'personalization.residualAdapter.allowedPrecisions[0] is not supported',
+        'personalization.residualAdapter.activationSwap must be utterance-boundary',
+      ]),
     );
   });
 });

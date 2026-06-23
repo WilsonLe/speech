@@ -504,7 +504,15 @@
     "residualAdapter": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["supported", "contractVersion", "insertionPoints", "maxParameters"],
+      "required": [
+        "supported",
+        "contractVersion",
+        "insertionPoints",
+        "maxParameters",
+        "maxAdapterSizeBytes",
+        "allowedPrecisions",
+        "activationSwap"
+      ],
       "properties": {
         "supported": {
           "type": "boolean"
@@ -516,14 +524,26 @@
         "insertionPoints": {
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "uniqueItems": true
+            "$ref": "#/$defs/residualAdapterInsertionPoint"
+          }
         },
         "maxParameters": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 0
+        },
+        "maxAdapterSizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowedPrecisions": {
+          "type": "array",
+          "items": {
+            "enum": ["float32", "float16", "int8"]
+          },
+          "uniqueItems": true
+        },
+        "activationSwap": {
+          "const": "utterance-boundary"
         }
       }
     },
@@ -625,6 +645,31 @@
         },
         "emitScoreBreakdown": {
           "type": "boolean"
+        }
+      }
+    },
+    "residualAdapterInsertionPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "targetGraph", "inputTensor", "outputTensor", "application"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetGraph": {
+          "enum": ["encoder", "predictor", "joiner"]
+        },
+        "inputTensor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputTensor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "application": {
+          "enum": ["residual-add", "lhuc-scale", "film-affine"]
         }
       }
     }
