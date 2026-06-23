@@ -8,6 +8,8 @@ const requiredBenchmarkMetrics = [
   'encoderChunkMs',
   'decoderChunkMs',
   'realTimeFactor',
+  'customTermRecall',
+  'customTermFalseInsertionRate',
   'queueDepthFrames',
   'audioOverruns',
 ];
@@ -152,6 +154,12 @@ test('benchmark export covers MVP timing, queue, RTF, and privacy metrics', asyn
   expect(report.traces.length).toBeGreaterThanOrEqual(24);
   expect(report.configuration.syntheticAudioMs).toBeGreaterThan(0);
   expect(report.warnings.join(' ')).toMatch(/reference hardware/i);
+  expect(report.customTermEvaluation).toMatchObject({
+    reportType: 'custom-term-benchmark',
+    synthetic: true,
+    recall: { numerator: 2, denominator: 3 },
+    falseInsertion: { numerator: 1, denominator: 3 },
+  });
 
   const summaryNames = report.summaries.map((summary) => summary.name);
   expect(summaryNames).toEqual(expect.arrayContaining(requiredBenchmarkMetrics));
@@ -169,6 +177,12 @@ interface BenchmarkReportLike {
     readonly networkUpload: boolean;
   };
   readonly configuration: { readonly syntheticAudioMs: number };
+  readonly customTermEvaluation?: {
+    readonly reportType: string;
+    readonly synthetic: boolean;
+    readonly recall: { readonly numerator: number; readonly denominator: number };
+    readonly falseInsertion: { readonly numerator: number; readonly denominator: number };
+  };
   readonly warnings: readonly string[];
   readonly traces: readonly unknown[];
   readonly summaries: ReadonlyArray<{

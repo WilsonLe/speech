@@ -94,7 +94,14 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-  packages/benchmark: {}
+  packages/benchmark:
+    dependencies:
+      '@speech/context-bias':
+        specifier: workspace:*
+        version: link:../context-bias
+      '@speech/formatter':
+        specifier: workspace:*
+        version: link:../formatter
 
   packages/context-bias:
     dependencies:
