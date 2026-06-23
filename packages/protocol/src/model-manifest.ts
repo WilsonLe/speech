@@ -4,6 +4,18 @@ export type VocabularyEntryLanguage = SpeechLanguageMode;
 export type ContextBiasingBoundaryMode = 'none' | 'token' | 'unicode-word';
 export type ContextBiasingRevisionSwapPolicy = 'utterance-boundary';
 export type TensorDataType = 'float32' | 'float16' | 'int32' | 'int64' | 'uint8' | 'int8' | 'bool';
+export type ResidualAdapterGraphRole = 'encoder' | 'predictor' | 'joiner';
+export type ResidualAdapterPrecision = 'float32' | 'float16' | 'int8';
+export type ResidualAdapterApplicationMode = 'residual-add' | 'lhuc-scale' | 'film-affine';
+export type ResidualAdapterActivationSwapPolicy = 'utterance-boundary';
+
+export interface ResidualAdapterInsertionPointContract {
+  readonly id: string;
+  readonly targetGraph: ResidualAdapterGraphRole;
+  readonly inputTensor: string;
+  readonly outputTensor: string;
+  readonly application: ResidualAdapterApplicationMode;
+}
 
 export interface TensorContract {
   readonly name: string;
@@ -113,8 +125,11 @@ export interface SpeechModelManifestV2 {
     readonly residualAdapter?: {
       readonly supported: boolean;
       readonly contractVersion: number;
-      readonly insertionPoints: readonly string[];
+      readonly insertionPoints: readonly ResidualAdapterInsertionPointContract[];
       readonly maxParameters: number;
+      readonly maxAdapterSizeBytes: number;
+      readonly allowedPrecisions: readonly ResidualAdapterPrecision[];
+      readonly activationSwap: ResidualAdapterActivationSwapPolicy;
     };
   };
   readonly files: Record<
@@ -167,6 +182,21 @@ const contextBiasingBoundaryModeValues = new Set<ContextBiasingBoundaryMode>([
 const contextBiasingRevisionSwapValues = new Set<ContextBiasingRevisionSwapPolicy>([
   'utterance-boundary',
 ]);
+const residualAdapterGraphRoleValues = new Set<ResidualAdapterGraphRole>([
+  'encoder',
+  'predictor',
+  'joiner',
+]);
+const residualAdapterPrecisionValues = new Set<ResidualAdapterPrecision>([
+  'float32',
+  'float16',
+  'int8',
+]);
+const residualAdapterApplicationValues = new Set<ResidualAdapterApplicationMode>([
+  'residual-add',
+  'lhuc-scale',
+  'film-affine',
+]);
 const sha256Pattern = /^[a-f0-9]{64}$/;
 const modelIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 
@@ -208,7 +238,7 @@ export function validateSpeechModelManifestV2(value: unknown): ManifestValidatio
   );
   const fileKeys = validateFiles(value['files'], errors);
   validateGraphs(value['graphs'], fileKeys, errors);
-  validatePersonalization(value['personalization'], fileKeys, errors);
+  validatePersonalization(value['personalization'], fileKeys, value['graphs'], errors);
   validateRecommended(value['recommended'], errors);
 
   if (vocabularySize !== undefined) {
@@ -899,6 +929,7 @@ function validateStateRelationships(
 function validatePersonalization(
   value: unknown,
   fileKeys: ReadonlySet<string>,
+  graphs: unknown,
   errors: string[],
 ): void {
   if (value === undefined) return;
@@ -938,29 +969,154 @@ function validatePersonalization(
 
   const residualAdapter = value['residualAdapter'];
   if (residualAdapter !== undefined) {
-    if (!isRecord(residualAdapter)) {
-      errors.push('personalization.residualAdapter must be an object');
-    } else {
-      if (typeof residualAdapter['supported'] !== 'boolean') {
-        errors.push('personalization.residualAdapter.supported must be boolean');
-      }
-      validatePositiveInteger(
-        residualAdapter['contractVersion'],
-        'personalization.residualAdapter.contractVersion',
-        errors,
+    validateResidualAdapterContract(residualAdapter, graphs, errors);
+  }
+}
+
+function validateResidualAdapterContract(value: unknown, graphs: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('personalization.residualAdapter must be an object');
+    return;
+  }
+  if (typeof value['supported'] !== 'boolean') {
+    errors.push('personalization.residualAdapter.supported must be boolean');
+  }
+  validatePositiveInteger(
+    value['contractVersion'],
+    'personalization.residualAdapter.contractVersion',
+    errors,
+  );
+  const maxParameters = validateNonNegativeInteger(
+    value['maxParameters'],
+    'personalization.residualAdapter.maxParameters',
+    errors,
+  );
+  const maxAdapterSizeBytes = validateNonNegativeInteger(
+    value['maxAdapterSizeBytes'],
+    'personalization.residualAdapter.maxAdapterSizeBytes',
+    errors,
+  );
+  const insertionPoints = validateResidualAdapterInsertionPoints(value['insertionPoints'], errors);
+  const allowedPrecisions = validateEnumArray(
+    value['allowedPrecisions'],
+    'personalization.residualAdapter.allowedPrecisions',
+    residualAdapterPrecisionValues,
+    errors,
+  );
+  if (value['activationSwap'] !== 'utterance-boundary') {
+    errors.push('personalization.residualAdapter.activationSwap must be utterance-boundary');
+  }
+
+  const adapterGraph = isRecord(graphs) ? graphs['adapter'] : undefined;
+  if (isRecord(adapterGraph)) {
+    validateResidualAdapterGraphBindings(adapterGraph, insertionPoints, errors);
+  }
+
+  if (value['supported'] === true) {
+    if (!isRecord(adapterGraph)) {
+      errors.push('graphs.adapter is required when residual adapters are supported');
+    }
+    if (insertionPoints.length === 0) {
+      errors.push(
+        'personalization.residualAdapter.insertionPoints must not be empty when supported',
       );
-      validateStringArray(
-        residualAdapter['insertionPoints'],
-        'personalization.residualAdapter.insertionPoints',
-        errors,
+    }
+    if ((allowedPrecisions?.length ?? 0) === 0) {
+      errors.push(
+        'personalization.residualAdapter.allowedPrecisions must not be empty when supported',
       );
-      validatePositiveInteger(
-        residualAdapter['maxParameters'],
-        'personalization.residualAdapter.maxParameters',
-        errors,
+    }
+    if (maxParameters !== undefined && maxParameters <= 0) {
+      errors.push('personalization.residualAdapter.maxParameters must be positive when supported');
+    }
+    if (maxAdapterSizeBytes !== undefined && maxAdapterSizeBytes <= 0) {
+      errors.push(
+        'personalization.residualAdapter.maxAdapterSizeBytes must be positive when supported',
       );
     }
   }
+}
+
+interface ValidatedResidualAdapterInsertionPoint {
+  readonly index: number;
+  readonly id: string;
+  readonly inputTensor: string;
+  readonly outputTensor: string;
+}
+
+function validateResidualAdapterInsertionPoints(
+  value: unknown,
+  errors: string[],
+): readonly ValidatedResidualAdapterInsertionPoint[] {
+  if (!Array.isArray(value)) {
+    errors.push('personalization.residualAdapter.insertionPoints must be an array');
+    return [];
+  }
+  const seen = new Set<string>();
+  const insertionPoints: ValidatedResidualAdapterInsertionPoint[] = [];
+  value.forEach((entry, index) => {
+    const path = `personalization.residualAdapter.insertionPoints[${index}]`;
+    if (!isRecord(entry)) {
+      errors.push(`${path} must be an object`);
+      return;
+    }
+    const id = validateNonEmptyString(entry['id'], `${path}.id`, errors);
+    if (id !== undefined) {
+      if (seen.has(id)) errors.push(`${path}.id must be unique`);
+      seen.add(id);
+    }
+    validateEnumValue(
+      entry['targetGraph'],
+      `${path}.targetGraph`,
+      residualAdapterGraphRoleValues,
+      errors,
+    );
+    const inputTensor = validateNonEmptyString(entry['inputTensor'], `${path}.inputTensor`, errors);
+    const outputTensor = validateNonEmptyString(
+      entry['outputTensor'],
+      `${path}.outputTensor`,
+      errors,
+    );
+    validateEnumValue(
+      entry['application'],
+      `${path}.application`,
+      residualAdapterApplicationValues,
+      errors,
+    );
+    if (id !== undefined && inputTensor !== undefined && outputTensor !== undefined) {
+      insertionPoints.push({ index, id, inputTensor, outputTensor });
+    }
+  });
+  return insertionPoints;
+}
+
+function validateResidualAdapterGraphBindings(
+  graph: Record<string, unknown>,
+  insertionPoints: readonly ValidatedResidualAdapterInsertionPoint[],
+  errors: string[],
+): void {
+  const graphInputs = tensorNames(graph['inputs']);
+  const graphOutputs = tensorNames(graph['outputs']);
+  for (const insertionPoint of insertionPoints) {
+    const path = `personalization.residualAdapter.insertionPoints[${insertionPoint.index}]`;
+    if (!graphInputs.has(insertionPoint.inputTensor)) {
+      errors.push(`${path}.inputTensor must reference graphs.adapter.inputs`);
+    }
+    if (!graphOutputs.has(insertionPoint.outputTensor)) {
+      errors.push(`${path}.outputTensor must reference graphs.adapter.outputs`);
+    }
+  }
+}
+
+function tensorNames(value: unknown): ReadonlySet<string> {
+  const names = new Set<string>();
+  if (!Array.isArray(value)) return names;
+  for (const tensor of value) {
+    if (!isRecord(tensor)) continue;
+    const name = tensor['name'];
+    if (typeof name === 'string') names.add(name);
+  }
+  return names;
 }
 
 function validateRecommended(value: unknown, errors: string[]): void {
@@ -997,23 +1153,6 @@ function validateEnumArray<T extends string>(
     values.push(typedEntry);
   });
   return values;
-}
-
-function validateStringArray(value: unknown, path: string, errors: string[]): readonly string[] {
-  if (!Array.isArray(value)) {
-    errors.push(`${path} must be an array`);
-    return [];
-  }
-  const seen = new Set<string>();
-  value.forEach((entry, index) => {
-    if (typeof entry !== 'string' || entry.length === 0) {
-      errors.push(`${path}[${index}] must be a non-empty string`);
-      return;
-    }
-    if (seen.has(entry)) errors.push(`${path}[${index}] must be unique`);
-    seen.add(entry);
-  });
-  return [...seen];
 }
 
 function validateEnumArrayAllowEmpty<T extends string>(
