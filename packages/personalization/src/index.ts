@@ -1,3 +1,5 @@
+export * from './browser-training';
+
 import type {
   EnrollmentQualityReportV1,
   EnrollmentSentenceLanguage,

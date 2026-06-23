@@ -17,6 +17,22 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
     trainingSpikeStatus.getByText('defer; use local trainer', { exact: true }),
   ).toBeVisible();
 
+  await page.getByRole('button', { name: 'Run browser training prototype' }).click();
+  const browserTrainingStatus = page.getByLabel('Browser training prototype status');
+  await expect(browserTrainingStatus.getByText('Training worker', { exact: true })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    browserTrainingStatus.getByText('dedicated-training-worker', { exact: true }),
+  ).toBeVisible();
+  await expect(browserTrainingStatus.getByText('Prototype status', { exact: true })).toBeVisible();
+  await expect(browserTrainingStatus.getByText('completed', { exact: true })).toBeVisible();
+  await expect(browserTrainingStatus.getByText('Training examples', { exact: true })).toBeVisible();
+  await expect(browserTrainingStatus.getByText('Loss reduction', { exact: true })).toBeVisible();
+  await expect(
+    browserTrainingStatus.getByText('required before activation', { exact: true }),
+  ).toBeVisible();
+
   await page.getByRole('button', { name: 'Benchmark worker provider' }).click();
 
   const runtimeStatus = page.getByLabel('ONNX Runtime worker status');

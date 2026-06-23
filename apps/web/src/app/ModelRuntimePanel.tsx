@@ -1,9 +1,14 @@
 import { createPinnedOnnxRuntimeWebTrainingSpikeReport } from '@speech/inference/training-artifact-spike';
+import type {
+  FrozenFeatureTinyAdapterProgressV1,
+  FrozenFeatureTinyAdapterTrainingResultV1,
+} from '@speech/personalization';
 import { useState } from 'react';
 import {
   checkAsrWorkerRuntime,
   type AsrWorkerRuntimeCheckResult,
 } from '../workers/asr-worker-client';
+import { runBrowserTrainingPrototype } from '../workers/browser-training-client';
 
 const browserTrainingSpikeReport = createPinnedOnnxRuntimeWebTrainingSpikeReport();
 
@@ -13,8 +18,15 @@ type RuntimeStatus =
   | ({ readonly state: 'ready' } & AsrWorkerRuntimeCheckResult)
   | { readonly state: 'error'; readonly message: string };
 
+type BrowserTrainingStatus =
+  | { readonly state: 'idle' }
+  | { readonly state: 'training'; readonly latestProgress?: FrozenFeatureTinyAdapterProgressV1 }
+  | { readonly state: 'complete'; readonly result: FrozenFeatureTinyAdapterTrainingResultV1 }
+  | { readonly state: 'error'; readonly message: string };
+
 export function ModelRuntimePanel() {
   const [status, setStatus] = useState<RuntimeStatus>({ state: 'idle' });
+  const [trainingStatus, setTrainingStatus] = useState<BrowserTrainingStatus>({ state: 'idle' });
 
   async function handleCheckRuntime() {
     setStatus({ state: 'loading' });
@@ -26,6 +38,22 @@ export function ModelRuntimePanel() {
       setStatus({ state: 'ready', ...result });
     } catch (error) {
       setStatus({
+        state: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async function handleRunBrowserTrainingPrototype() {
+    setTrainingStatus({ state: 'training' });
+    try {
+      const result = await runBrowserTrainingPrototype({
+        training: { epochs: 60, progressEveryEpochs: 15 },
+        onProgress: (latestProgress) => setTrainingStatus({ state: 'training', latestProgress }),
+      });
+      setTrainingStatus({ state: 'complete', result });
+    } catch (error) {
+      setTrainingStatus({
         state: 'error',
         message: error instanceof Error ? error.message : String(error),
       });
@@ -55,7 +83,17 @@ export function ModelRuntimePanel() {
         >
           {status.state === 'loading' ? 'Benchmarking provider…' : 'Benchmark worker provider'}
         </button>
+        <button
+          type="button"
+          onClick={() => void handleRunBrowserTrainingPrototype()}
+          disabled={trainingStatus.state === 'training'}
+        >
+          {trainingStatus.state === 'training'
+            ? 'Training tiny adapter…'
+            : 'Run browser training prototype'}
+        </button>
         <TrainingSpikeStatus />
+        <BrowserTrainingStatusMessage status={trainingStatus} />
         <RuntimeStatusMessage status={status} />
       </div>
     </section>
@@ -83,6 +121,66 @@ function TrainingSpikeStatus() {
           {browserTrainingSpikeReport.recommendation === 'defer-browser-training-prototype'
             ? 'defer; use local trainer'
             : 'prototype in training worker'}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function BrowserTrainingStatusMessage({ status }: { readonly status: BrowserTrainingStatus }) {
+  if (status.state === 'idle') {
+    return (
+      <p className="status-message">
+        Browser-training worker prototype has not run yet. It uses synthetic frozen features and
+        does not touch the active ASR worker or profile.
+      </p>
+    );
+  }
+  if (status.state === 'training') {
+    const progress = status.latestProgress;
+    return (
+      <p className="status-message">
+        Training tiny adapter in a dedicated worker…{' '}
+        {progress === undefined
+          ? 'starting'
+          : `epoch ${progress.epoch.toString()}/${progress.epochs.toString()}, loss ${progress.loss.toFixed(6)}`}
+      </p>
+    );
+  }
+  if (status.state === 'error') {
+    return <p className="status-message error-message">{status.message}</p>;
+  }
+  const { result } = status;
+  return (
+    <dl className="microphone-settings" aria-label="Browser training prototype status">
+      <div>
+        <dt>Training worker</dt>
+        <dd>{result.workerOwner}</dd>
+      </div>
+      <div>
+        <dt>Prototype status</dt>
+        <dd>{result.status}</dd>
+      </div>
+      <div>
+        <dt>Training examples</dt>
+        <dd>{result.metrics.examples.toString()}</dd>
+      </div>
+      <div>
+        <dt>Epochs completed</dt>
+        <dd>{result.metrics.epochsCompleted.toString()}</dd>
+      </div>
+      <div>
+        <dt>Loss reduction</dt>
+        <dd>{result.metrics.lossReduction.toFixed(6)}</dd>
+      </div>
+      <div>
+        <dt>Adapter parameters</dt>
+        <dd>{result.artifact.parameterCount.toString()}</dd>
+      </div>
+      <div>
+        <dt>Activation gate</dt>
+        <dd>
+          {result.compatibility.activationGateRequired ? 'required before activation' : 'missing'}
         </dd>
       </div>
     </dl>
