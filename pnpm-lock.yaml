@@ -93,7 +93,11 @@ importers:
 
   packages/benchmark: {}
 
-  packages/context-bias: {}
+  packages/context-bias:
+    dependencies:
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/decoder: {}
 
