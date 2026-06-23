@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { analyzeEnrollmentTakeQuality, type EnrollmentQualityReportV1 } from '@speech/enrollment';
 import {
   aggregateSpeakerEmbeddings,
+  createHeldOutProfileEvaluationReport,
   encodeSpeakerEmbeddingCandidate,
+  evaluationMetricsFromHeldOutReport,
   parseSpeakerEmbeddingVector,
   serializeSpeakerEmbeddingVector,
+  type HeldOutProfileEvaluationCaseInputV1,
   type SpeakerEmbeddingCandidateV1,
 } from './index';
 
@@ -132,6 +135,355 @@ describe('speaker embedding personalization', () => {
     expect(Array.from(parsed)).toEqual(Array.from(original));
   });
 });
+
+describe('held-out base-vs-profile evaluation reports', () => {
+  it('creates an aggregate-only comparison report with slices and manifest metric snapshots', () => {
+    const report = createHeldOutProfileEvaluationReport({
+      generatedAt: '2026-06-23T00:00:00.000Z',
+      evaluationId: 'eval-local-heldout',
+      profileId: 'profile-local',
+      baseModel: modelIdentity,
+      adaptationType: 'speaker-embedding',
+      heldOutSet: {
+        id: 'synthetic-heldout-v1',
+        sentenceBankVersion: 'synthetic-bank-1',
+        notes: ['Synthetic aggregate fixture; no audio or transcript text included.'],
+      },
+      cases: heldOutCases,
+    });
+
+    expect(report).toMatchObject({
+      schemaVersion: 1,
+      reportType: 'held-out-profile-evaluation',
+      profileId: 'profile-local',
+      heldOutSet: { split: 'held-out', caseCount: 3 },
+      privacy: {
+        containsAudio: false,
+        containsTranscriptText: false,
+        containsRawProfileData: false,
+        containsModelWeights: false,
+        networkUpload: false,
+        localOnly: true,
+      },
+      summary: {
+        caseCount: 3,
+        languageCounts: { vi: 1, en: 1, mixed: 1 },
+        voiceConditionCounts: { whisper: 1, normal: 1, projected: 1 },
+      },
+    });
+    expect(metric(report.overall, 'wordErrorRate')).toMatchObject({
+      base: { numerator: 8, denominator: 25, rate: 0.32 },
+      profile: { numerator: 5, denominator: 25, rate: 0.2 },
+      status: 'improved',
+    });
+    expect(metric(report.overall, 'customTermRecall')).toMatchObject({
+      base: { numerator: 1, denominator: 2, rate: 0.5 },
+      profile: { numerator: 2, denominator: 2, rate: 1 },
+      status: 'improved',
+    });
+    expect(
+      metric(report.overall, 'falseCustomTermInsertionsPer100NonTargetUtterances'),
+    ).toMatchObject({
+      base: { numerator: 0, denominator: 1, rate: 0 },
+      profile: { numerator: 0, denominator: 1, rate: 0 },
+    });
+    expect(metric(report.overall, 'realTimeFactor')).toMatchObject({
+      base: { count: 3, mean: 0.2, median: 0.2 },
+      profile: { count: 3, mean: 0.206667, median: 0.21 },
+    });
+    expect(report.slices.map((slice) => slice.id)).toEqual([
+      'language:vi',
+      'language:en',
+      'language:mixed',
+      'voice-condition:whisper',
+      'voice-condition:normal',
+      'voice-condition:projected',
+    ]);
+    expect(report.activationGate).toMatchObject({
+      passed: true,
+      criteria: {
+        wordErrorRelativeImprovement: 0.375,
+        characterErrorRelativeImprovement: 0.399998,
+        customTermRecallAbsoluteImprovement: 0.5,
+        realTimeFactorRelativeRegression: 0.033335,
+        falseInsertionPer100Regression: 0,
+      },
+      reasons: [],
+    });
+    expect(evaluationMetricsFromHeldOutReport(report, 'base')).toEqual({
+      wer: 0.32,
+      cer: 0.210526,
+      customTermRecall: 0.5,
+      falseInsertionsPer100Utterances: 0,
+      realTimeFactor: 0.2,
+    });
+    expect(evaluationMetricsFromHeldOutReport(report, 'profile')).toEqual({
+      wer: 0.2,
+      cer: 0.126316,
+      customTermRecall: 1,
+      falseInsertionsPer100Utterances: 0,
+      realTimeFactor: 0.206667,
+    });
+
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toMatch(/xin chào|spoken phrase|reference text|raw pcm/i);
+  });
+
+  it('fails the activation gate when quality does not improve or false insertions regress', () => {
+    const regressed: HeldOutProfileEvaluationCaseInputV1[] = [
+      {
+        id: 'regression-case',
+        language: 'vi',
+        voiceCondition: 'normal',
+        nonTargetCustomTermUtterance: true,
+        base: {
+          referenceWordCount: 10,
+          wordErrorCount: 1,
+          referenceCharacterCount: 40,
+          characterErrorCount: 4,
+          expectedCustomTermCount: 0,
+          recalledCustomTermCount: 0,
+          falseCustomTermInsertionCount: 0,
+          realTimeFactor: 0.2,
+        },
+        profile: {
+          referenceWordCount: 10,
+          wordErrorCount: 2,
+          referenceCharacterCount: 40,
+          characterErrorCount: 6,
+          expectedCustomTermCount: 0,
+          recalledCustomTermCount: 0,
+          falseCustomTermInsertionCount: 1,
+          realTimeFactor: 0.27,
+        },
+      },
+    ];
+
+    const report = createHeldOutProfileEvaluationReport({
+      generatedAt: '2026-06-23T00:00:00.000Z',
+      evaluationId: 'eval-regressed',
+      profileId: 'profile-local',
+      baseModel: modelIdentity,
+      adaptationType: 'speaker-embedding',
+      heldOutSet: { id: 'heldout', sentenceBankVersion: 'bank', notes: ['Synthetic.'] },
+      cases: regressed,
+    });
+
+    expect(report.activationGate.passed).toBe(false);
+    expect(report.activationGate.reasons).toEqual([
+      'Profile did not meet the held-out quality improvement threshold.',
+      'Profile real-time-factor regression exceeded the configured budget.',
+      'Profile custom-term false-insertion regression exceeded the configured budget.',
+    ]);
+  });
+
+  it('rejects empty or internally inconsistent held-out metrics', () => {
+    expect(() =>
+      createHeldOutProfileEvaluationReport({
+        generatedAt: '2026-06-23T00:00:00.000Z',
+        evaluationId: 'eval-empty',
+        profileId: 'profile-local',
+        baseModel: modelIdentity,
+        adaptationType: 'speaker-embedding',
+        heldOutSet: { id: 'heldout', sentenceBankVersion: 'bank', notes: ['Synthetic.'] },
+        cases: [],
+      }),
+    ).toThrow(/At least one/);
+
+    expect(() =>
+      createHeldOutProfileEvaluationReport({
+        generatedAt: '2026-06-23T00:00:00.000Z',
+        evaluationId: 'eval-invalid',
+        profileId: 'profile-local',
+        baseModel: modelIdentity,
+        adaptationType: 'speaker-embedding',
+        heldOutSet: { id: 'heldout', sentenceBankVersion: 'bank', notes: ['Synthetic.'] },
+        cases: [
+          {
+            id: 'invalid-case',
+            language: 'mixed',
+            voiceCondition: 'projected',
+            base: {
+              referenceWordCount: 2,
+              wordErrorCount: 3,
+              referenceCharacterCount: 8,
+              characterErrorCount: 1,
+            },
+            profile: {
+              referenceWordCount: 2,
+              wordErrorCount: 1,
+              referenceCharacterCount: 8,
+              characterErrorCount: 1,
+            },
+          },
+        ],
+      }),
+    ).toThrow(/wordErrorCount/);
+
+    expect(() =>
+      createHeldOutProfileEvaluationReport({
+        generatedAt: '2026-06-23T00:00:00.000Z',
+        evaluationId: 'eval-invalid-non-target',
+        profileId: 'profile-local',
+        baseModel: modelIdentity,
+        adaptationType: 'speaker-embedding',
+        heldOutSet: { id: 'heldout', sentenceBankVersion: 'bank', notes: ['Synthetic.'] },
+        cases: [
+          {
+            id: 'invalid-non-target',
+            language: 'mixed',
+            voiceCondition: 'projected',
+            nonTargetCustomTermUtterance: true,
+            base: {
+              referenceWordCount: 2,
+              wordErrorCount: 1,
+              referenceCharacterCount: 8,
+              characterErrorCount: 1,
+              expectedCustomTermCount: 1,
+            },
+            profile: {
+              referenceWordCount: 2,
+              wordErrorCount: 1,
+              referenceCharacterCount: 8,
+              characterErrorCount: 1,
+            },
+          },
+        ],
+      }),
+    ).toThrow(/non-target/);
+  });
+});
+
+const modelIdentity = {
+  id: 'mock-vi-en-rnnt',
+  version: '0.0.0-test',
+  manifestSha256: 'manifest-sha256',
+  graphContractSha256: 'graph-contract-sha256',
+};
+
+const heldOutCases: readonly HeldOutProfileEvaluationCaseInputV1[] = [
+  {
+    id: 'heldout-vi-normal',
+    language: 'vi',
+    voiceCondition: 'normal',
+    base: {
+      referenceWordCount: 10,
+      wordErrorCount: 4,
+      referenceCharacterCount: 40,
+      characterErrorCount: 9,
+      switchBoundaryCount: 0,
+      switchBoundaryErrorCount: 0,
+      expectedCustomTermCount: 1,
+      recalledCustomTermCount: 0,
+      expectedAliasTriggerCount: 1,
+      recalledAliasTriggerCount: 0,
+      falseCustomTermInsertionCount: 0,
+      firstPartialLatencyMs: 260,
+      finalizationLatencyMs: 240,
+      realTimeFactor: 0.22,
+    },
+    profile: {
+      referenceWordCount: 10,
+      wordErrorCount: 2,
+      referenceCharacterCount: 40,
+      characterErrorCount: 5,
+      switchBoundaryCount: 0,
+      switchBoundaryErrorCount: 0,
+      expectedCustomTermCount: 1,
+      recalledCustomTermCount: 1,
+      expectedAliasTriggerCount: 1,
+      recalledAliasTriggerCount: 1,
+      falseCustomTermInsertionCount: 0,
+      firstPartialLatencyMs: 270,
+      finalizationLatencyMs: 230,
+      realTimeFactor: 0.24,
+    },
+  },
+  {
+    id: 'heldout-en-whisper',
+    language: 'en',
+    voiceCondition: 'whisper',
+    base: {
+      referenceWordCount: 8,
+      wordErrorCount: 2,
+      referenceCharacterCount: 30,
+      characterErrorCount: 4,
+      switchBoundaryCount: 0,
+      switchBoundaryErrorCount: 0,
+      expectedCustomTermCount: 1,
+      recalledCustomTermCount: 1,
+      expectedAliasTriggerCount: 0,
+      recalledAliasTriggerCount: 0,
+      falseCustomTermInsertionCount: 0,
+      firstPartialLatencyMs: 240,
+      finalizationLatencyMs: 220,
+      realTimeFactor: 0.2,
+    },
+    profile: {
+      referenceWordCount: 8,
+      wordErrorCount: 1,
+      referenceCharacterCount: 30,
+      characterErrorCount: 2,
+      switchBoundaryCount: 0,
+      switchBoundaryErrorCount: 0,
+      expectedCustomTermCount: 1,
+      recalledCustomTermCount: 1,
+      expectedAliasTriggerCount: 0,
+      recalledAliasTriggerCount: 0,
+      falseCustomTermInsertionCount: 0,
+      firstPartialLatencyMs: 250,
+      finalizationLatencyMs: 210,
+      realTimeFactor: 0.21,
+    },
+  },
+  {
+    id: 'heldout-mixed-projected',
+    language: 'mixed',
+    voiceCondition: 'projected',
+    nonTargetCustomTermUtterance: true,
+    base: {
+      referenceWordCount: 7,
+      wordErrorCount: 2,
+      referenceCharacterCount: 25,
+      characterErrorCount: 7,
+      switchBoundaryCount: 2,
+      switchBoundaryErrorCount: 1,
+      expectedCustomTermCount: 0,
+      recalledCustomTermCount: 0,
+      expectedAliasTriggerCount: 0,
+      recalledAliasTriggerCount: 0,
+      falseCustomTermInsertionCount: 0,
+      firstPartialLatencyMs: 220,
+      finalizationLatencyMs: 210,
+      realTimeFactor: 0.18,
+    },
+    profile: {
+      referenceWordCount: 7,
+      wordErrorCount: 2,
+      referenceCharacterCount: 25,
+      characterErrorCount: 5,
+      switchBoundaryCount: 2,
+      switchBoundaryErrorCount: 1,
+      expectedCustomTermCount: 0,
+      recalledCustomTermCount: 0,
+      expectedAliasTriggerCount: 0,
+      recalledAliasTriggerCount: 0,
+      falseCustomTermInsertionCount: 0,
+      firstPartialLatencyMs: 230,
+      finalizationLatencyMs: 200,
+      realTimeFactor: 0.17,
+    },
+  },
+];
+
+function metric(
+  slice: { readonly metrics: readonly { readonly name: string }[] },
+  name: string,
+): { readonly name: string } {
+  const found = slice.metrics.find((candidate) => candidate.name === name);
+  if (found === undefined) throw new Error(`Missing metric ${name}.`);
+  return found;
+}
 
 function candidate(
   utteranceId: string,
