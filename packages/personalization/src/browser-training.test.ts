@@ -3,7 +3,9 @@ import {
   createBrowserTrainingPrivacy,
   createSyntheticFrozenFeatureTinyAdapterDataset,
   trainFrozenFeatureTinyAdapter,
+  validateFrozenFeatureTinyAdapterCheckpoint,
   validateFrozenFeatureTinyAdapterDataset,
+  type FrozenFeatureTinyAdapterCheckpointV1,
   type FrozenFeatureTinyAdapterDatasetV1,
 } from './browser-training';
 
@@ -32,6 +34,13 @@ describe('browser frozen-feature tiny-adapter prototype', () => {
     expect(first.artifact.bias).toHaveLength(2);
     expect(first.artifact.checksum).toMatch(/^fnv1a32:[a-f0-9]{8}$/);
     expect(first.artifact).toEqual(second.artifact);
+    expect(first.checkpoint.epoch).toBe(first.metrics.epochsCompleted);
+    expect(first.recovery).toMatchObject({
+      resumable: false,
+      reloadRecoverySupported: true,
+      previousActiveProfileIntact: true,
+      activationGateRequired: true,
+    });
     expect(first.compatibility).toMatchObject({
       activationGateRequired: true,
       importChecksumRequired: true,
@@ -50,10 +59,13 @@ describe('browser frozen-feature tiny-adapter prototype', () => {
 
   it('emits progress and supports cooperative cancellation without mutating active profiles', () => {
     const progressEpochs: number[] = [];
+    const checkpoints: FrozenFeatureTinyAdapterCheckpointV1[] = [];
     const result = trainFrozenFeatureTinyAdapter(createSyntheticFrozenFeatureTinyAdapterDataset(), {
       epochs: 30,
       progressEveryEpochs: 5,
+      checkpointEveryEpochs: 5,
       onProgress: (progress) => progressEpochs.push(progress.epoch),
+      onCheckpoint: (checkpoint) => checkpoints.push(checkpoint),
       shouldCancel: (progress) => progress.epoch >= 7,
     });
 
@@ -61,13 +73,55 @@ describe('browser frozen-feature tiny-adapter prototype', () => {
     expect(result.metrics.epochsCompleted).toBe(7);
     expect(progressEpochs).toContain(5);
     expect(progressEpochs.at(-1)).toBe(7);
-    expect(result.compatibility.activationGateRequired).toBe(true);
+    expect(checkpoints.map((checkpoint) => checkpoint.epoch)).toEqual([5, 7]);
+    expect(result.recovery).toMatchObject({
+      checkpointEpoch: 7,
+      resumable: true,
+      previousActiveProfileIntact: true,
+      activationGateRequired: true,
+    });
   });
 
-  it('validates dimensions, checksums, and local-only privacy before training', () => {
+  it('pauses with a resumable checkpoint and resumes from checkpoint state', () => {
     const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
+    const paused = trainFrozenFeatureTinyAdapter(dataset, {
+      epochs: 40,
+      progressEveryEpochs: 4,
+      checkpointEveryEpochs: 4,
+      targetLoss: 0,
+      shouldPause: (progress) => progress.epoch >= 12,
+    });
+
+    expect(paused.status).toBe('paused');
+    expect(paused.checkpoint.epoch).toBe(12);
+    expect(paused.recovery.resumable).toBe(true);
+    expect(validateFrozenFeatureTinyAdapterCheckpoint(dataset, paused.checkpoint)).toBe(
+      paused.checkpoint,
+    );
+
+    const resumed = trainFrozenFeatureTinyAdapter(dataset, {
+      epochs: 40,
+      progressEveryEpochs: 10,
+      checkpointEveryEpochs: 10,
+      targetLoss: 0,
+      resumeFromCheckpoint: paused.checkpoint,
+    });
+
+    expect(resumed.status).toBe('completed');
+    expect(resumed.metrics.epochsCompleted).toBe(40);
+    expect(resumed.metrics.finalLoss).toBeLessThan(paused.metrics.finalLoss);
+    expect(resumed.recovery.resumable).toBe(false);
+  });
+
+  it('validates dimensions, checksums, checkpoints, and local-only privacy before training', () => {
+    const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
+    const checkpoint = trainFrozenFeatureTinyAdapter(dataset, {
+      epochs: 12,
+      checkpointEveryEpochs: 6,
+    }).checkpoint;
 
     expect(validateFrozenFeatureTinyAdapterDataset(dataset)).toBe(dataset);
+    expect(validateFrozenFeatureTinyAdapterCheckpoint(dataset, checkpoint)).toBe(checkpoint);
     expect(() =>
       validateFrozenFeatureTinyAdapterDataset({
         ...dataset,
@@ -89,6 +143,18 @@ describe('browser frozen-feature tiny-adapter prototype', () => {
         } as unknown as FrozenFeatureTinyAdapterDatasetV1['privacy'],
       }),
     ).toThrow(/raw audio/);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterCheckpoint(dataset, {
+        ...checkpoint,
+        checkpointId: 'tampered',
+      }),
+    ).toThrow(/checkpointId/);
+    expect(() =>
+      trainFrozenFeatureTinyAdapter(
+        { ...dataset, datasetId: 'different-dataset' },
+        { resumeFromCheckpoint: checkpoint },
+      ),
+    ).toThrow(/datasetId/);
   });
 
   it('refuses adapters that exceed the tiny parameter budget', () => {
@@ -99,12 +165,13 @@ describe('browser frozen-feature tiny-adapter prototype', () => {
     ).toThrow(/parameter count/);
   });
 
-  it('propagates private frozen-feature markers into training results', () => {
+  it('propagates private frozen-feature markers into training results and checkpoints', () => {
+    const baseDataset = createSyntheticFrozenFeatureTinyAdapterDataset();
     const privateDataset = {
-      ...createSyntheticFrozenFeatureTinyAdapterDataset(),
+      ...baseDataset,
       datasetId: 'private-profile-frozen-feature-dataset',
       source: {
-        ...createSyntheticFrozenFeatureTinyAdapterDataset().source,
+        ...baseDataset.source,
         kind: 'profile-frozen-features' as const,
       },
       privacy: createBrowserTrainingPrivacy({
@@ -113,7 +180,9 @@ describe('browser frozen-feature tiny-adapter prototype', () => {
       }),
     } satisfies FrozenFeatureTinyAdapterDatasetV1;
 
-    expect(trainFrozenFeatureTinyAdapter(privateDataset, { epochs: 10 }).privacy).toEqual({
+    const result = trainFrozenFeatureTinyAdapter(privateDataset, { epochs: 10 });
+
+    expect(result.privacy).toEqual({
       containsRawAudio: false,
       containsTranscriptText: false,
       containsPrivateFrozenFeatureValues: true,
@@ -122,6 +191,7 @@ describe('browser frozen-feature tiny-adapter prototype', () => {
       telemetry: false,
       localOnly: true,
     });
+    expect(result.checkpoint.privacy).toEqual(result.privacy);
   });
 
   it('creates explicit sensitive-feature privacy markers for future profile datasets', () => {

@@ -51,7 +51,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 - Does documentation distinguish local speaker profiles, vocabulary steering, residual adapters, and full base-model training?
 - If a trainer is added, does it split by prompt identity, keep held-out prompts separate, validate exported profile checksums/base-model identity before reading audio, keep base graphs frozen by default, omit raw audio/transcript text/case IDs from metadata and evaluation reports, and refuse automatic activation when regression gates fail?
 - If a trainer Docker image is added, does the guide use `--network none`, narrow bind mounts, host UID/GID mapping, and a publication checklist that records the base image digest without committing user data?
-- If browser training is prototyped, is it isolated to a dedicated training worker, does it avoid UI/AudioWorklet/ASR-worker ownership, and does the UI receive only aggregate progress/results rather than private frozen-feature matrices?
+- If browser training is prototyped, is it isolated to a dedicated training worker, does it avoid UI/AudioWorklet/ASR-worker ownership, does the UI receive only aggregate progress/results rather than private frozen-feature matrices, and do pause/cancel/reload-recovery checkpoints leave the previous active profile intact?
 
 ## Validation evidence
 
