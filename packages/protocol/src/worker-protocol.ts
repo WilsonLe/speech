@@ -1,7 +1,7 @@
 import type { ErrorCode, WarningCode } from './errors';
 import type { LanguageModeDiagnostics, LanguageSpan } from './language-diagnostics';
-import type { SpeechLanguageMode } from './model-manifest';
-import type { ModelIdentity, AdaptationType } from './profile';
+import type { SpeechLanguageMode, SpeechModelManifestV2 } from './model-manifest';
+import type { ModelIdentity, AdaptationType, SpeechProfileManifestV1 } from './profile';
 import type { VocabularyEntryV1, VocabularyError } from './vocabulary';
 
 export interface RuntimeCapabilities {
@@ -34,6 +34,9 @@ export interface RuntimeMetrics {
   readonly realTimeFactor?: number;
   readonly provider?: 'webgpu' | 'wasm';
   readonly wasmThreads?: number;
+  readonly adapterRunMedianMs?: number;
+  readonly adapterRtfOverheadRatio?: number;
+  readonly adapterSizeBytes?: number;
 }
 
 export type { LanguageSpan };
@@ -54,6 +57,14 @@ export type MainToAsrWorker =
       readonly type: 'LOAD_PROFILE';
       readonly profileId: string;
       readonly expectedBaseModel: ModelIdentity;
+      readonly profileManifest?: SpeechProfileManifestV1;
+      readonly baseModelManifest?: SpeechModelManifestV2;
+      readonly adapterGraphBytes?: ArrayBuffer;
+      readonly adapterBenchmark?: {
+        readonly runs?: number;
+        readonly warmupRuns?: number;
+        readonly audioChunkDurationMs?: number;
+      };
     }
   | { readonly type: 'UNLOAD_PROFILE' }
   | { readonly type: 'START_UTTERANCE'; readonly utteranceId: string; readonly startedAtMs: number }

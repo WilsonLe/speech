@@ -16,7 +16,10 @@ export function ModelRuntimePanel() {
   async function handleCheckRuntime() {
     setStatus({ state: 'loading' });
     try {
-      const result = await checkAsrWorkerRuntime({ preferredProvider: 'auto' });
+      const result = await checkAsrWorkerRuntime({
+        preferredProvider: 'auto',
+        adapterSmokeTest: true,
+      });
       setStatus({ state: 'ready', ...result });
     } catch (error) {
       setStatus({
@@ -34,7 +37,8 @@ export function ModelRuntimePanel() {
         <p>
           ONNX Runtime Web is loaded only inside the ASR worker. The UI thread can request a
           lightweight provider benchmark and fallback check, but it does not import ORT or
-          instantiate model sessions.
+          instantiate model sessions. The check also loads a tiny generated residual-adapter graph
+          in the worker and records aggregate adapter overhead without audio or transcript data.
         </p>
       </div>
 
@@ -83,6 +87,18 @@ function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {
           <dt>Language spans</dt>
           <dd>{formatLanguageSpanDiagnostics(status.languageDiagnostics)}</dd>
         </div>
+        <div>
+          <dt>Adapter profile</dt>
+          <dd>{formatAdapterProfile(status.adapterBenchmark)}</dd>
+        </div>
+        <div>
+          <dt>Adapter median run</dt>
+          <dd>{formatAdapterMedian(status.adapterBenchmark)}</dd>
+        </div>
+        <div>
+          <dt>Adapter RTF overhead</dt>
+          <dd>{formatAdapterRtf(status.adapterBenchmark)}</dd>
+        </div>
       </dl>
       {status.warnings.length > 0 ? (
         <ul className="runtime-warnings" aria-label="Provider fallback warnings">
@@ -93,6 +109,23 @@ function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {
       ) : null}
     </>
   );
+}
+
+function formatAdapterProfile(adapter: AsrWorkerRuntimeCheckResult['adapterBenchmark']): string {
+  if (adapter === undefined) return 'not loaded';
+  return `${adapter.profileId} (${adapter.adaptationType})`;
+}
+
+function formatAdapterMedian(adapter: AsrWorkerRuntimeCheckResult['adapterBenchmark']): string {
+  if (adapter === undefined) return 'not measured';
+  return `${adapter.adapterRunMedianMs.toFixed(3)} ms · ${(adapter.adapterSizeBytes / 1024).toFixed(1)} KiB`;
+}
+
+function formatAdapterRtf(adapter: AsrWorkerRuntimeCheckResult['adapterBenchmark']): string {
+  if (adapter === undefined) return 'not measured';
+  return adapter.adapterRtfOverheadRatio > 0 && adapter.adapterRtfOverheadRatio < 0.001
+    ? '<0.001'
+    : adapter.adapterRtfOverheadRatio.toFixed(3);
 }
 
 function formatLanguageModeDiagnostics(
