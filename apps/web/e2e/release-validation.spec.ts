@@ -113,6 +113,13 @@ test('active push-to-talk stress cycles do not make network requests or surface 
 
   await page.goto('/');
   await page.waitForLoadState('networkidle');
+  await expect(page.getByLabel('Offline app shell status')).toContainText('opfs', {
+    timeout: 10_000,
+  });
+  await expect(page.getByText(/VietASR Iteration 3 Vietnamese INT8 candidate/i)).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.waitForLoadState('networkidle');
 
   const transcript = page.getByRole('region', { name: /focused push-to-talk dictation/i });
   const pushToTalk = transcript.getByRole('button', { name: /hold to talk/i });

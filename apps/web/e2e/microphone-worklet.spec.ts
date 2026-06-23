@@ -22,6 +22,24 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await expect(calibration).toContainText('Projected means loud and clear');
   await expect(calibration).toContainText('Do not strain');
 
+  const recorder = page.getByLabel('Enrollment recorder', { exact: true });
+  await expect(recorder).toContainText('Enrollment recorder and quality analyzer');
+  await recorder.getByRole('button', { name: /start enrollment take/i }).click();
+  await expect(recorder).toContainText('recording');
+  await expect
+    .poll(async () => readMetric(recorder, 'Take samples'), { timeout: 10_000 })
+    .toBeGreaterThan(0);
+  await recorder.getByRole('button', { name: /stop and analyze take/i }).click();
+  await expect(page.getByLabel('Enrollment quality report')).toContainText('Quality report', {
+    timeout: 10_000,
+  });
+  await expect(page.getByLabel('Enrollment quality report')).toContainText(
+    'No audio or transcript text in report',
+  );
+  await expect(recorder.getByRole('button', { name: /manually accept take/i })).toBeEnabled();
+  await recorder.getByRole('button', { name: /retry take/i }).click();
+  await expect(recorder).toContainText('Take cleared from memory');
+
   await page.getByRole('button', { name: /stop microphone/i }).click();
   await expect(metrics).toContainText('stopped');
   await expect(page.getByText(/microphone resources were released/i)).toBeVisible();

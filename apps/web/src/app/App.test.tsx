@@ -15,6 +15,7 @@ describe('App', () => {
     expect(html).toContain('Benchmark and diagnostics export');
     expect(html).toContain('Permission and capture check');
     expect(html).toContain('Calibration and voice guidance');
+    expect(html).toContain('Enrollment recorder and quality analyzer');
     expect(html).toContain('Dedicated worker ONNX Runtime loader');
     expect(html).toContain('Implementation roadmap');
   });

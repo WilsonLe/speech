@@ -1,5 +1,6 @@
 export * from './calibration';
 export * from './coverage';
+export * from './quality';
 export * from './sentence-bank';
 
 export interface EnrollmentPackageInfo {
