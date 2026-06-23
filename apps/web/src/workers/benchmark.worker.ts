@@ -4,6 +4,7 @@ import {
   calculateRealTimeFactor,
   createBenchmarkId,
   createBenchmarkReport,
+  createSyntheticCustomTermBenchmarkEvaluation,
   type BenchmarkEnvironment,
   type BenchmarkMetricSample,
   type BenchmarkReportV1,
@@ -148,6 +149,8 @@ function runSyntheticBenchmark(options: BenchmarkRunOptions): BenchmarkReportV1 
     metricSamples.push({ name: 'jsHeapUsedBytes', unit: 'bytes', value: heapUsedBytes });
   }
 
+  const customTermEvaluation = createSyntheticCustomTermBenchmarkEvaluation();
+
   return createBenchmarkReport({
     generatedAt,
     benchmarkId,
@@ -159,11 +162,13 @@ function runSyntheticBenchmark(options: BenchmarkRunOptions): BenchmarkReportV1 
       syntheticAudioMs,
       notes: [
         'Synthetic worker benchmark only; it does not measure production ASR model accuracy or latency.',
-        'No microphone audio, transcript text, model weights, telemetry, or network upload is included.',
+        'Includes a synthetic custom-term recall and false-insertion fixture with aggregate counts only.',
+        'No microphone audio, transcript text, private vocabulary, model weights, telemetry, or network upload is included.',
       ],
     },
     environment: collectEnvironment(options),
     traces,
+    customTermEvaluation,
     metricSamples,
     warnings: [
       'Synthetic benchmark results are informational until measured with real model packs on declared reference hardware.',

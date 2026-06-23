@@ -4,6 +4,7 @@ import {
   createBenchmarkId,
   createBenchmarkReport,
   createDiagnosticsExport,
+  createSyntheticCustomTermBenchmarkEvaluation,
   serializeBenchmarkJson,
   summarizeSamples,
   type BenchmarkTraceEvent,
@@ -92,6 +93,75 @@ describe('benchmark report helpers', () => {
       'realTimeFactor',
       'audioOverruns',
     ]);
+  });
+
+  it('evaluates synthetic custom-term recall and false insertions without exported transcript text', () => {
+    const customTermEvaluation = createSyntheticCustomTermBenchmarkEvaluation();
+
+    expect(customTermEvaluation).toMatchObject({
+      schemaVersion: 1,
+      reportType: 'custom-term-benchmark',
+      synthetic: true,
+      caseCount: 4,
+      activeCustomTermCount: 3,
+      recall: { numerator: 2, denominator: 3, rate: 0.666667 },
+      falseInsertion: { numerator: 1, denominator: 3, rate: 0.333333 },
+      displayReplacementCount: 3,
+    });
+    expect(customTermEvaluation.cases).toEqual([
+      {
+        id: 'synthetic-hit-phrase',
+        expectedCustomTermCount: 1,
+        recalledCustomTermCount: 1,
+        emittedCustomTermCount: 1,
+        falseInsertionCount: 0,
+        displayReplacementCount: 1,
+      },
+      {
+        id: 'synthetic-hit-alias',
+        expectedCustomTermCount: 1,
+        recalledCustomTermCount: 1,
+        emittedCustomTermCount: 1,
+        falseInsertionCount: 0,
+        displayReplacementCount: 1,
+      },
+      {
+        id: 'synthetic-miss',
+        expectedCustomTermCount: 1,
+        recalledCustomTermCount: 0,
+        emittedCustomTermCount: 0,
+        falseInsertionCount: 0,
+        displayReplacementCount: 0,
+      },
+      {
+        id: 'synthetic-false-insertion',
+        expectedCustomTermCount: 0,
+        recalledCustomTermCount: 0,
+        emittedCustomTermCount: 1,
+        falseInsertionCount: 1,
+        displayReplacementCount: 1,
+      },
+    ]);
+
+    const report = createBenchmarkReport({
+      generatedAt: '2026-06-22T00:00:00.000Z',
+      benchmarkId: 'speech-custom-terms',
+      configuration,
+      traces,
+      customTermEvaluation,
+    });
+    expect(report.summaries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'customTermRecall', unit: 'ratio', median: 0.666667 }),
+        expect.objectContaining({
+          name: 'customTermFalseInsertionRate',
+          unit: 'ratio',
+          median: 0.333333,
+        }),
+      ]),
+    );
+    const serialized = serializeBenchmarkJson(report);
+    expect(serialized).not.toMatch(/Pangea|Wilson|Sổ Cái|dashboard chat|mở/);
   });
 
   it('creates a combined diagnostics export with optional capability data', () => {
