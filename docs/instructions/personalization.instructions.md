@@ -1,6 +1,6 @@
 ---
 description: 'Vocabulary steering, enrollment, speaker profile, and adapter implementation rules.'
-applyTo: 'packages/context-bias/**,packages/enrollment/**,packages/personalization/**,packages/profile-manager/**,tools/profile-trainer/**,training/personalization/**'
+applyTo: 'packages/context-bias/**,packages/enrollment/**,packages/personalization/**,packages/profile-manager/**,tools/sentence-bank/**,tools/profile-trainer/**,training/personalization/**,test-data/expected/enrollment-sentence-bank.json'
 ---
 
 # Personalization rules
@@ -12,4 +12,5 @@ applyTo: 'packages/context-bias/**,packages/enrollment/**,packages/personalizati
 - Refuse profiles whose base model identity, graph-contract hash, checksum, or regression gate fails.
 - Preserve one-click fallback to the generic model.
 - Use `projected` internally for loud/clear enrollment and warn users not to strain or scream.
+- Enrollment sentence-bank releases must be UI-independent, schema-versioned, NFC-normalized, license-linked per sentence, human-reviewed, redistributable, and include deterministic held-out IDs. Draft tooling may bypass release gates explicitly, but committed release fixtures must not contain private transcripts, corpus excerpts, recordings, or user enrollment data.
 - Browser-only training is experimental and must never block transcription or corrupt the active profile.
