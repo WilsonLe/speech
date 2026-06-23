@@ -9,6 +9,7 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**,MODEL_LICENSES
 - No telemetry, remote logging, analytics, or crash uploads are enabled by default.
 - During active transcription, do not fetch remote services; model downloads and app updates must be explicit lifecycle events outside active dictation.
 - Enrollment recordings, speaker embeddings, adapters, and exported profiles are sensitive voice-biometric-like personal data.
+- Persist enrollment audio only after explicit user acceptance/save into private profile storage; never use localStorage/IndexedDB for raw voice data, and keep delete-all voice-data flows local and deterministic.
 - Never place private audio/transcripts/profile artifacts in logs, screenshots, fixtures, support bundles, or CI artifacts.
 - Code license, model license, dataset license, and fixture license are separate release gates.
 - Catalog research leads with unclear or `other` license metadata must stay blocked/non-installable and must not be downloaded by the PWA until redistribution and runtime compatibility are documented.

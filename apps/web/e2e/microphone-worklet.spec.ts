@@ -23,7 +23,11 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await expect(calibration).toContainText('Do not strain');
 
   const recorder = page.getByLabel('Enrollment recorder', { exact: true });
+  const profileStore = page.getByLabel('Enrollment profile storage');
   await expect(recorder).toContainText('Enrollment recorder and quality analyzer');
+  await expect(profileStore).toContainText('ready', { timeout: 10_000 });
+  await deleteStoredProfileIfPresent(profileStore);
+
   await recorder.getByRole('button', { name: /start enrollment take/i }).click();
   await expect(recorder).toContainText('recording');
   await expect
@@ -36,14 +40,49 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await expect(page.getByLabel('Enrollment quality report')).toContainText(
     'No audio or transcript text in report',
   );
-  await expect(recorder.getByRole('button', { name: /manually accept take/i })).toBeEnabled();
-  await recorder.getByRole('button', { name: /retry take/i }).click();
-  await expect(recorder).toContainText('Take cleared from memory');
+  const acceptAndSave = recorder.getByRole('button', { name: /manually accept and save take/i });
+  await expect(acceptAndSave).toBeEnabled();
+  await acceptAndSave.click();
+  await expect(profileStore).toContainText(/Accepted take saved/i, { timeout: 10_000 });
+  await expect
+    .poll(async () => readMetric(profileStore, 'Stored accepted takes'), { timeout: 10_000 })
+    .toBeGreaterThan(0);
 
+  await page.reload();
+  const resumedProfileStore = page.getByLabel('Enrollment profile storage');
+  await expect(resumedProfileStore).toContainText(/resumed accepted enrollment takes/i, {
+    timeout: 10_000,
+  });
+  await expect
+    .poll(async () => readMetric(resumedProfileStore, 'Stored accepted takes'), {
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(0);
+  await resumedProfileStore
+    .getByRole('button', { name: /delete stored enrollment profile/i })
+    .click();
+  await expect(resumedProfileStore).toContainText(/deleted locally/i, { timeout: 10_000 });
+  await expect
+    .poll(async () => readMetric(resumedProfileStore, 'Stored accepted takes'), {
+      timeout: 10_000,
+    })
+    .toBe(0);
+
+  await page.getByRole('button', { name: /start microphone check/i }).click();
   await page.getByRole('button', { name: /stop microphone/i }).click();
   await expect(metrics).toContainText('stopped');
   await expect(page.getByText(/microphone resources were released/i)).toBeVisible();
 });
+
+async function deleteStoredProfileIfPresent(profileStore: Locator): Promise<void> {
+  const deleteButton = profileStore.getByRole('button', {
+    name: /delete stored enrollment profile/i,
+  });
+  if (await deleteButton.isEnabled()) {
+    await deleteButton.click();
+    await expect(profileStore).toContainText(/deleted locally/i, { timeout: 10_000 });
+  }
+}
 
 async function readMetric(metrics: Locator, label: string): Promise<number> {
   const lines = (await metrics.innerText()).split(/\n+/).map((line) => line.trim());

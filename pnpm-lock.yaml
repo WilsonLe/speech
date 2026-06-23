@@ -59,6 +59,9 @@ importers:
       '@speech/model-manager':
         specifier: workspace:*
         version: link:../../packages/model-manager
+      '@speech/profile-manager':
+        specifier: workspace:*
+        version: link:../../packages/profile-manager
       '@speech/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -137,7 +140,11 @@ importers:
 
   packages/personalization: {}
 
-  packages/profile-manager: {}
+  packages/profile-manager:
+    dependencies:
+      '@speech/enrollment':
+        specifier: workspace:*
+        version: link:../enrollment
 
   packages/protocol: {}
 
