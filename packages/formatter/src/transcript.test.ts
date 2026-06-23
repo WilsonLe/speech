@@ -41,6 +41,56 @@ describe('transcript rendering parity fixture', () => {
     expect(detokenizePieces([`▁${decomposed}`, '▁phê'])).toBe('cà phê');
   });
 
+  it('renders spoken aliases with canonical display replacements by token span', () => {
+    const vocabulary: TranscriptVocabulary = {
+      wordBoundaryMarker: '▁',
+      tokens: {
+        '1': '▁mở',
+        '2': '▁dashboard',
+        '3': '▁chat',
+        '4': '▁cho',
+        '5': '▁Wilson',
+      },
+    };
+
+    expect(
+      renderTranscriptFromTokenIds({
+        tokenIds: [1, 2, 3, 4, 5],
+        vocabulary,
+        displayReplacements: [
+          {
+            startTokenIndex: 1,
+            endTokenIndex: 3,
+            displayForm: 'Pangea Chat',
+            vocabularyEntryId: 'term-pangea',
+          },
+        ],
+      }),
+    ).toBe('mở Pangea Chat cho Wilson');
+  });
+
+  it('rejects invalid or overlapping display replacement spans', () => {
+    const vocabulary: TranscriptVocabulary = { tokens: { '1': '▁a', '2': '▁b' } };
+
+    expect(() =>
+      renderTranscriptFromTokenIds({
+        tokenIds: [1, 2],
+        vocabulary,
+        displayReplacements: [{ startTokenIndex: 1, endTokenIndex: 1, displayForm: 'B' }],
+      }),
+    ).toThrow(/valid non-empty token index spans/);
+    expect(() =>
+      renderTranscriptFromTokenIds({
+        tokenIds: [1, 2],
+        vocabulary,
+        displayReplacements: [
+          { startTokenIndex: 0, endTokenIndex: 2, displayForm: 'AB' },
+          { startTokenIndex: 1, endTokenIndex: 2, displayForm: 'B' },
+        ],
+      }),
+    ).toThrow(/must not overlap/);
+  });
+
   it('formats Vietnamese text with conservative basic ITN rules', () => {
     const formatted = formatTranscriptText(
       'hôm nay tăng hai mươi phần trăm lúc ba giờ mười lăm ngày hai mươi hai tháng sáu năm hai nghìn không trăm hai mươi sáu',
