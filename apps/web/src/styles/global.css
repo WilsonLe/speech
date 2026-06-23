@@ -306,6 +306,29 @@ h2 {
   text-align: right;
 }
 
+.enrollment-calibration {
+  margin-top: 1rem;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+}
+
+.select-field {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 18rem;
+  margin-top: 1rem;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.select-field select {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.8);
+  font: inherit;
+}
+
 .transcript-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.45fr);

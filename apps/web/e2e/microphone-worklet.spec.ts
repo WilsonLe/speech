@@ -14,6 +14,14 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
     .poll(async () => readMetric(metrics, 'Captured samples'), { timeout: 10_000 })
     .toBeGreaterThan(0);
 
+  const calibration = page.getByLabel('Enrollment calibration guidance');
+  await expect(calibration).toContainText('Calibration and voice guidance');
+  await calibration.getByRole('button', { name: /room-noise sample/i }).click();
+  await calibration.getByRole('button', { name: /normal baseline/i }).click();
+  await calibration.getByLabel('Voice condition').selectOption('projected');
+  await expect(calibration).toContainText('Projected means loud and clear');
+  await expect(calibration).toContainText('Do not strain');
+
   await page.getByRole('button', { name: /stop microphone/i }).click();
   await expect(metrics).toContainText('stopped');
   await expect(page.getByText(/microphone resources were released/i)).toBeVisible();

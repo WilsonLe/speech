@@ -11,6 +11,12 @@ import {
   type PcmCaptureWorkletFailure,
   type PcmCaptureWorkletMessage,
 } from '@speech/audio';
+import {
+  evaluateVoiceConditionGuidance,
+  formatDb,
+  formatDbRange,
+  type EnrollmentVoiceCondition,
+} from '@speech/enrollment';
 
 interface ToggleConfig {
   readonly key: keyof MicrophoneProcessingOptions;
@@ -61,6 +67,14 @@ const idleCaptureSummary: WorkletCaptureSummary = {
   message: 'AudioWorklet capture is idle until you start a microphone check.',
 };
 
+const enrollmentProcessingOptions: MicrophoneProcessingOptions = {
+  echoCancellation: false,
+  noiseSuppression: false,
+  autoGainControl: false,
+};
+
+const voiceConditions: readonly EnrollmentVoiceCondition[] = ['whisper', 'normal', 'projected'];
+
 export function MicrophonePanel() {
   const controller = useMemo(() => new MicrophoneCaptureController(), []);
   const workletController = useRef<PcmCaptureWorkletController | null>(null);
@@ -73,6 +87,24 @@ export function MicrophonePanel() {
     null,
   );
   const [captureSummary, setCaptureSummary] = useState<WorkletCaptureSummary>(idleCaptureSummary);
+  const [roomNoiseRms, setRoomNoiseRms] = useState<number | null>(null);
+  const [normalBaselineRms, setNormalBaselineRms] = useState<number | null>(null);
+  const [voiceCondition, setVoiceCondition] = useState<EnrollmentVoiceCondition>('normal');
+  const calibrationBaseline = normalBaselineRms
+    ? {
+        normalRms: normalBaselineRms,
+        ...(roomNoiseRms !== null ? { roomNoiseRms } : {}),
+      }
+    : null;
+  const voiceGuidance = evaluateVoiceConditionGuidance(
+    {
+      rms: captureSummary.rms,
+      peak: captureSummary.peak,
+      clippingRatio: captureSummary.clippingRatio,
+    },
+    calibrationBaseline,
+    voiceCondition,
+  );
 
   useEffect(() => {
     return () => {
@@ -144,6 +176,22 @@ export function MicrophonePanel() {
       status: 'stopped',
       message: 'Capture stopped and microphone resources were released.',
     }));
+  }
+
+  function useEnrollmentProcessingDefaults() {
+    setProcessing(enrollmentProcessingOptions);
+  }
+
+  function saveRoomNoiseSample() {
+    if (captureSummary.rms > 0) {
+      setRoomNoiseRms(captureSummary.rms);
+    }
+  }
+
+  function saveNormalBaseline() {
+    if (captureSummary.rms > 0) {
+      setNormalBaselineRms(captureSummary.rms);
+    }
   }
 
   function handleWorkletMessage(message: PcmCaptureWorkletMessage) {
@@ -234,6 +282,9 @@ export function MicrophonePanel() {
             </span>
           </label>
         ))}
+        <button type="button" className="secondary" onClick={useEnrollmentProcessingDefaults}>
+          Use enrollment defaults: browser processing off
+        </button>
       </fieldset>
 
       <div className="hero-actions" aria-label="Microphone controls">
@@ -289,6 +340,87 @@ export function MicrophonePanel() {
         </div>
       </dl>
       <p className="status-message">{captureSummary.message}</p>
+
+      <div
+        className="status-message enrollment-calibration"
+        aria-label="Enrollment calibration guidance"
+      >
+        <h3>Calibration and voice guidance</h3>
+        <p>
+          For enrollment, capture a short room-noise sample, then set a normal speaking baseline.
+          Guidance uses only local RMS, peak, and clipping metrics from the AudioWorklet; no
+          calibration audio is persisted.
+        </p>
+        <p>
+          Enrollment requests should prefer browser processing off when supported. Current track AGC
+          setting:{' '}
+          {snapshot ? formatSetting(snapshot.actualSettings.autoGainControl) : 'not reported'}.
+        </p>
+        <div className="hero-actions" aria-label="Enrollment calibration controls">
+          <button
+            type="button"
+            className="secondary"
+            onClick={saveRoomNoiseSample}
+            disabled={status !== 'active' || captureSummary.rms <= 0}
+          >
+            Use current level as room-noise sample
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={saveNormalBaseline}
+            disabled={status !== 'active' || captureSummary.rms <= 0}
+          >
+            Set normal baseline from current level
+          </button>
+        </div>
+        <label className="select-field">
+          <span>Voice condition</span>
+          <select
+            value={voiceCondition}
+            onChange={(event) => setVoiceCondition(event.target.value as EnrollmentVoiceCondition)}
+          >
+            {voiceConditions.map((condition) => (
+              <option key={condition} value={condition}>
+                {condition}
+              </option>
+            ))}
+          </select>
+        </label>
+        <dl className="probe-list microphone-settings" aria-label="Enrollment calibration metrics">
+          <div>
+            <dt>Room noise RMS</dt>
+            <dd>{roomNoiseRms !== null ? roomNoiseRms.toFixed(3) : 'not set'}</dd>
+          </div>
+          <div>
+            <dt>Normal baseline RMS</dt>
+            <dd>{normalBaselineRms !== null ? normalBaselineRms.toFixed(3) : 'not set'}</dd>
+          </div>
+          <div>
+            <dt>Current relative level</dt>
+            <dd>{formatDb(voiceGuidance.relativeDb)}</dd>
+          </div>
+          <div>
+            <dt>Advisory band</dt>
+            <dd>{formatDbRange(voiceGuidance.target)}</dd>
+          </div>
+          <div>
+            <dt>Estimated SNR</dt>
+            <dd>{formatDb(voiceGuidance.snrDb)}</dd>
+          </div>
+          <div>
+            <dt>Guidance status</dt>
+            <dd>{voiceGuidance.status}</dd>
+          </div>
+        </dl>
+        <p className="status-message">{voiceGuidance.message}</p>
+        {voiceCondition === 'projected' ? (
+          <p className="status-message">
+            Projected means loud and clear, like addressing a room. Do not strain, scream, or
+            sustain a shout.
+          </p>
+        ) : null}
+      </div>
 
       {snapshot ? (
         <dl className="probe-list microphone-settings" aria-label="Actual microphone settings">

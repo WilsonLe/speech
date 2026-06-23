@@ -50,6 +50,9 @@ importers:
       '@speech/context-bias':
         specifier: workspace:*
         version: link:../../packages/context-bias
+      '@speech/enrollment':
+        specifier: workspace:*
+        version: link:../../packages/enrollment
       '@speech/inference':
         specifier: workspace:*
         version: link:../../packages/inference

@@ -17,6 +17,7 @@
     "@speech/audio": "workspace:*",
     "@speech/benchmark": "workspace:*",
     "@speech/context-bias": "workspace:*",
+    "@speech/enrollment": "workspace:*",
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
