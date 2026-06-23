@@ -100,6 +100,7 @@ Current catalog:
 - The v0.1.0 release validates the browser runtime and model-pack contracts; it does not yet publish a production bilingual streaming ASR accuracy benchmark.
 - The VietASR candidate is Vietnamese-only and its inspected ONNX encoder is full-sequence/length based, not streaming-cache based.
 - The benchmark panel runs synthetic worker timing for export plumbing and methodology; headline latency/RTF numbers require real model packs on declared reference hardware.
+- Browser-only adapter training is currently deferred: the pinned `onnxruntime-web@1.27.0` package exposes inference bundles and no public training artifact/API, so the local Python/Docker trainer remains the supported adapter path.
 - Global OS hotkeys and cross-application insertion are roadmap items for later milestones. Bilingual vocabulary steering, guided enrollment, and local adapter training currently use deterministic contract/tooling slices until production model-quality data supports user-facing accuracy claims.
 
 ## Roadmap
