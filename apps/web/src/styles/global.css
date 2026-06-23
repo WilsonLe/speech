@@ -308,6 +308,7 @@ h2 {
 
 .enrollment-calibration,
 .enrollment-recorder,
+.profile-store-status,
 .quality-report {
   margin-top: 1rem;
   border: 1px solid rgba(56, 189, 248, 0.24);

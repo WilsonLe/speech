@@ -20,7 +20,17 @@ import {
   type EnrollmentSentenceLanguage,
   type EnrollmentVoiceCondition,
 } from '@speech/enrollment';
+import type {
+  EnrollmentCaptureMetadataV1,
+  EnrollmentProfileSummaryV1,
+  ProfileStorageBackendKind,
+} from '@speech/profile-manager';
 import { analyzeEnrollmentTakeInWorker } from '../workers/enrollment-quality-worker-client';
+import {
+  deleteEnrollmentProfile,
+  loadEnrollmentProfile,
+  saveAcceptedEnrollmentTake,
+} from '../workers/profile-store-client';
 
 interface ToggleConfig {
   readonly key: keyof MicrophoneProcessingOptions;
@@ -63,6 +73,16 @@ interface EnrollmentRecorderSummary {
   readonly sampleRateHz: number | null;
   readonly sampleCount: number;
   readonly durationMs: number;
+  readonly message: string;
+}
+
+type ProfileStoreStatus = 'loading' | 'ready' | 'saving' | 'deleting' | 'error';
+
+interface ProfileStoreUiState {
+  readonly status: ProfileStoreStatus;
+  readonly backendKind: ProfileStorageBackendKind | null;
+  readonly persistentStorageGranted: boolean | null;
+  readonly summary: EnrollmentProfileSummaryV1 | null;
   readonly message: string;
 }
 
@@ -115,6 +135,19 @@ const enrollmentProcessingOptions: MicrophoneProcessingOptions = {
 const voiceConditions: readonly EnrollmentVoiceCondition[] = ['whisper', 'normal', 'projected'];
 const enrollmentLanguages: readonly EnrollmentSentenceLanguage[] = ['vi', 'en', 'mixed'];
 const defaultEnrollmentPrompt = 'Tôi vừa update dashboard.';
+const defaultProfileId = 'local-enrollment-profile';
+const defaultProfileDisplayName = 'Local enrollment profile';
+const defaultSentenceBankVersion = 'synthetic-v1';
+const manualPromptId = 'manual-enrollment-prompt';
+const manualPromptVersion = 1;
+
+const initialProfileStoreState: ProfileStoreUiState = {
+  status: 'loading',
+  backendKind: null,
+  persistentStorageGranted: null,
+  summary: null,
+  message: 'Checking private enrollment profile storage…',
+};
 
 export function MicrophonePanel() {
   const controller = useMemo(() => new MicrophoneCaptureController(), []);
@@ -140,6 +173,7 @@ export function MicrophonePanel() {
     idleEnrollmentRecorderSummary,
   );
   const [qualityReport, setQualityReport] = useState<EnrollmentQualityReportV1 | null>(null);
+  const [profileStore, setProfileStore] = useState<ProfileStoreUiState>(initialProfileStoreState);
   const calibrationBaseline = normalBaselineRms
     ? {
         normalRms: normalBaselineRms,
@@ -155,6 +189,41 @@ export function MicrophonePanel() {
     calibrationBaseline,
     voiceCondition,
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    setProfileStore(initialProfileStoreState);
+    loadEnrollmentProfile({ profileId: defaultProfileId })
+      .then((result) => {
+        if (cancelled) return;
+        setProfileStore({
+          status: 'ready',
+          backendKind: result.backendKind,
+          persistentStorageGranted: result.persistentStorageGranted,
+          summary: result.summary ?? null,
+          message:
+            result.summary === undefined
+              ? 'Private profile store is ready. No accepted enrollment takes are stored yet.'
+              : 'Private profile store resumed accepted enrollment takes from local storage.',
+        });
+      })
+      .catch((storeError) => {
+        if (cancelled) return;
+        setProfileStore({
+          status: 'error',
+          backendKind: null,
+          persistentStorageGranted: null,
+          summary: null,
+          message:
+            storeError instanceof Error
+              ? storeError.message
+              : 'Enrollment profile storage could not initialize.',
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -336,7 +405,7 @@ export function MicrophonePanel() {
         sampleCount: pcm.length,
         durationMs: report.level.durationMs,
         message:
-          'Quality report is ready. Audio remains only in memory for replay/retry until durable profile storage is implemented.',
+          'Quality report is ready. Audio remains in memory for replay/retry until you explicitly accept and save this take.',
       });
     } catch (analysisError) {
       setRecorderSummary({
@@ -377,16 +446,112 @@ export function MicrophonePanel() {
     });
   }
 
-  function manuallyAcceptTake() {
-    if (!qualityReport) {
+  async function manuallyAcceptTake() {
+    const pcm = lastTakePcm.current;
+    const sampleRateHz = lastTakeSampleRateHz.current;
+    if (!qualityReport || !pcm || !sampleRateHz) {
+      setRecorderSummary((current) => ({
+        ...current,
+        status: 'error',
+        message: 'Analyze a captured take before saving it to the private profile store.',
+      }));
       return;
     }
+
+    setProfileStore((current) => ({
+      ...current,
+      status: 'saving',
+      message: 'Saving accepted take to the private enrollment profile store…',
+    }));
     setRecorderSummary((current) => ({
       ...current,
-      status: 'accepted',
-      message:
-        'Take marked manually accepted in this local preview. Future OPFS profile storage will persist accepted audio only after explicit enrollment consent.',
+      status: 'analyzing',
+      message: 'Saving accepted take to worker-owned private profile storage…',
     }));
+
+    try {
+      const saveBuffer = copyFloat32ArrayToArrayBuffer(pcm);
+      const result = await saveAcceptedEnrollmentTake({
+        profileId: defaultProfileId,
+        profileDisplayName: defaultProfileDisplayName,
+        sentenceBankVersion: defaultSentenceBankVersion,
+        promptId: manualPromptId,
+        promptVersion: manualPromptVersion,
+        referenceText: enrollmentPrompt,
+        language: enrollmentLanguage,
+        voiceCondition,
+        pcm: saveBuffer,
+        sampleRateHz,
+        durationMs: qualityReport.level.durationMs,
+        capture: buildCaptureMetadata(snapshot),
+        quality: qualityReport,
+        acceptedBy: 'manual',
+      });
+      setProfileStore({
+        status: 'ready',
+        backendKind: result.backendKind,
+        persistentStorageGranted: result.persistentStorageGranted,
+        summary: result.summary,
+        message:
+          result.backendKind === 'opfs'
+            ? 'Accepted take saved in private OPFS profile storage and will resume after reload.'
+            : 'Accepted take saved in non-durable memory fallback storage for this page session; OPFS is unavailable.',
+      });
+      setRecorderSummary((current) => ({
+        ...current,
+        status: 'accepted',
+        message: `Accepted take ${result.utterance.id} saved locally with checksum ${result.utterance.audio.sha256.slice(0, 12)}…`,
+      }));
+    } catch (storeError) {
+      setProfileStore((current) => ({
+        ...current,
+        status: 'error',
+        message:
+          storeError instanceof Error
+            ? storeError.message
+            : 'Enrollment take could not be saved to private profile storage.',
+      }));
+      setRecorderSummary((current) => ({
+        ...current,
+        status: 'error',
+        message:
+          storeError instanceof Error
+            ? storeError.message
+            : 'Enrollment take could not be saved to private profile storage.',
+      }));
+    }
+  }
+
+  async function deleteStoredProfile() {
+    setProfileStore((current) => ({
+      ...current,
+      status: 'deleting',
+      message: 'Deleting stored enrollment recordings and derived profile files…',
+    }));
+    try {
+      const result = await deleteEnrollmentProfile({ profileId: defaultProfileId });
+      setProfileStore({
+        status: 'ready',
+        backendKind: result.backendKind,
+        persistentStorageGranted: result.persistentStorageGranted,
+        summary: null,
+        message: 'Stored enrollment recordings and profile metadata were deleted locally.',
+      });
+      setRecorderSummary((current) => ({
+        ...current,
+        status: current.status === 'recording' ? current.status : 'idle',
+        message: 'Private profile store cleared. Current in-memory take, if any, was not saved.',
+      }));
+    } catch (storeError) {
+      setProfileStore((current) => ({
+        ...current,
+        status: 'error',
+        message:
+          storeError instanceof Error
+            ? storeError.message
+            : 'Stored enrollment profile could not be deleted.',
+      }));
+    }
   }
 
   async function replayLastTake() {
@@ -680,8 +845,9 @@ export function MicrophonePanel() {
         <h3>Enrollment recorder and quality analyzer</h3>
         <p>
           Record a single guided take into memory, analyze it in a dedicated worker, then replay,
-          retry, skip, or manually accept it. This preview does not persist audio; durable private
-          OPFS profile storage is implemented in the next milestone issue.
+          retry, skip, or explicitly save the accepted take to the private enrollment profile store.
+          OPFS is preferred; an in-memory fallback is reported when the browser context cannot
+          expose OPFS to the worker.
         </p>
         <label className="text-field">
           <span>Reference prompt</span>
@@ -749,10 +915,16 @@ export function MicrophonePanel() {
           <button
             type="button"
             className="secondary"
-            onClick={manuallyAcceptTake}
-            disabled={!qualityReport || recorderSummary.status === 'recording'}
+            onClick={() => void manuallyAcceptTake()}
+            disabled={
+              !qualityReport ||
+              !lastTakePcm.current ||
+              recorderSummary.status === 'recording' ||
+              profileStore.status === 'saving' ||
+              profileStore.status === 'deleting'
+            }
           >
-            Manually accept take
+            Manually accept and save take
           </button>
         </div>
         <dl className="probe-list microphone-settings" aria-label="Enrollment recorder metrics">
@@ -776,6 +948,54 @@ export function MicrophonePanel() {
           </div>
         </dl>
         <p className="status-message">{recorderSummary.message}</p>
+        <div className="profile-store-status" aria-label="Enrollment profile storage">
+          <h4>Durable profile storage</h4>
+          <p>
+            Accepted takes are stored locally only after an explicit save. Use delete to remove the
+            stored enrollment recordings and derived profile files for this local profile.
+          </p>
+          <dl className="probe-list microphone-settings">
+            <div>
+              <dt>Profile store status</dt>
+              <dd>{profileStore.status}</dd>
+            </div>
+            <div>
+              <dt>Storage backend</dt>
+              <dd>{formatProfileStoreBackend(profileStore.backendKind)}</dd>
+            </div>
+            <div>
+              <dt>Persistent storage</dt>
+              <dd>{formatPersistentStorage(profileStore.persistentStorageGranted)}</dd>
+            </div>
+            <div>
+              <dt>Stored accepted takes</dt>
+              <dd>{profileStore.summary?.profile.enrollment.acceptedUtterances ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Stored accepted seconds</dt>
+              <dd>
+                {(profileStore.summary?.profile.enrollment.acceptedSeconds ?? 0).toFixed(2)} s
+              </dd>
+            </div>
+            <div>
+              <dt>Stored profile bytes</dt>
+              <dd>{getStoredProfileBytes(profileStore.summary).toLocaleString()} bytes</dd>
+            </div>
+          </dl>
+          <p className="status-message">{profileStore.message}</p>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void deleteStoredProfile()}
+            disabled={
+              profileStore.summary === null ||
+              profileStore.status === 'saving' ||
+              profileStore.status === 'deleting'
+            }
+          >
+            Delete stored enrollment profile
+          </button>
+        </div>
         {qualityReport ? <QualityReportSummary report={qualityReport} /> : null}
       </div>
 
@@ -888,6 +1108,36 @@ function copyFloat32ArrayToArrayBuffer(samples: Float32Array): ArrayBuffer {
   const buffer = new ArrayBuffer(samples.byteLength);
   new Float32Array(buffer).set(samples);
   return buffer;
+}
+
+function buildCaptureMetadata(
+  snapshot: MicrophoneCaptureSnapshot | null,
+): EnrollmentCaptureMetadataV1 {
+  return {
+    requestedConstraints: toMetadataRecord(snapshot?.requestedConstraints),
+    actualSettings: toMetadataRecord(snapshot?.actualSettings),
+    ...(snapshot?.trackLabel ? { userMicrophoneLabel: snapshot.trackLabel } : {}),
+  };
+}
+
+function toMetadataRecord(value: unknown): Readonly<Record<string, unknown>> {
+  if (value === undefined || value === null) return {};
+  return JSON.parse(JSON.stringify(value)) as Readonly<Record<string, unknown>>;
+}
+
+function getStoredProfileBytes(summary: EnrollmentProfileSummaryV1 | null): number {
+  if (!summary) return 0;
+  return Object.values(summary.checksums.files).reduce((total, file) => total + file.sizeBytes, 0);
+}
+
+function formatProfileStoreBackend(kind: ProfileStorageBackendKind | null): string {
+  if (kind === null) return 'checking';
+  return kind === 'opfs' ? 'OPFS' : 'memory fallback (not reload-durable)';
+}
+
+function formatPersistentStorage(value: boolean | null): string {
+  if (value === null) return 'checking';
+  return value ? 'granted' : 'not granted';
 }
 
 function getAudioContextConstructor(): typeof AudioContext {
