@@ -1,5 +1,7 @@
 import type {
+  ActiveEnrollmentProfileStateV1,
   EnrollmentCaptureMetadataV1,
+  EnrollmentProfileExportPackageV1,
   EnrollmentProfileSummaryV1,
   EnrollmentUtteranceV1,
   ProfileStorageBackendKind,
@@ -15,13 +17,29 @@ import type { ProfileStoreWorkerRequest, ProfileStoreWorkerResponse } from './pr
 export interface ProfileStoreLoadResult {
   readonly backendKind: ProfileStorageBackendKind;
   readonly persistentStorageGranted: boolean;
+  readonly activeState: ActiveEnrollmentProfileStateV1;
   readonly summary?: EnrollmentProfileSummaryV1;
 }
 
 export interface ProfileStoreSaveResult {
   readonly backendKind: ProfileStorageBackendKind;
   readonly persistentStorageGranted: boolean;
+  readonly activeState: ActiveEnrollmentProfileStateV1;
   readonly utterance: EnrollmentUtteranceV1;
+  readonly summary: EnrollmentProfileSummaryV1;
+}
+
+export interface ProfileStoreActiveResult {
+  readonly backendKind: ProfileStorageBackendKind;
+  readonly persistentStorageGranted: boolean;
+  readonly activeState: ActiveEnrollmentProfileStateV1;
+}
+
+export interface ProfileStoreExportResult extends ProfileStoreActiveResult {
+  readonly profilePackage: EnrollmentProfileExportPackageV1;
+}
+
+export interface ProfileStoreImportResult extends ProfileStoreActiveResult {
   readonly summary: EnrollmentProfileSummaryV1;
 }
 
@@ -49,6 +67,12 @@ export interface DeleteProfileOptions {
 }
 
 export type LoadProfileOptions = DeleteProfileOptions;
+export type EnableProfileOptions = DeleteProfileOptions;
+export interface ImportProfileOptions {
+  readonly profilePackage: EnrollmentProfileExportPackageV1;
+  readonly overwriteExisting?: boolean;
+  readonly timeoutMs?: number;
+}
 
 let activeProfileStoreWorker: Worker | null = null;
 
@@ -88,7 +112,80 @@ export function loadEnrollmentProfile(
     return {
       backendKind: response.backendKind,
       persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
       ...(response.summary === undefined ? {} : { summary: response.summary }),
+    };
+  });
+}
+
+export function enableEnrollmentProfile(
+  options: EnableProfileOptions,
+): Promise<ProfileStoreActiveResult> {
+  return requestProfileStore(
+    {
+      type: 'ENABLE_PROFILE',
+      requestId: createRequestId('enable'),
+      profileId: options.profileId,
+    },
+    options.timeoutMs,
+  ).then(activeResultFromResponse);
+}
+
+export function rollbackEnrollmentProfile(
+  options: { readonly timeoutMs?: number } = {},
+): Promise<ProfileStoreActiveResult> {
+  return requestProfileStore(
+    {
+      type: 'ROLLBACK_PROFILE',
+      requestId: createRequestId('rollback'),
+    },
+    options.timeoutMs,
+  ).then(activeResultFromResponse);
+}
+
+export function exportEnrollmentProfile(
+  options: EnableProfileOptions,
+): Promise<ProfileStoreExportResult> {
+  return requestProfileStore(
+    {
+      type: 'EXPORT_PROFILE',
+      requestId: createRequestId('export'),
+      profileId: options.profileId,
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_EXPORT_COMPLETE') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      profilePackage: response.profilePackage,
+    };
+  });
+}
+
+export function importEnrollmentProfile(
+  options: ImportProfileOptions,
+): Promise<ProfileStoreImportResult> {
+  return requestProfileStore(
+    {
+      type: 'IMPORT_PROFILE',
+      requestId: createRequestId('import'),
+      profilePackage: options.profilePackage,
+      overwriteExisting: options.overwriteExisting ?? false,
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_IMPORT_COMPLETE') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      summary: response.summary,
     };
   });
 }
@@ -121,6 +218,7 @@ export function saveAcceptedEnrollmentTake(
     return {
       backendKind: response.backendKind,
       persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
       utterance: response.utterance,
       summary: response.summary,
     };
@@ -129,7 +227,7 @@ export function saveAcceptedEnrollmentTake(
 
 export function deleteEnrollmentProfile(
   options: DeleteProfileOptions,
-): Promise<ProfileStoreLoadResult> {
+): Promise<ProfileStoreActiveResult> {
   return requestProfileStore(
     {
       type: 'DELETE_PROFILE',
@@ -144,8 +242,20 @@ export function deleteEnrollmentProfile(
     return {
       backendKind: response.backendKind,
       persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
     };
   });
+}
+
+function activeResultFromResponse(response: ProfileStoreWorkerResponse): ProfileStoreActiveResult {
+  if (response.type !== 'PROFILE_STORE_ACTIVE_PROFILE_UPDATED') {
+    throw new Error(`Unexpected profile-store response: ${response.type}`);
+  }
+  return {
+    backendKind: response.backendKind,
+    persistentStorageGranted: response.persistentStorageGranted,
+    activeState: response.activeState,
+  };
 }
 
 function requestProfileStore(

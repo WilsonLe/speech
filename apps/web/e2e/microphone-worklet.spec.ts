@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Download, type Locator } from '@playwright/test';
 
 test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) => {
   await page.goto('/');
@@ -47,6 +47,15 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await expect
     .poll(async () => readMetric(profileStore, 'Stored accepted takes'), { timeout: 10_000 })
     .toBeGreaterThan(0);
+  await profileStore.getByRole('button', { name: /enable local profile/i }).click();
+  await expect(profileStore).toContainText(/Profile enabled locally/i, { timeout: 10_000 });
+  await expect(profileStore).toContainText('local-enrollment-profile');
+  const downloadPromise = page.waitForEvent('download');
+  await profileStore.getByRole('button', { name: /export sensitive profile package/i }).click();
+  const exportedPath = await requireDownloadPath(await downloadPromise);
+  await expect(profileStore).toContainText(/Profile export downloaded locally/i, {
+    timeout: 10_000,
+  });
 
   await page.reload();
   const resumedProfileStore = page.getByLabel('Enrollment profile storage');
@@ -67,12 +76,32 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
       timeout: 10_000,
     })
     .toBe(0);
+  await resumedProfileStore.locator('input[type="file"]').setInputFiles(exportedPath);
+  await expect(resumedProfileStore).toContainText(/import verified checksums/i, {
+    timeout: 10_000,
+  });
+  await expect
+    .poll(async () => readMetric(resumedProfileStore, 'Stored accepted takes'), {
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(0);
+  await resumedProfileStore
+    .getByRole('button', { name: /delete stored enrollment profile/i })
+    .click();
+  await expect(resumedProfileStore).toContainText(/deleted locally/i, { timeout: 10_000 });
 
   await page.getByRole('button', { name: /start microphone check/i }).click();
   await page.getByRole('button', { name: /stop microphone/i }).click();
   await expect(metrics).toContainText('stopped');
   await expect(page.getByText(/microphone resources were released/i)).toBeVisible();
 });
+
+async function requireDownloadPath(download: Download): Promise<string> {
+  expect(download.suggestedFilename()).toMatch(/\.speechprofile\.json$/);
+  const path = await download.path();
+  if (path === null) throw new Error('Profile export download path was unavailable.');
+  return path;
+}
 
 async function deleteStoredProfileIfPresent(profileStore: Locator): Promise<void> {
   const deleteButton = profileStore.getByRole('button', {

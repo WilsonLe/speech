@@ -13,3 +13,4 @@ applyTo: 'packages/model-manager/**,apps/web/src/workers/**,apps/web/src/app/**'
 - Delete and list operations must be scoped by model ID and version so rollback/reinstall flows can preserve unrelated model versions.
 - Deleting an active model through lifecycle UI must remove both the active registry record and that active version's files; it must not affect unrelated model versions.
 - Do not store private audio, transcripts, enrollment recordings, or profile artifacts in the model-file backend.
+- Profile storage is separate from model storage: keep accepted-take WAV/metadata, export packages, and active/previous profile pointers under `@speech/profile-manager` paths with safe segments, checksum verification, atomic writes, explicit import/export, and deterministic delete-all behavior.
