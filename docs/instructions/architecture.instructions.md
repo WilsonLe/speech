@@ -9,6 +9,7 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**'
 - `AudioWorkletProcessor` owns capture and enqueue only. It must not fetch, decode tokens, allocate large buffers repeatedly, or invoke ONNX Runtime.
 - Dedicated ASR worker owns model sessions, decoder state, feature state, vocabulary automata, active profile state, and timing instrumentation.
 - Enrollment/profile workers own recording analysis, sentence coverage, alignment, embedding aggregation, profile packaging, and future adapter preparation.
+- Experimental browser training, if enabled later, must run in its own dedicated training worker and never share the UI thread, AudioWorklet, or real-time ASR worker.
 - Service worker owns app-shell caching only; model/profile lifecycle belongs to dedicated stores and workers.
 - Model-pack, worker-protocol, vocabulary, enrollment, and profile contracts must be UI-independent and versioned.
 - Keep WebGPU, shared memory, graph capture, and FP16/INT8 as optimizations; correctness must preserve the WASM and transferable-buffer paths.

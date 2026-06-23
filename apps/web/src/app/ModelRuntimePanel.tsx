@@ -1,8 +1,11 @@
+import { createPinnedOnnxRuntimeWebTrainingSpikeReport } from '@speech/inference/training-artifact-spike';
 import { useState } from 'react';
 import {
   checkAsrWorkerRuntime,
   type AsrWorkerRuntimeCheckResult,
 } from '../workers/asr-worker-client';
+
+const browserTrainingSpikeReport = createPinnedOnnxRuntimeWebTrainingSpikeReport();
 
 type RuntimeStatus =
   | { readonly state: 'idle' }
@@ -39,6 +42,8 @@ export function ModelRuntimePanel() {
           lightweight provider benchmark and fallback check, but it does not import ORT or
           instantiate model sessions. The check also loads a tiny generated residual-adapter graph
           in the worker and records aggregate adapter overhead without audio or transcript data.
+          Browser-only adapter training remains a blocked experiment for the pinned ORT Web package
+          until a public training artifact and JS API are available.
         </p>
       </div>
 
@@ -50,9 +55,37 @@ export function ModelRuntimePanel() {
         >
           {status.state === 'loading' ? 'Benchmarking provider…' : 'Benchmark worker provider'}
         </button>
+        <TrainingSpikeStatus />
         <RuntimeStatusMessage status={status} />
       </div>
     </section>
+  );
+}
+
+function TrainingSpikeStatus() {
+  return (
+    <dl className="microphone-settings" aria-label="ONNX Runtime Web training spike status">
+      <div>
+        <dt>Training artifact</dt>
+        <dd>
+          {browserTrainingSpikeReport.packageName} {browserTrainingSpikeReport.packageVersion}
+        </dd>
+      </div>
+      <div>
+        <dt>Browser training API</dt>
+        <dd>
+          {browserTrainingSpikeReport.trainingApiAvailable ? 'candidate detected' : 'not exposed'}
+        </dd>
+      </div>
+      <div>
+        <dt>Training decision</dt>
+        <dd>
+          {browserTrainingSpikeReport.recommendation === 'defer-browser-training-prototype'
+            ? 'defer; use local trainer'
+            : 'prototype in training worker'}
+        </dd>
+      </div>
+    </dl>
   );
 }
 
