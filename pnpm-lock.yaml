@@ -138,7 +138,11 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-  packages/personalization: {}
+  packages/personalization:
+    dependencies:
+      '@speech/enrollment':
+        specifier: workspace:*
+        version: link:../enrollment
 
   packages/profile-manager:
     dependencies:
