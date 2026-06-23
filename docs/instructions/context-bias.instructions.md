@@ -10,4 +10,5 @@ applyTo: 'packages/context-bias/**,packages/protocol/src/vocabulary.ts,packages/
 - Validate schema separately from tokenizer/automaton compilation. Entry/set validation may enforce IDs, language values, weights, alias counts, duplicate phrases, and active-entry limits, but token-length and unknown-token decisions belong to tokenizer-aware compilation.
 - Apply manifest contextual-bias limits only to active sets and enabled entries. Disabled local sets may keep future-model vocabulary terms without blocking storage.
 - Produce worker-ready vocabulary revisions from active sets only and swap revisions only at utterance boundaries.
+- Browser CRUD may persist vocabulary snapshots in origin-local storage; imports and exports must be explicit user actions and must warn that files may contain sensitive names or project terms.
 - Preserve canonical `displayForm` and Vietnamese diacritics; normalize matching phrases/aliases to NFC with collapsed whitespace without rewriting the display form.

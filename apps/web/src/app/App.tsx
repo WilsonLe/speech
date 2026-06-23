@@ -5,6 +5,7 @@ import { MicrophonePanel } from './MicrophonePanel';
 import { ModelRuntimePanel } from './ModelRuntimePanel';
 import { OfflineModelPanel } from './OfflineModelPanel';
 import { TranscriptPanel } from './TranscriptPanel';
+import { VocabularyPanel } from './VocabularyPanel';
 import { roadmap } from './milestones';
 
 const privacyPoints = [
@@ -57,6 +58,7 @@ export function App() {
       </section>
 
       <TranscriptPanel />
+      <VocabularyPanel />
       <OfflineModelPanel />
       <DiagnosticsPanel />
       <BenchmarkPanel />

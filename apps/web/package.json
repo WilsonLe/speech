@@ -16,6 +16,7 @@
   "dependencies": {
     "@speech/audio": "workspace:*",
     "@speech/benchmark": "workspace:*",
+    "@speech/context-bias": "workspace:*",
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
