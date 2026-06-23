@@ -7,6 +7,7 @@ from typing import Any
 
 from .dataset import load_profile_dataset
 from .evaluation import evaluate_adapter_activation_from_files, write_evaluation_report
+from .packaging import package_personal_adapter_from_files, write_personal_adapter_package
 from .training import train_frozen_base_adapter_from_files, write_training_outputs
 from .validation import load_json_file, validate_profile_package
 
@@ -58,6 +59,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     evaluate_parser.add_argument("--output", help="optional path for aggregate evaluation report")
     evaluate_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    package_parser = subparsers.add_parser(
+        "package", help="package a browser-compatible residual-adapter speech profile"
+    )
+    package_parser.add_argument("--adapter", required=True, help="path to adapter.bin")
+    package_parser.add_argument(
+        "--training-metadata", required=True, help="path to training-metadata.json"
+    )
+    package_parser.add_argument(
+        "--evaluation-report", required=True, help="path to aggregate evaluation report JSON"
+    )
+    package_parser.add_argument("--output", required=True, help="path to .speechprofile package")
+    package_parser.add_argument("--profile-id", help="safe profile id override")
+    package_parser.add_argument("--display-name", help="display name for the packaged adapter")
+    package_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
     args = parser.parse_args(argv)
     if args.command == "validate":
@@ -122,6 +138,23 @@ def main(argv: list[str] | None = None) -> int:
         }
         _emit(payload, json_output=args.json)
         return 0 if result.activation_gate["passed"] else 2
+    if args.command == "package":
+        result = package_personal_adapter_from_files(
+            adapter_path=args.adapter,
+            training_metadata_path=args.training_metadata,
+            evaluation_report_path=args.evaluation_report,
+            profile_id=args.profile_id,
+            display_name=args.display_name,
+        )
+        output_path = write_personal_adapter_package(result, args.output)
+        payload = {
+            "profileId": result.manifest["id"],
+            "outputPath": str(output_path),
+            "adapterSha256": result.manifest["adaptation"]["files"]["adapterGraph"]["sha256"],
+            "activationGatePassed": result.manifest["evaluation"]["activationGatePassed"],
+        }
+        _emit(payload, json_output=args.json)
+        return 0
     raise AssertionError(f"Unhandled command {args.command}")
 
 
@@ -158,7 +191,7 @@ def _emit(payload: dict[str, Any], *, json_output: bool) -> None:
             f"{payload['adapterPath']} ({payload['adapterSha256']})"
         )
         return
-    if "activationGatePassed" in payload:
+    if "activationGatePassed" in payload and "checks" in payload:
         status = "passed" if payload["activationGatePassed"] else "failed"
         print(f"adapter activation gate {status}")
         for check in payload.get("checks", []):
@@ -166,6 +199,12 @@ def _emit(payload: dict[str, Any], *, json_output: bool) -> None:
             print(f"{check_status}: {check['name']}")
         if payload.get("outputPath"):
             print(f"report: {payload['outputPath']}")
+        return
+    if "adapterSha256" in payload and "outputPath" in payload:
+        print(
+            f"adapter package complete for {payload['profileId']}: "
+            f"{payload['outputPath']} ({payload['adapterSha256']})"
+        )
         return
     print(
         f"profile dataset {payload['profileId']}: {payload['records']} records "

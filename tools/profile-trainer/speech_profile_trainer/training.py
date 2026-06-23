@@ -272,6 +272,9 @@ def _training_metadata(
         "dataset": {
             "profileId": dataset.profile_id,
             "records": len(dataset.records),
+            "acceptedSeconds": round(
+                sum(record.duration_ms for record in dataset.records) / 1000, 6
+            ),
             "splits": {
                 "train": len(dataset.train),
                 "validation": len(dataset.validation),
