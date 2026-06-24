@@ -54,6 +54,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 - If a trainer Docker image is added, does the guide use `--network none`, narrow bind mounts, host UID/GID mapping, and a publication checklist that records the base image digest without committing user data?
 - If browser training is prototyped, is it isolated to a dedicated training worker, does it avoid UI/AudioWorklet/ASR-worker ownership, does the UI receive only aggregate progress/results rather than private frozen-feature matrices, and do pause/cancel/reload-recovery checkpoints leave the previous active profile intact?
 - If browser-vs-Python adapter comparison is added, does it mark missing browser held-out quality as insufficient evidence and keep all exported comparison data aggregate-only with no prompt text, case IDs, frozen features, adapter weights, or profile JSON?
+- If a portable `.speechmodel` bundle is added, does it validate the `WLSPEECHMODEL` magic and size before allocating or decrypting, enforce file-count/per-file/expanded/compression/path-segment limits, reject absolute/parent/backslash/control-char paths, require AES-256-GCM + PBKDF2-HMAC-SHA-256 (>=600,000 iterations) for encrypted exports, never store the passphrase, exclude raw audio/features/optimizer/base model by default, and stage imports under temporary OPFS before atomic commit?
 
 ## Validation evidence
 
