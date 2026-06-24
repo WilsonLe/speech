@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  migrateSpeechProfileManifestV1ToV2,
+  parseSpeechProfileManifest,
   parseSpeechProfileManifestV1,
+  parseSpeechProfileManifestV2,
+  validateSpeechProfileManifest,
   validateSpeechProfileManifestV1,
+  validateSpeechProfileManifestV2,
+  type BrowserTopAdapterAdaptationV1,
   type ResidualAdapterAdaptationV1,
+  type SpeechProfileManifest,
   type SpeechProfileManifestV1,
+  type SpeechProfileManifestV2,
 } from './profile';
 
 const sha = 'a'.repeat(64);
@@ -187,5 +195,162 @@ describe('speech profile manifest contract', () => {
         'privacy.exportEncrypted must be boolean',
       ]),
     );
+  });
+});
+
+function browserTopAdapterAdaptation(): BrowserTopAdapterAdaptationV1 {
+  return {
+    type: 'browser-top-adapter',
+    contractVersion: 1,
+    algorithmId: 'browser-top-adapter-frame-ce-v1',
+    source: 'browser',
+    weights: {
+      path: 'adapters/browser-top/weights.bin',
+      sha256: sha,
+      sizeBytes: 256_000,
+      mediaType: 'application/octet-stream',
+    },
+    speakerEmbedding: {
+      path: 'embeddings/speaker.f32',
+      sha256: sha,
+      sizeBytes: 768,
+      mediaType: 'application/octet-stream',
+    },
+    vocabularyRevision: 7,
+    trainingJobId: 'job-001',
+    evaluationId: 'eval-001',
+  };
+}
+
+function browserTopAdapterProfileV2(
+  overrides: Partial<SpeechProfileManifestV2> = {},
+): SpeechProfileManifestV2 {
+  return {
+    ...residualAdapterProfile(),
+    schemaVersion: 2,
+    id: 'profile-browser-top',
+    displayName: 'Browser-trained profile',
+    adaptation: browserTopAdapterAdaptation(),
+    ...overrides,
+  };
+}
+
+describe('speech profile manifest v2 and migration', () => {
+  it('accepts a V2 browser-top-adapter profile manifest', () => {
+    const manifest = browserTopAdapterProfileV2();
+
+    expect(validateSpeechProfileManifestV2(manifest)).toEqual({ ok: true, errors: [] });
+    expect(parseSpeechProfileManifestV2(manifest)).toBe(manifest);
+    expect(validateSpeechProfileManifest(manifest)).toEqual({ ok: true, errors: [] });
+    expect(parseSpeechProfileManifest(manifest)).toBe(manifest);
+  });
+
+  it('keeps V1 manifests loadable through the dispatch validator', () => {
+    const manifest = residualAdapterProfile();
+
+    expect(validateSpeechProfileManifest(manifest)).toEqual({ ok: true, errors: [] });
+    expect(parseSpeechProfileManifest(manifest)).toBe(manifest);
+  });
+
+  it('rejects browser-top-adapter under V1 but accepts it under V2', () => {
+    const v1WithBrowser = {
+      ...residualAdapterProfile(),
+      adaptation: browserTopAdapterAdaptation(),
+    } as unknown as SpeechProfileManifestV1;
+
+    expect(validateSpeechProfileManifestV1(v1WithBrowser).ok).toBe(false);
+    expect(validateSpeechProfileManifestV1(v1WithBrowser).errors).toContain(
+      'adaptation.type is not supported',
+    );
+  });
+
+  it('rejects unsupported schema versions through the dispatch validator', () => {
+    const manifest = {
+      ...residualAdapterProfile(),
+      schemaVersion: 9,
+    } as unknown as SpeechProfileManifest;
+
+    expect(validateSpeechProfileManifest(manifest).ok).toBe(false);
+    expect(validateSpeechProfileManifest(manifest).errors).toContain(
+      'schemaVersion must be 1 or 2',
+    );
+    expect(() => parseSpeechProfileManifest(manifest)).toThrow(/schemaVersion must be 1 or 2/);
+  });
+
+  it('rejects invalid browser-top-adapter bindings', () => {
+    const manifest = browserTopAdapterProfileV2({
+      adaptation: {
+        ...browserTopAdapterAdaptation(),
+        algorithmId: 'wrong-algorithm' as 'browser-top-adapter-frame-ce-v1',
+        source: 'python' as 'browser',
+        weights: {
+          path: 'adapters/browser-top/weights.bin',
+          sha256: 'not-a-sha',
+          sizeBytes: 0,
+          mediaType: '',
+        },
+        trainingJobId: '',
+        evaluationId: '',
+      },
+    });
+
+    const result = validateSpeechProfileManifestV2(manifest);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'adaptation.algorithmId must be browser-top-adapter-frame-ce-v1',
+        'adaptation.source must be browser',
+        'adaptation.weights.sha256 has invalid format',
+        'adaptation.weights.sizeBytes must be a positive integer',
+        'adaptation.weights.mediaType must be a non-empty string',
+        'adaptation.trainingJobId must be a non-empty string',
+        'adaptation.evaluationId must be a non-empty string',
+      ]),
+    );
+  });
+
+  it('migrates a V1 manifest to V2 copy-on-write without rewriting CLI residual adapters', () => {
+    const v1 = residualAdapterProfile();
+    const v2 = migrateSpeechProfileManifestV1ToV2(v1);
+
+    expect(v2.schemaVersion).toBe(2);
+    expect(v1.schemaVersion).toBe(1);
+    expect(v2.adaptation).toBe(v1.adaptation);
+    expect(v2.id).toBe(v1.id);
+    expect(v2.baseModel).toEqual(v1.baseModel);
+    expect(v2.evaluation).toEqual(v1.evaluation);
+    expect(validateSpeechProfileManifestV2(v2)).toEqual({ ok: true, errors: [] });
+  });
+
+  it('refuses to migrate an invalid V1 manifest', () => {
+    const invalid = {
+      ...residualAdapterProfile(),
+      id: 'Bad ID With Spaces',
+    } as SpeechProfileManifestV1;
+
+    expect(() => migrateSpeechProfileManifestV1ToV2(invalid)).toThrow(
+      /invalid V1 profile manifest/,
+    );
+  });
+
+  it('accepts an optional browser-top-adapter profile without speaker embedding or vocabulary', () => {
+    const minimal: BrowserTopAdapterAdaptationV1 = {
+      type: 'browser-top-adapter',
+      contractVersion: 1,
+      algorithmId: 'browser-top-adapter-frame-ce-v1',
+      source: 'browser',
+      weights: {
+        path: 'adapters/browser-top/weights.bin',
+        sha256: sha,
+        sizeBytes: 256_000,
+        mediaType: 'application/octet-stream',
+      },
+      trainingJobId: 'job-001',
+      evaluationId: 'eval-001',
+    };
+    const manifest = browserTopAdapterProfileV2({ adaptation: minimal });
+
+    expect(validateSpeechProfileManifestV2(manifest)).toEqual({ ok: true, errors: [] });
   });
 });
