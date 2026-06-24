@@ -156,6 +156,102 @@ export interface SpeechModelManifestV2 {
   };
 }
 
+export type BrowserTrainingBackendKind =
+  | 'repository-fixed-adapter-math'
+  | 'onnxruntime-web-training';
+export type BrowserTrainingBackendProofStatus =
+  | 'fixed-adapter-math-required'
+  | 'ort-training-worker-proof-passed';
+export type BrowserTrainingAlgorithmId = 'browser-top-adapter-frame-ce-v1';
+export type BrowserTrainingAdapterArchitecture = 'residual-bottleneck-lhuc-v1';
+export type BrowserTrainingFeatureDtype = 'float16';
+export type BrowserTrainingArtifactRole =
+  | 'training-model'
+  | 'eval-model'
+  | 'optimizer-model'
+  | 'nominal-checkpoint'
+  | 'runtime-adapter'
+  | 'contract-test-vectors'
+  | 'anchor-pack';
+
+export interface ExactBaseModelIdentityV1 {
+  readonly id: string;
+  readonly version: string;
+  readonly manifestSha256: string;
+  readonly graphContractSha256: string;
+  readonly tokenizerSha256: string;
+}
+
+export interface BrowserTrainingArtifactRefV1 {
+  readonly fileKey: string;
+  readonly role: BrowserTrainingArtifactRole;
+  readonly license: {
+    readonly spdx?: string;
+    readonly name: string;
+    readonly noticeUrl?: string;
+    readonly redistributionAllowed: boolean;
+  };
+  readonly provenance: {
+    readonly source: string;
+    readonly generatedBy: string;
+    readonly createdAt?: string;
+  };
+}
+
+export interface BrowserTrainingContractV1 {
+  readonly supported: true;
+  readonly contractVersion: 1;
+  readonly backend: {
+    readonly interface: 'BrowserTrainingBackend';
+    readonly kind: BrowserTrainingBackendKind;
+    readonly proofStatus: BrowserTrainingBackendProofStatus;
+    readonly runtimePackage?: string;
+  };
+  readonly algorithmId: BrowserTrainingAlgorithmId;
+  readonly minimumAppVersion: '0.5.0';
+  readonly exactBaseModel: ExactBaseModelIdentityV1;
+  readonly featureTap: {
+    readonly graphId: string;
+    readonly outputName: string;
+    readonly dimension: number;
+    readonly frameShiftMs: number;
+    readonly persistedDtype: BrowserTrainingFeatureDtype;
+  };
+  readonly adapter: {
+    readonly architecture: BrowserTrainingAdapterArchitecture;
+    readonly inputDimension: number;
+    readonly rank: number;
+    readonly residualScale: number;
+    readonly parameterTensors: readonly TensorContract[];
+    readonly runtimeGraph: BrowserTrainingArtifactRefV1;
+    readonly preferredMaxBytes: number;
+    readonly hardMaxBytes: number;
+  };
+  readonly artifacts: {
+    readonly trainingModel: BrowserTrainingArtifactRefV1;
+    readonly evalModel: BrowserTrainingArtifactRefV1;
+    readonly optimizerModel: BrowserTrainingArtifactRefV1;
+    readonly nominalCheckpoint: readonly BrowserTrainingArtifactRefV1[];
+    readonly contractTestVectors: BrowserTrainingArtifactRefV1;
+    readonly anchorPack: readonly BrowserTrainingArtifactRefV1[];
+  };
+  readonly limits: {
+    readonly maxUtterances: number;
+    readonly maxAcceptedSeconds: number;
+    readonly maxFramesPerBatch: number;
+    readonly maxEpochs: number;
+    readonly maxOptimizerSteps: number;
+    readonly checkpointIntervalSteps: number;
+  };
+}
+
+export interface SpeechModelManifestV3 extends Omit<SpeechModelManifestV2, 'schemaVersion'> {
+  readonly schemaVersion: 3;
+  readonly browserTraining: BrowserTrainingContractV1;
+}
+
+export type SpeechModelManifest = SpeechModelManifestV2 | SpeechModelManifestV3;
+
 export interface ManifestValidationResult {
   readonly ok: boolean;
   readonly errors: readonly string[];
@@ -197,6 +293,24 @@ const residualAdapterApplicationValues = new Set<ResidualAdapterApplicationMode>
   'lhuc-scale',
   'film-affine',
 ]);
+const browserTrainingBackendKindValues = new Set<BrowserTrainingBackendKind>([
+  'repository-fixed-adapter-math',
+  'onnxruntime-web-training',
+]);
+const browserTrainingProofStatusValues = new Set<BrowserTrainingBackendProofStatus>([
+  'fixed-adapter-math-required',
+  'ort-training-worker-proof-passed',
+]);
+const browserTrainingArtifactRoleValues = new Set<BrowserTrainingArtifactRole>([
+  'training-model',
+  'eval-model',
+  'optimizer-model',
+  'nominal-checkpoint',
+  'runtime-adapter',
+  'contract-test-vectors',
+  'anchor-pack',
+]);
+const browserTrainingParameterTensorNames = new Set(['w_down', 'b_down', 'w_up', 'b_up', 'lhuc']);
 const sha256Pattern = /^[a-f0-9]{64}$/;
 const modelIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 
@@ -207,7 +321,63 @@ export function validateSpeechModelManifestV2(value: unknown): ManifestValidatio
     return { ok: false, errors: ['manifest must be an object'] };
   }
 
-  if (value['schemaVersion'] !== 2) errors.push('schemaVersion must be 2');
+  validateSpeechModelManifestBase(value, 2, errors);
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateSpeechModelManifestV3(value: unknown): ManifestValidationResult {
+  const errors: string[] = [];
+
+  if (!isRecord(value)) {
+    return { ok: false, errors: ['manifest must be an object'] };
+  }
+
+  const base = validateSpeechModelManifestBase(value, 3, errors);
+  validateBrowserTrainingContract(value['browserTraining'], value, base.fileKeys, errors);
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateSpeechModelManifest(value: unknown): ManifestValidationResult {
+  if (!isRecord(value)) {
+    return { ok: false, errors: ['manifest must be an object'] };
+  }
+  if (value['schemaVersion'] === 2) return validateSpeechModelManifestV2(value);
+  if (value['schemaVersion'] === 3) return validateSpeechModelManifestV3(value);
+  return { ok: false, errors: ['schemaVersion must be 2 or 3'] };
+}
+
+export function parseSpeechModelManifestV2(value: unknown): SpeechModelManifestV2 {
+  const result = validateSpeechModelManifestV2(value);
+  if (!result.ok) {
+    throw new Error(`Invalid SpeechModelManifestV2: ${result.errors.join('; ')}`);
+  }
+  return value as SpeechModelManifestV2;
+}
+
+export function parseSpeechModelManifestV3(value: unknown): SpeechModelManifestV3 {
+  const result = validateSpeechModelManifestV3(value);
+  if (!result.ok) {
+    throw new Error(`Invalid SpeechModelManifestV3: ${result.errors.join('; ')}`);
+  }
+  return value as SpeechModelManifestV3;
+}
+
+export function parseSpeechModelManifest(value: unknown): SpeechModelManifest {
+  const result = validateSpeechModelManifest(value);
+  if (!result.ok) {
+    throw new Error(`Invalid SpeechModelManifest: ${result.errors.join('; ')}`);
+  }
+  return value as SpeechModelManifest;
+}
+
+function validateSpeechModelManifestBase(
+  value: Record<string, unknown>,
+  schemaVersion: 2 | 3,
+  errors: string[],
+): { readonly fileKeys: ReadonlySet<string> } {
+  if (value['schemaVersion'] !== schemaVersion) {
+    errors.push(`schemaVersion must be ${schemaVersion}`);
+  }
   validatePatternString(value['id'], 'id', modelIdPattern, errors);
   validateNonEmptyString(value['version'], 'version', errors);
   validateNonEmptyString(value['displayName'], 'displayName', errors);
@@ -245,15 +415,7 @@ export function validateSpeechModelManifestV2(value: unknown): ManifestValidatio
     validateTokenizerIds(value['tokenizer'], vocabularySize, supportedLanguageModes, errors);
   }
 
-  return { ok: errors.length === 0, errors };
-}
-
-export function parseSpeechModelManifestV2(value: unknown): SpeechModelManifestV2 {
-  const result = validateSpeechModelManifestV2(value);
-  if (!result.ok) {
-    throw new Error(`Invalid SpeechModelManifestV2: ${result.errors.join('; ')}`);
-  }
-  return value as SpeechModelManifestV2;
+  return { fileKeys };
 }
 
 function validateLicense(value: unknown, errors: string[]): void {
@@ -1117,6 +1279,422 @@ function tensorNames(value: unknown): ReadonlySet<string> {
     if (typeof name === 'string') names.add(name);
   }
   return names;
+}
+
+function validateBrowserTrainingContract(
+  value: unknown,
+  manifest: Record<string, unknown>,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push('browserTraining must be an object');
+    return;
+  }
+
+  if (value['supported'] !== true) errors.push('browserTraining.supported must be true');
+  if (value['contractVersion'] !== 1) errors.push('browserTraining.contractVersion must be 1');
+  validateBrowserTrainingBackend(value['backend'], errors);
+  if (value['algorithmId'] !== 'browser-top-adapter-frame-ce-v1') {
+    errors.push('browserTraining.algorithmId must be browser-top-adapter-frame-ce-v1');
+  }
+  if (value['minimumAppVersion'] !== '0.5.0') {
+    errors.push('browserTraining.minimumAppVersion must be 0.5.0');
+  }
+
+  validateExactBaseModelIdentity(value['exactBaseModel'], manifest, errors);
+  const featureTap = validateBrowserTrainingFeatureTap(value['featureTap'], manifest, errors);
+  validateBrowserTrainingAdapter(value['adapter'], featureTap?.dimension, fileKeys, errors);
+  validateBrowserTrainingArtifacts(value['artifacts'], fileKeys, errors);
+  validateBrowserTrainingLimits(value['limits'], errors);
+}
+
+function validateBrowserTrainingBackend(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('browserTraining.backend must be an object');
+    return;
+  }
+  if (value['interface'] !== 'BrowserTrainingBackend') {
+    errors.push('browserTraining.backend.interface must be BrowserTrainingBackend');
+  }
+  validateEnumValue(
+    value['kind'],
+    'browserTraining.backend.kind',
+    browserTrainingBackendKindValues,
+    errors,
+  );
+  validateEnumValue(
+    value['proofStatus'],
+    'browserTraining.backend.proofStatus',
+    browserTrainingProofStatusValues,
+    errors,
+  );
+  validateOptionalNonEmptyString(
+    value['runtimePackage'],
+    'browserTraining.backend.runtimePackage',
+    errors,
+  );
+
+  if (
+    value['kind'] === 'repository-fixed-adapter-math' &&
+    value['proofStatus'] !== 'fixed-adapter-math-required'
+  ) {
+    errors.push(
+      'browserTraining.backend.proofStatus must be fixed-adapter-math-required for repository-fixed-adapter-math',
+    );
+  }
+  if (
+    value['kind'] === 'onnxruntime-web-training' &&
+    value['proofStatus'] !== 'ort-training-worker-proof-passed'
+  ) {
+    errors.push(
+      'browserTraining.backend.proofStatus must be ort-training-worker-proof-passed for onnxruntime-web-training',
+    );
+  }
+}
+
+function validateExactBaseModelIdentity(
+  value: unknown,
+  manifest: Record<string, unknown>,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push('browserTraining.exactBaseModel must be an object');
+    return;
+  }
+  const id = validatePatternString(
+    value['id'],
+    'browserTraining.exactBaseModel.id',
+    modelIdPattern,
+    errors,
+  );
+  const version = validateNonEmptyString(
+    value['version'],
+    'browserTraining.exactBaseModel.version',
+    errors,
+  );
+  validatePatternString(
+    value['manifestSha256'],
+    'browserTraining.exactBaseModel.manifestSha256',
+    sha256Pattern,
+    errors,
+  );
+  validatePatternString(
+    value['graphContractSha256'],
+    'browserTraining.exactBaseModel.graphContractSha256',
+    sha256Pattern,
+    errors,
+  );
+  validatePatternString(
+    value['tokenizerSha256'],
+    'browserTraining.exactBaseModel.tokenizerSha256',
+    sha256Pattern,
+    errors,
+  );
+  if (id !== undefined && id !== manifest['id']) {
+    errors.push('browserTraining.exactBaseModel.id must match manifest id');
+  }
+  if (version !== undefined && version !== manifest['version']) {
+    errors.push('browserTraining.exactBaseModel.version must match manifest version');
+  }
+}
+
+function validateBrowserTrainingFeatureTap(
+  value: unknown,
+  manifest: Record<string, unknown>,
+  errors: string[],
+): { readonly dimension: number } | undefined {
+  if (!isRecord(value)) {
+    errors.push('browserTraining.featureTap must be an object');
+    return undefined;
+  }
+  const graphId = validateNonEmptyString(
+    value['graphId'],
+    'browserTraining.featureTap.graphId',
+    errors,
+  );
+  const outputName = validateNonEmptyString(
+    value['outputName'],
+    'browserTraining.featureTap.outputName',
+    errors,
+  );
+  const dimension = validatePositiveInteger(
+    value['dimension'],
+    'browserTraining.featureTap.dimension',
+    errors,
+  );
+  const frameShiftMs = validatePositiveNumber(
+    value['frameShiftMs'],
+    'browserTraining.featureTap.frameShiftMs',
+    errors,
+  );
+  if (value['persistedDtype'] !== 'float16') {
+    errors.push('browserTraining.featureTap.persistedDtype must be float16');
+  }
+
+  const graphs = manifest['graphs'];
+  const graph = graphId !== undefined && isRecord(graphs) ? graphs[graphId] : undefined;
+  if (graphId !== undefined && !isRecord(graph)) {
+    errors.push('browserTraining.featureTap.graphId must reference a declared graph');
+  }
+  if (
+    outputName !== undefined &&
+    isRecord(graph) &&
+    !tensorNames(graph['outputs']).has(outputName)
+  ) {
+    errors.push(
+      'browserTraining.featureTap.outputName must reference the featureTap graph outputs',
+    );
+  }
+  const feature = manifest['feature'];
+  const manifestFrameShiftMs = isRecord(feature) ? feature['frameShiftMs'] : undefined;
+  if (
+    frameShiftMs !== undefined &&
+    typeof manifestFrameShiftMs === 'number' &&
+    frameShiftMs !== manifestFrameShiftMs
+  ) {
+    errors.push('browserTraining.featureTap.frameShiftMs must match feature.frameShiftMs');
+  }
+  return dimension === undefined ? undefined : { dimension };
+}
+
+function validateBrowserTrainingAdapter(
+  value: unknown,
+  featureDimension: number | undefined,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push('browserTraining.adapter must be an object');
+    return;
+  }
+  if (value['architecture'] !== 'residual-bottleneck-lhuc-v1') {
+    errors.push('browserTraining.adapter.architecture must be residual-bottleneck-lhuc-v1');
+  }
+  const inputDimension = validatePositiveInteger(
+    value['inputDimension'],
+    'browserTraining.adapter.inputDimension',
+    errors,
+  );
+  validatePositiveInteger(value['rank'], 'browserTraining.adapter.rank', errors);
+  const residualScale = validatePositiveNumber(
+    value['residualScale'],
+    'browserTraining.adapter.residualScale',
+    errors,
+  );
+  const parameterTensorNames = validateTensorArray(
+    value['parameterTensors'],
+    'browserTraining.adapter.parameterTensors',
+    errors,
+  );
+  for (const requiredName of browserTrainingParameterTensorNames) {
+    if (!parameterTensorNames.has(requiredName)) {
+      errors.push(`browserTraining.adapter.parameterTensors must include ${requiredName}`);
+    }
+  }
+  validateBrowserTrainingParameterTensorTypes(value['parameterTensors'], errors);
+  validateBrowserTrainingArtifactRef(
+    value['runtimeGraph'],
+    'browserTraining.adapter.runtimeGraph',
+    'runtime-adapter',
+    fileKeys,
+    errors,
+  );
+  const preferredMaxBytes = validatePositiveInteger(
+    value['preferredMaxBytes'],
+    'browserTraining.adapter.preferredMaxBytes',
+    errors,
+  );
+  const hardMaxBytes = validatePositiveInteger(
+    value['hardMaxBytes'],
+    'browserTraining.adapter.hardMaxBytes',
+    errors,
+  );
+  if (
+    inputDimension !== undefined &&
+    featureDimension !== undefined &&
+    inputDimension !== featureDimension
+  ) {
+    errors.push('browserTraining.adapter.inputDimension must match featureTap.dimension');
+  }
+  if (residualScale !== undefined && residualScale > 1) {
+    errors.push('browserTraining.adapter.residualScale must be less than or equal to 1');
+  }
+  if (
+    preferredMaxBytes !== undefined &&
+    hardMaxBytes !== undefined &&
+    preferredMaxBytes > hardMaxBytes
+  ) {
+    errors.push('browserTraining.adapter.preferredMaxBytes must not exceed hardMaxBytes');
+  }
+}
+
+function validateBrowserTrainingParameterTensorTypes(value: unknown, errors: string[]): void {
+  if (!Array.isArray(value)) return;
+  value.forEach((tensor, index) => {
+    if (!isRecord(tensor)) return;
+    const dataType = tensor['dataType'];
+    if (dataType !== 'float32' && dataType !== 'float16') {
+      errors.push(
+        `browserTraining.adapter.parameterTensors[${index}].dataType must be float32 or float16`,
+      );
+    }
+  });
+}
+
+function validateBrowserTrainingArtifacts(
+  value: unknown,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push('browserTraining.artifacts must be an object');
+    return;
+  }
+  validateBrowserTrainingArtifactRef(
+    value['trainingModel'],
+    'browserTraining.artifacts.trainingModel',
+    'training-model',
+    fileKeys,
+    errors,
+  );
+  validateBrowserTrainingArtifactRef(
+    value['evalModel'],
+    'browserTraining.artifacts.evalModel',
+    'eval-model',
+    fileKeys,
+    errors,
+  );
+  validateBrowserTrainingArtifactRef(
+    value['optimizerModel'],
+    'browserTraining.artifacts.optimizerModel',
+    'optimizer-model',
+    fileKeys,
+    errors,
+  );
+  validateBrowserTrainingArtifactArray(
+    value['nominalCheckpoint'],
+    'browserTraining.artifacts.nominalCheckpoint',
+    'nominal-checkpoint',
+    fileKeys,
+    errors,
+  );
+  validateBrowserTrainingArtifactRef(
+    value['contractTestVectors'],
+    'browserTraining.artifacts.contractTestVectors',
+    'contract-test-vectors',
+    fileKeys,
+    errors,
+  );
+  validateBrowserTrainingArtifactArray(
+    value['anchorPack'],
+    'browserTraining.artifacts.anchorPack',
+    'anchor-pack',
+    fileKeys,
+    errors,
+  );
+}
+
+function validateBrowserTrainingArtifactArray(
+  value: unknown,
+  path: string,
+  expectedRole: BrowserTrainingArtifactRole,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!Array.isArray(value) || value.length === 0) {
+    errors.push(`${path} must be a non-empty array`);
+    return;
+  }
+  value.forEach((entry, index) =>
+    validateBrowserTrainingArtifactRef(entry, `${path}[${index}]`, expectedRole, fileKeys, errors),
+  );
+}
+
+function validateBrowserTrainingArtifactRef(
+  value: unknown,
+  path: string,
+  expectedRole: BrowserTrainingArtifactRole,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+  const fileKey = validateNonEmptyString(value['fileKey'], `${path}.fileKey`, errors);
+  if (fileKey !== undefined && !fileKeys.has(fileKey)) {
+    errors.push(`${path}.fileKey must reference an entry in files`);
+  }
+  validateEnumValue(value['role'], `${path}.role`, browserTrainingArtifactRoleValues, errors);
+  if (value['role'] !== expectedRole) {
+    errors.push(`${path}.role must be ${expectedRole}`);
+  }
+  validateBrowserTrainingArtifactLicense(value['license'], `${path}.license`, errors);
+  validateArtifactProvenance(value['provenance'], `${path}.provenance`, errors);
+}
+
+function validateBrowserTrainingArtifactLicense(
+  value: unknown,
+  path: string,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+  validateOptionalNonEmptyString(value['spdx'], `${path}.spdx`, errors);
+  validateNonEmptyString(value['name'], `${path}.name`, errors);
+  validateOptionalNonEmptyString(value['noticeUrl'], `${path}.noticeUrl`, errors);
+  if (typeof value['redistributionAllowed'] !== 'boolean') {
+    errors.push(`${path}.redistributionAllowed must be boolean`);
+  }
+}
+
+function validateArtifactProvenance(value: unknown, path: string, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+  validateNonEmptyString(value['source'], `${path}.source`, errors);
+  validateNonEmptyString(value['generatedBy'], `${path}.generatedBy`, errors);
+  validateOptionalNonEmptyString(value['createdAt'], `${path}.createdAt`, errors);
+}
+
+function validateBrowserTrainingLimits(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('browserTraining.limits must be an object');
+    return;
+  }
+  validatePositiveInteger(value['maxUtterances'], 'browserTraining.limits.maxUtterances', errors);
+  validatePositiveInteger(
+    value['maxAcceptedSeconds'],
+    'browserTraining.limits.maxAcceptedSeconds',
+    errors,
+  );
+  validatePositiveInteger(
+    value['maxFramesPerBatch'],
+    'browserTraining.limits.maxFramesPerBatch',
+    errors,
+  );
+  validatePositiveInteger(value['maxEpochs'], 'browserTraining.limits.maxEpochs', errors);
+  const maxOptimizerSteps = validatePositiveInteger(
+    value['maxOptimizerSteps'],
+    'browserTraining.limits.maxOptimizerSteps',
+    errors,
+  );
+  const checkpointIntervalSteps = validatePositiveInteger(
+    value['checkpointIntervalSteps'],
+    'browserTraining.limits.checkpointIntervalSteps',
+    errors,
+  );
+  if (
+    maxOptimizerSteps !== undefined &&
+    checkpointIntervalSteps !== undefined &&
+    checkpointIntervalSteps > maxOptimizerSteps
+  ) {
+    errors.push('browserTraining.limits.checkpointIntervalSteps must not exceed maxOptimizerSteps');
+  }
 }
 
 function validateRecommended(value: unknown, errors: string[]): void {

@@ -1,9 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  parseSpeechModelManifest,
   parseSpeechModelManifestV2,
+  parseSpeechModelManifestV3,
+  validateSpeechModelManifest,
   validateSpeechModelManifestV2,
+  validateSpeechModelManifestV3,
+  type BrowserTrainingArtifactRefV1,
+  type BrowserTrainingContractV1,
   type SpeechModelManifestV2,
+  type SpeechModelManifestV3,
 } from './model-manifest';
 
 const exampleManifest = JSON.parse(
@@ -149,6 +156,144 @@ function createManifest(overrides: Partial<SpeechModelManifestV2> = {}): SpeechM
   };
 }
 
+const artifactLicense = {
+  spdx: 'Apache-2.0',
+  name: 'Synthetic browser-training contract fixture',
+  noticeUrl: '../../MODEL_LICENSES.md',
+  redistributionAllowed: true,
+} as const;
+
+const artifactProvenance = {
+  source: 'repo-generated-synthetic-fixture',
+  generatedBy: 'packages/protocol model-manifest tests',
+  createdAt: '2026-06-24T00:00:00.000Z',
+} as const;
+
+function trainingArtifact(
+  fileKey: string,
+  role: BrowserTrainingArtifactRefV1['role'],
+): BrowserTrainingArtifactRefV1 {
+  return { fileKey, role, license: artifactLicense, provenance: artifactProvenance };
+}
+
+function browserTrainingContract(
+  overrides: Partial<BrowserTrainingContractV1> = {},
+): BrowserTrainingContractV1 {
+  return {
+    supported: true,
+    contractVersion: 1,
+    backend: {
+      interface: 'BrowserTrainingBackend',
+      kind: 'repository-fixed-adapter-math',
+      proofStatus: 'fixed-adapter-math-required',
+    },
+    algorithmId: 'browser-top-adapter-frame-ce-v1',
+    minimumAppVersion: '0.5.0',
+    exactBaseModel: {
+      id: 'local-dev-mock',
+      version: '0.0.0',
+      manifestSha256: '4'.repeat(64),
+      graphContractSha256: '5'.repeat(64),
+      tokenizerSha256: '6'.repeat(64),
+    },
+    featureTap: {
+      graphId: 'encoder',
+      outputName: 'y',
+      dimension: 256,
+      frameShiftMs: 10,
+      persistedDtype: 'float16',
+    },
+    adapter: {
+      architecture: 'residual-bottleneck-lhuc-v1',
+      inputDimension: 256,
+      rank: 8,
+      residualScale: 0.25,
+      parameterTensors: [
+        { name: 'w_down', dataType: 'float32', shape: [256, 8], description: 'Down projection' },
+        { name: 'b_down', dataType: 'float32', shape: [8], description: 'Down bias' },
+        { name: 'w_up', dataType: 'float32', shape: [8, 256], description: 'Up projection' },
+        { name: 'b_up', dataType: 'float32', shape: [256], description: 'Up bias' },
+        { name: 'lhuc', dataType: 'float32', shape: [256], description: 'LHUC scale' },
+      ],
+      runtimeGraph: trainingArtifact('adapter-runtime', 'runtime-adapter'),
+      preferredMaxBytes: 2_000_000,
+      hardMaxBytes: 10_000_000,
+    },
+    artifacts: {
+      trainingModel: trainingArtifact('training-model', 'training-model'),
+      evalModel: trainingArtifact('eval-model', 'eval-model'),
+      optimizerModel: trainingArtifact('optimizer-model', 'optimizer-model'),
+      nominalCheckpoint: [trainingArtifact('nominal-checkpoint', 'nominal-checkpoint')],
+      contractTestVectors: trainingArtifact('contract-test-vectors', 'contract-test-vectors'),
+      anchorPack: [trainingArtifact('anchor-pack', 'anchor-pack')],
+    },
+    limits: {
+      maxUtterances: 180,
+      maxAcceptedSeconds: 1_800,
+      maxFramesPerBatch: 8_000,
+      maxEpochs: 20,
+      maxOptimizerSteps: 2_000,
+      checkpointIntervalSteps: 100,
+    },
+    ...overrides,
+  };
+}
+
+function createManifestV3(overrides: Partial<SpeechModelManifestV3> = {}): SpeechModelManifestV3 {
+  const v2 = createManifest();
+  return {
+    ...v2,
+    schemaVersion: 3,
+    files: {
+      ...v2.files,
+      'training-model': {
+        url: '/models/mock/training-model.json',
+        sha256: '7'.repeat(64),
+        sizeBytes: 1,
+        mediaType: 'application/json',
+      },
+      'eval-model': {
+        url: '/models/mock/eval-model.json',
+        sha256: '8'.repeat(64),
+        sizeBytes: 1,
+        mediaType: 'application/json',
+      },
+      'optimizer-model': {
+        url: '/models/mock/optimizer-model.json',
+        sha256: '9'.repeat(64),
+        sizeBytes: 1,
+        mediaType: 'application/json',
+      },
+      'nominal-checkpoint': {
+        url: '/models/mock/nominal-checkpoint.bin',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 1,
+        mediaType: 'application/octet-stream',
+      },
+      'adapter-runtime': {
+        url: '/models/mock/adapter-runtime.onnx',
+        sha256: 'b'.repeat(64),
+        sizeBytes: 1,
+        mediaType: 'application/onnx',
+      },
+      'contract-test-vectors': {
+        url: '/models/mock/contract-test-vectors.bin',
+        sha256: 'c'.repeat(64),
+        sizeBytes: 1,
+        mediaType: 'application/octet-stream',
+      },
+      'anchor-pack': {
+        url: '/models/mock/anchor-pack.json',
+        sha256: 'd'.repeat(64),
+        sizeBytes: 1,
+        mediaType: 'application/json',
+      },
+    },
+    browserTraining: browserTrainingContract(),
+    ...overrides,
+  };
+}
+
 describe('model manifest validation', () => {
   it('accepts a complete manifest v2 contract', () => {
     const manifest = createManifest();
@@ -159,6 +304,122 @@ describe('model manifest validation', () => {
 
   it('accepts the checked-in metadata-only example manifest', () => {
     expect(validateSpeechModelManifestV2(exampleManifest)).toEqual({ ok: true, errors: [] });
+  });
+
+  it('preserves V2 read compatibility through the version-dispatch parser', () => {
+    const manifest = createManifest();
+
+    expect(validateSpeechModelManifest(manifest)).toEqual({ ok: true, errors: [] });
+    expect(parseSpeechModelManifest(manifest)).toBe(manifest);
+  });
+
+  it('accepts a manifest v3 browser-training contract', () => {
+    const manifest = createManifestV3();
+
+    expect(validateSpeechModelManifestV3(manifest)).toEqual({ ok: true, errors: [] });
+    expect(validateSpeechModelManifest(manifest)).toEqual({ ok: true, errors: [] });
+    expect(parseSpeechModelManifestV3(manifest)).toBe(manifest);
+    expect(parseSpeechModelManifest(manifest)).toBe(manifest);
+  });
+
+  it('rejects invalid manifest v3 browser-training backend and identity bindings', () => {
+    const manifest = createManifestV3({
+      browserTraining: browserTrainingContract({
+        backend: {
+          interface: 'BrowserTrainingBackend',
+          kind: 'repository-fixed-adapter-math',
+          proofStatus: 'ort-training-worker-proof-passed',
+        },
+        exactBaseModel: {
+          id: 'other-model',
+          version: '9.9.9',
+          manifestSha256: 'not-a-sha',
+          graphContractSha256: '5'.repeat(64),
+          tokenizerSha256: '6'.repeat(64),
+        },
+      }),
+    });
+
+    const result = validateSpeechModelManifestV3(manifest);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'browserTraining.backend.proofStatus must be fixed-adapter-math-required for repository-fixed-adapter-math',
+        'browserTraining.exactBaseModel.id must match manifest id',
+        'browserTraining.exactBaseModel.version must match manifest version',
+        'browserTraining.exactBaseModel.manifestSha256 has invalid format',
+      ]),
+    );
+  });
+
+  it('rejects invalid manifest v3 feature tap, adapter tensors, artifact refs, and limits', () => {
+    const manifest = createManifestV3({
+      browserTraining: browserTrainingContract({
+        featureTap: {
+          graphId: 'missing-graph',
+          outputName: 'missing-output',
+          dimension: 128,
+          frameShiftMs: 20,
+          persistedDtype: 'float32' as 'float16',
+        },
+        adapter: {
+          ...browserTrainingContract().adapter,
+          inputDimension: 256,
+          residualScale: 2,
+          parameterTensors: [
+            {
+              name: 'w_down',
+              dataType: 'int32',
+              shape: [256, 8],
+              description: 'Invalid trainable dtype.',
+            },
+          ],
+          runtimeGraph: trainingArtifact('missing-adapter-runtime', 'training-model'),
+          preferredMaxBytes: 11,
+          hardMaxBytes: 10,
+        },
+        artifacts: {
+          ...browserTrainingContract().artifacts,
+          contractTestVectors: trainingArtifact('missing-vectors', 'anchor-pack'),
+          anchorPack: [],
+        },
+        limits: {
+          ...browserTrainingContract().limits,
+          maxOptimizerSteps: 10,
+          checkpointIntervalSteps: 20,
+        },
+      }),
+    });
+
+    const result = validateSpeechModelManifestV3(manifest);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'browserTraining.featureTap.graphId must reference a declared graph',
+        'browserTraining.featureTap.persistedDtype must be float16',
+        'browserTraining.featureTap.frameShiftMs must match feature.frameShiftMs',
+        'browserTraining.adapter.inputDimension must match featureTap.dimension',
+        'browserTraining.adapter.residualScale must be less than or equal to 1',
+        'browserTraining.adapter.parameterTensors must include b_down',
+        'browserTraining.adapter.parameterTensors[0].dataType must be float32 or float16',
+        'browserTraining.adapter.runtimeGraph.fileKey must reference an entry in files',
+        'browserTraining.adapter.runtimeGraph.role must be runtime-adapter',
+        'browserTraining.adapter.preferredMaxBytes must not exceed hardMaxBytes',
+        'browserTraining.artifacts.contractTestVectors.fileKey must reference an entry in files',
+        'browserTraining.artifacts.contractTestVectors.role must be contract-test-vectors',
+        'browserTraining.artifacts.anchorPack must be a non-empty array',
+        'browserTraining.limits.checkpointIntervalSteps must not exceed maxOptimizerSteps',
+      ]),
+    );
+  });
+
+  it('rejects unsupported manifest schema versions through the dispatch validator', () => {
+    expect(validateSpeechModelManifest({ schemaVersion: 4 })).toEqual({
+      ok: false,
+      errors: ['schemaVersion must be 2 or 3'],
+    });
   });
 
   it('rejects missing graph contracts', () => {
