@@ -14,6 +14,21 @@ CONTEXT_BIASING_REVISION_SWAPS = {"utterance-boundary"}
 RESIDUAL_ADAPTER_GRAPH_ROLES = {"encoder", "predictor", "joiner"}
 RESIDUAL_ADAPTER_PRECISIONS = {"float32", "float16", "int8"}
 RESIDUAL_ADAPTER_APPLICATIONS = {"residual-add", "lhuc-scale", "film-affine"}
+BROWSER_TRAINING_BACKENDS = {"repository-fixed-adapter-math", "onnxruntime-web-training"}
+BROWSER_TRAINING_PROOF_STATUSES = {
+    "fixed-adapter-math-required",
+    "ort-training-worker-proof-passed",
+}
+BROWSER_TRAINING_ARTIFACT_ROLES = {
+    "training-model",
+    "eval-model",
+    "optimizer-model",
+    "nominal-checkpoint",
+    "runtime-adapter",
+    "contract-test-vectors",
+    "anchor-pack",
+}
+BROWSER_TRAINING_PARAMETER_TENSORS = {"w_down", "b_down", "w_up", "b_up", "lhuc"}
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
@@ -62,9 +77,29 @@ def validate_manifest_v2(manifest: Mapping[str, Any]) -> list[str]:
     return errors
 
 
+def validate_manifest_v3(manifest: Mapping[str, Any]) -> list[str]:
+    """Return human-readable errors for the SpeechModelManifestV3 contract."""
+    v2_view = dict(manifest)
+    v2_view["schemaVersion"] = 2
+    errors = validate_manifest_v2(v2_view)
+    if manifest.get("schemaVersion") != 3:
+        errors.append("schemaVersion must be 3")
+    _browser_training(manifest.get("browserTraining"), manifest, _file_keys(manifest), errors)
+    return errors
+
+
+def validate_manifest(manifest: Mapping[str, Any]) -> list[str]:
+    """Validate supported model manifest versions while preserving v2 read compatibility."""
+    if manifest.get("schemaVersion") == 2:
+        return validate_manifest_v2(manifest)
+    if manifest.get("schemaVersion") == 3:
+        return validate_manifest_v3(manifest)
+    return ["schemaVersion must be 2 or 3"]
+
+
 def validate_manifest_minimum(manifest: Mapping[str, Any]) -> list[str]:
-    """Compatibility alias for older bootstrap tests; validates the full v2 contract."""
-    return validate_manifest_v2(manifest)
+    """Compatibility alias for bootstrap tests; validates supported manifest versions."""
+    return validate_manifest(manifest)
 
 
 def _license(value: Any, errors: list[str]) -> None:
@@ -724,6 +759,350 @@ def _tensor_names(value: Any) -> set[str]:
         if isinstance(tensor, Mapping) and isinstance(tensor.get("name"), str):
             names.add(tensor["name"])
     return names
+
+
+def _browser_training(
+    value: Any,
+    manifest: Mapping[str, Any],
+    file_keys: set[str],
+    errors: list[str],
+) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining must be an object")
+        return
+    if value.get("supported") is not True:
+        errors.append("browserTraining.supported must be true")
+    if value.get("contractVersion") != 1:
+        errors.append("browserTraining.contractVersion must be 1")
+    _browser_training_backend(value.get("backend"), errors)
+    if value.get("algorithmId") != "browser-top-adapter-frame-ce-v1":
+        errors.append("browserTraining.algorithmId must be browser-top-adapter-frame-ce-v1")
+    if value.get("minimumAppVersion") != "0.5.0":
+        errors.append("browserTraining.minimumAppVersion must be 0.5.0")
+    _exact_base_model(value.get("exactBaseModel"), manifest, errors)
+    feature_dimension = _browser_training_feature_tap(value.get("featureTap"), manifest, errors)
+    _browser_training_adapter(value.get("adapter"), feature_dimension, file_keys, errors)
+    _browser_training_artifacts(value.get("artifacts"), file_keys, errors)
+    _browser_training_limits(value.get("limits"), errors)
+
+
+def _browser_training_backend(value: Any, errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining.backend must be an object")
+        return
+    if value.get("interface") != "BrowserTrainingBackend":
+        errors.append("browserTraining.backend.interface must be BrowserTrainingBackend")
+    _enum_value(
+        value.get("kind"), "browserTraining.backend.kind", BROWSER_TRAINING_BACKENDS, errors
+    )
+    _enum_value(
+        value.get("proofStatus"),
+        "browserTraining.backend.proofStatus",
+        BROWSER_TRAINING_PROOF_STATUSES,
+        errors,
+    )
+    _optional_non_empty_string(
+        value.get("runtimePackage"), "browserTraining.backend.runtimePackage", errors
+    )
+    if (
+        value.get("kind") == "repository-fixed-adapter-math"
+        and value.get("proofStatus") != "fixed-adapter-math-required"
+    ):
+        errors.append(
+            "browserTraining.backend.proofStatus must be fixed-adapter-math-required for "
+            "repository-fixed-adapter-math"
+        )
+    if (
+        value.get("kind") == "onnxruntime-web-training"
+        and value.get("proofStatus") != "ort-training-worker-proof-passed"
+    ):
+        errors.append(
+            "browserTraining.backend.proofStatus must be ort-training-worker-proof-passed for "
+            "onnxruntime-web-training"
+        )
+
+
+def _exact_base_model(value: Any, manifest: Mapping[str, Any], errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining.exactBaseModel must be an object")
+        return
+    model_id = _pattern_string(
+        value.get("id"), "browserTraining.exactBaseModel.id", MODEL_ID_RE, errors
+    )
+    version = _non_empty_string(
+        value.get("version"), "browserTraining.exactBaseModel.version", errors
+    )
+    _pattern_string(
+        value.get("manifestSha256"),
+        "browserTraining.exactBaseModel.manifestSha256",
+        SHA256_RE,
+        errors,
+    )
+    _pattern_string(
+        value.get("graphContractSha256"),
+        "browserTraining.exactBaseModel.graphContractSha256",
+        SHA256_RE,
+        errors,
+    )
+    _pattern_string(
+        value.get("tokenizerSha256"),
+        "browserTraining.exactBaseModel.tokenizerSha256",
+        SHA256_RE,
+        errors,
+    )
+    if model_id is not None and model_id != manifest.get("id"):
+        errors.append("browserTraining.exactBaseModel.id must match manifest id")
+    if version is not None and version != manifest.get("version"):
+        errors.append("browserTraining.exactBaseModel.version must match manifest version")
+
+
+def _browser_training_feature_tap(
+    value: Any,
+    manifest: Mapping[str, Any],
+    errors: list[str],
+) -> int | None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining.featureTap must be an object")
+        return None
+    graph_id = _non_empty_string(value.get("graphId"), "browserTraining.featureTap.graphId", errors)
+    output_name = _non_empty_string(
+        value.get("outputName"), "browserTraining.featureTap.outputName", errors
+    )
+    dimension = _positive_int(
+        value.get("dimension"), "browserTraining.featureTap.dimension", errors
+    )
+    frame_shift_ms = _positive_number(
+        value.get("frameShiftMs"), "browserTraining.featureTap.frameShiftMs", errors
+    )
+    if value.get("persistedDtype") != "float16":
+        errors.append("browserTraining.featureTap.persistedDtype must be float16")
+    graphs = manifest.get("graphs")
+    graph = graphs.get(graph_id) if isinstance(graphs, Mapping) and graph_id is not None else None
+    if graph_id is not None and not isinstance(graph, Mapping):
+        errors.append("browserTraining.featureTap.graphId must reference a declared graph")
+    if (
+        output_name is not None
+        and isinstance(graph, Mapping)
+        and output_name not in _tensor_names(graph.get("outputs"))
+    ):
+        errors.append(
+            "browserTraining.featureTap.outputName must reference the featureTap graph outputs"
+        )
+    feature = manifest.get("feature")
+    manifest_frame_shift = feature.get("frameShiftMs") if isinstance(feature, Mapping) else None
+    if (
+        frame_shift_ms is not None
+        and isinstance(manifest_frame_shift, int | float)
+        and frame_shift_ms != float(manifest_frame_shift)
+    ):
+        errors.append("browserTraining.featureTap.frameShiftMs must match feature.frameShiftMs")
+    return dimension
+
+
+def _browser_training_adapter(
+    value: Any,
+    feature_dimension: int | None,
+    file_keys: set[str],
+    errors: list[str],
+) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining.adapter must be an object")
+        return
+    if value.get("architecture") != "residual-bottleneck-lhuc-v1":
+        errors.append("browserTraining.adapter.architecture must be residual-bottleneck-lhuc-v1")
+    input_dimension = _positive_int(
+        value.get("inputDimension"), "browserTraining.adapter.inputDimension", errors
+    )
+    _positive_int(value.get("rank"), "browserTraining.adapter.rank", errors)
+    residual_scale = _positive_number(
+        value.get("residualScale"), "browserTraining.adapter.residualScale", errors
+    )
+    parameter_names = _tensor_array(
+        value.get("parameterTensors"), "browserTraining.adapter.parameterTensors", errors
+    )
+    for required_name in sorted(BROWSER_TRAINING_PARAMETER_TENSORS):
+        if required_name not in parameter_names:
+            errors.append(f"browserTraining.adapter.parameterTensors must include {required_name}")
+    _browser_training_parameter_tensor_types(value.get("parameterTensors"), errors)
+    _browser_training_artifact_ref(
+        value.get("runtimeGraph"),
+        "browserTraining.adapter.runtimeGraph",
+        "runtime-adapter",
+        file_keys,
+        errors,
+    )
+    preferred_max_bytes = _positive_int(
+        value.get("preferredMaxBytes"), "browserTraining.adapter.preferredMaxBytes", errors
+    )
+    hard_max_bytes = _positive_int(
+        value.get("hardMaxBytes"), "browserTraining.adapter.hardMaxBytes", errors
+    )
+    if (
+        input_dimension is not None
+        and feature_dimension is not None
+        and input_dimension != feature_dimension
+    ):
+        errors.append("browserTraining.adapter.inputDimension must match featureTap.dimension")
+    if residual_scale is not None and residual_scale > 1:
+        errors.append("browserTraining.adapter.residualScale must be less than or equal to 1")
+    if (
+        preferred_max_bytes is not None
+        and hard_max_bytes is not None
+        and preferred_max_bytes > hard_max_bytes
+    ):
+        errors.append("browserTraining.adapter.preferredMaxBytes must not exceed hardMaxBytes")
+
+
+def _browser_training_parameter_tensor_types(value: Any, errors: list[str]) -> None:
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        return
+    for index, tensor in enumerate(value):
+        if not isinstance(tensor, Mapping):
+            continue
+        if tensor.get("dataType") not in {"float32", "float16"}:
+            errors.append(
+                f"browserTraining.adapter.parameterTensors[{index}].dataType must be float32 or "
+                "float16"
+            )
+
+
+def _browser_training_artifacts(value: Any, file_keys: set[str], errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining.artifacts must be an object")
+        return
+    _browser_training_artifact_ref(
+        value.get("trainingModel"),
+        "browserTraining.artifacts.trainingModel",
+        "training-model",
+        file_keys,
+        errors,
+    )
+    _browser_training_artifact_ref(
+        value.get("evalModel"),
+        "browserTraining.artifacts.evalModel",
+        "eval-model",
+        file_keys,
+        errors,
+    )
+    _browser_training_artifact_ref(
+        value.get("optimizerModel"),
+        "browserTraining.artifacts.optimizerModel",
+        "optimizer-model",
+        file_keys,
+        errors,
+    )
+    _browser_training_artifact_array(
+        value.get("nominalCheckpoint"),
+        "browserTraining.artifacts.nominalCheckpoint",
+        "nominal-checkpoint",
+        file_keys,
+        errors,
+    )
+    _browser_training_artifact_ref(
+        value.get("contractTestVectors"),
+        "browserTraining.artifacts.contractTestVectors",
+        "contract-test-vectors",
+        file_keys,
+        errors,
+    )
+    _browser_training_artifact_array(
+        value.get("anchorPack"),
+        "browserTraining.artifacts.anchorPack",
+        "anchor-pack",
+        file_keys,
+        errors,
+    )
+
+
+def _browser_training_artifact_array(
+    value: Any,
+    path: str,
+    expected_role: str,
+    file_keys: set[str],
+    errors: list[str],
+) -> None:
+    if not isinstance(value, Sequence) or isinstance(value, str) or len(value) == 0:
+        errors.append(f"{path} must be a non-empty array")
+        return
+    for index, entry in enumerate(value):
+        _browser_training_artifact_ref(entry, f"{path}[{index}]", expected_role, file_keys, errors)
+
+
+def _browser_training_artifact_ref(
+    value: Any,
+    path: str,
+    expected_role: str,
+    file_keys: set[str],
+    errors: list[str],
+) -> None:
+    if not isinstance(value, Mapping):
+        errors.append(f"{path} must be an object")
+        return
+    file_key = _non_empty_string(value.get("fileKey"), f"{path}.fileKey", errors)
+    if file_key is not None and file_key not in file_keys:
+        errors.append(f"{path}.fileKey must reference an entry in files")
+    _enum_value(value.get("role"), f"{path}.role", BROWSER_TRAINING_ARTIFACT_ROLES, errors)
+    if value.get("role") != expected_role:
+        errors.append(f"{path}.role must be {expected_role}")
+    _browser_training_artifact_license(value.get("license"), f"{path}.license", errors)
+    _artifact_provenance(value.get("provenance"), f"{path}.provenance", errors)
+
+
+def _browser_training_artifact_license(value: Any, path: str, errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append(f"{path} must be an object")
+        return
+    _optional_non_empty_string(value.get("spdx"), f"{path}.spdx", errors)
+    _non_empty_string(value.get("name"), f"{path}.name", errors)
+    _optional_non_empty_string(value.get("noticeUrl"), f"{path}.noticeUrl", errors)
+    if not isinstance(value.get("redistributionAllowed"), bool):
+        errors.append(f"{path}.redistributionAllowed must be boolean")
+
+
+def _artifact_provenance(value: Any, path: str, errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append(f"{path} must be an object")
+        return
+    _non_empty_string(value.get("source"), f"{path}.source", errors)
+    _non_empty_string(value.get("generatedBy"), f"{path}.generatedBy", errors)
+    _optional_non_empty_string(value.get("createdAt"), f"{path}.createdAt", errors)
+
+
+def _browser_training_limits(value: Any, errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining.limits must be an object")
+        return
+    _positive_int(value.get("maxUtterances"), "browserTraining.limits.maxUtterances", errors)
+    _positive_int(
+        value.get("maxAcceptedSeconds"), "browserTraining.limits.maxAcceptedSeconds", errors
+    )
+    _positive_int(
+        value.get("maxFramesPerBatch"), "browserTraining.limits.maxFramesPerBatch", errors
+    )
+    _positive_int(value.get("maxEpochs"), "browserTraining.limits.maxEpochs", errors)
+    max_optimizer_steps = _positive_int(
+        value.get("maxOptimizerSteps"), "browserTraining.limits.maxOptimizerSteps", errors
+    )
+    checkpoint_interval_steps = _positive_int(
+        value.get("checkpointIntervalSteps"),
+        "browserTraining.limits.checkpointIntervalSteps",
+        errors,
+    )
+    if (
+        max_optimizer_steps is not None
+        and checkpoint_interval_steps is not None
+        and checkpoint_interval_steps > max_optimizer_steps
+    ):
+        errors.append(
+            "browserTraining.limits.checkpointIntervalSteps must not exceed maxOptimizerSteps"
+        )
+
+
+def _file_keys(manifest: Mapping[str, Any]) -> set[str]:
+    files = manifest.get("files")
+    if not isinstance(files, Mapping):
+        return set()
+    return {key for key in files if isinstance(key, str) and key}
 
 
 def _recommended(value: Any, errors: list[str]) -> None:

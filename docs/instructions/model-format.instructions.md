@@ -6,6 +6,7 @@ applyTo: 'model-packs/**,apps/web/public/model-catalog.json,apps/web/public/mode
 # Model-pack format
 
 - Start model manifests at schema version 2. For v0.5.0 browser personal-model work, add schema version 3 read/write support under ADR 0002 while preserving V2 read compatibility; ADR 0003 means the V3 browser-training contract must name `BrowserTrainingBackend` and not assume npm-provided ORT Training artifacts until their worker proof passes.
+- `SpeechModelManifestV3.browserTraining` must declare `BrowserTrainingContractV1` with exact base-model identity, feature-tap tensor, residual-bottleneck/LHUC parameter tensor names (`w_down`, `b_down`, `w_up`, `b_up`, `lhuc`), adapter byte limits, companion artifact refs, license/provenance for each artifact, and positive training limits. Keep artifact refs as manifest file-key bindings; do not embed training weights, checkpoints, feature tensors, or private data in public manifests.
 - Validate manifests before downloading large assets.
 - Enumerate every graph input/output tensor name, data type, shape convention, and state-cache relationship.
 - Every graph `fileKey` and speaker-embedding `encoderFileKey` must reference a declared manifest `files` entry.

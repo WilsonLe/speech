@@ -1,0 +1,1158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilsonle.github.io/speech/schemas/speech-model-manifest-v3.schema.json",
+  "title": "SpeechModelManifestV3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "version",
+    "displayName",
+    "languages",
+    "supportedLanguageModes",
+    "architecture",
+    "license",
+    "sampleRateHz",
+    "feature",
+    "tokenizer",
+    "streaming",
+    "contextBiasing",
+    "files",
+    "graphs",
+    "recommended",
+    "browserTraining"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 3
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/language"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "supportedLanguageModes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/languageMode"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "architecture": {
+      "const": "rnnt"
+    },
+    "license": {
+      "$ref": "#/$defs/license"
+    },
+    "sampleRateHz": {
+      "const": 16000
+    },
+    "feature": {
+      "$ref": "#/$defs/feature"
+    },
+    "tokenizer": {
+      "$ref": "#/$defs/tokenizer"
+    },
+    "streaming": {
+      "$ref": "#/$defs/streaming"
+    },
+    "contextBiasing": {
+      "$ref": "#/$defs/contextBiasing"
+    },
+    "personalization": {
+      "$ref": "#/$defs/personalization"
+    },
+    "files": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/fileRef"
+      }
+    },
+    "graphs": {
+      "$ref": "#/$defs/graphs"
+    },
+    "recommended": {
+      "$ref": "#/$defs/recommended"
+    },
+    "browserTraining": {
+      "$ref": "#/$defs/browserTraining"
+    }
+  },
+  "$defs": {
+    "language": {
+      "enum": ["vi", "en"]
+    },
+    "languageMode": {
+      "enum": ["vi", "en", "auto", "mixed"]
+    },
+    "tensorDataType": {
+      "enum": ["float32", "float16", "int32", "int64", "uint8", "int8", "bool"]
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "redistributionAllowed"],
+      "properties": {
+        "spdx": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "noticeUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "redistributionAllowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "bins",
+        "frameLengthMs",
+        "frameShiftMs",
+        "fftSize",
+        "lowFreqHz",
+        "highFreqHz",
+        "dither",
+        "snipEdges"
+      ],
+      "properties": {
+        "type": {
+          "const": "log-mel"
+        },
+        "bins": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameLengthMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "frameShiftMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "fftSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lowFreqHz": {
+          "type": "number",
+          "minimum": 0
+        },
+        "highFreqHz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 8000
+        },
+        "dither": {
+          "type": "number",
+          "minimum": 0
+        },
+        "snipEdges": {
+          "type": "boolean"
+        }
+      }
+    },
+    "tokenizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "vocabularySize", "byteFallback", "blankId"],
+      "properties": {
+        "type": {
+          "enum": ["sentencepiece", "tokens"]
+        },
+        "vocabularySize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "byteFallback": {
+          "type": "boolean"
+        },
+        "blankId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unkId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bosId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "eosId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "languageTokenIds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vi": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "en": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "auto": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mixed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "wordBoundaryMarker": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "streaming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunkFrames", "chunkShiftFrames", "rightContextFrames", "maxSymbolsPerFrame"],
+      "properties": {
+        "chunkFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chunkShiftFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rightContextFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxSymbolsPerFrame": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "contextBiasing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "algorithm",
+        "supportedEntryLanguages",
+        "maxActiveEntries",
+        "maxPhraseTokens",
+        "maxAliasesPerEntry",
+        "maxAliasTokens",
+        "defaultWeight",
+        "maxCumulativeBonus",
+        "weightRange",
+        "presets",
+        "scoring",
+        "wordBoundary",
+        "revisionSwap",
+        "diagnostics"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "algorithm": {
+          "enum": ["token-trie", "aho-corasick"]
+        },
+        "supportedEntryLanguages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/languageMode"
+          },
+          "uniqueItems": true
+        },
+        "maxActiveEntries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxPhraseTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxAliasesPerEntry": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxAliasTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "defaultWeight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maxCumulativeBonus": {
+          "type": "number",
+          "minimum": 0
+        },
+        "weightRange": {
+          "$ref": "#/$defs/contextBiasingWeightRange"
+        },
+        "presets": {
+          "$ref": "#/$defs/contextBiasingPresets"
+        },
+        "scoring": {
+          "$ref": "#/$defs/contextBiasingScoring"
+        },
+        "wordBoundary": {
+          "$ref": "#/$defs/contextBiasingWordBoundary"
+        },
+        "revisionSwap": {
+          "const": "utterance-boundary"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/contextBiasingDiagnostics"
+        }
+      }
+    },
+    "fileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256", "sizeBytes", "mediaType"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "graphs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encoder", "predictor", "joiner"],
+      "properties": {
+        "encoder": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "predictor": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "joiner": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "speakerEncoder": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "adapter": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "finalizer": {
+          "$ref": "#/$defs/graphContract"
+        }
+      }
+    },
+    "graphContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileKey", "inputs", "outputs"],
+      "properties": {
+        "fileKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensorContract"
+          },
+          "minItems": 1
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensorContract"
+          },
+          "minItems": 1
+        },
+        "stateRelationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/graphStateRelationship"
+          }
+        }
+      }
+    },
+    "tensorContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "dataType", "shape", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataType": {
+          "$ref": "#/$defs/tensorDataType"
+        },
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          }
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "graphStateRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output", "resetAtUtteranceBoundary"],
+      "properties": {
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resetAtUtteranceBoundary": {
+          "type": "boolean"
+        }
+      }
+    },
+    "personalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "speakerEmbedding": {
+          "$ref": "#/$defs/speakerEmbedding"
+        },
+        "residualAdapter": {
+          "$ref": "#/$defs/residualAdapter"
+        }
+      }
+    },
+    "speakerEmbedding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported", "dimension", "inputName", "encoderFileKey"],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "dimension": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "inputName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "encoderFileKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "residualAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "contractVersion",
+        "insertionPoints",
+        "maxParameters",
+        "maxAdapterSizeBytes",
+        "allowedPrecisions",
+        "activationSwap"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "contractVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "insertionPoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/residualAdapterInsertionPoint"
+          }
+        },
+        "maxParameters": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxAdapterSizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowedPrecisions": {
+          "type": "array",
+          "items": {
+            "enum": ["float32", "float16", "int8"]
+          },
+          "uniqueItems": true
+        },
+        "activationSwap": {
+          "const": "utterance-boundary"
+        }
+      }
+    },
+    "recommended": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["webgpu", "wasmThreads", "expectedMemoryMb"],
+      "properties": {
+        "webgpu": {
+          "type": "boolean"
+        },
+        "wasmThreads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expectedMemoryMb": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "contextBiasingWeightRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "contextBiasingPresets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["light", "normal", "strong"],
+      "properties": {
+        "light": {
+          "type": "number",
+          "minimum": 0
+        },
+        "normal": {
+          "type": "number",
+          "minimum": 0
+        },
+        "strong": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "contextBiasingScoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefixBonus", "completionBonus", "mismatchPenalty"],
+      "properties": {
+        "prefixBonus": {
+          "type": "number",
+          "minimum": 0
+        },
+        "completionBonus": {
+          "type": "number",
+          "minimum": 0
+        },
+        "mismatchPenalty": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "contextBiasingWordBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "requireForSingleToken"],
+      "properties": {
+        "mode": {
+          "enum": ["none", "token", "unicode-word"]
+        },
+        "marker": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requireForSingleToken": {
+          "type": "boolean"
+        }
+      }
+    },
+    "contextBiasingDiagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["emitMatchedVocabularyIds", "emitScoreBreakdown"],
+      "properties": {
+        "emitMatchedVocabularyIds": {
+          "type": "boolean"
+        },
+        "emitScoreBreakdown": {
+          "type": "boolean"
+        }
+      }
+    },
+    "residualAdapterInsertionPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "targetGraph", "inputTensor", "outputTensor", "application"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetGraph": {
+          "enum": ["encoder", "predictor", "joiner"]
+        },
+        "inputTensor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputTensor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "application": {
+          "enum": ["residual-add", "lhuc-scale", "film-affine"]
+        }
+      }
+    },
+    "browserTrainingBackend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface", "kind", "proofStatus"],
+      "properties": {
+        "interface": {
+          "const": "BrowserTrainingBackend"
+        },
+        "kind": {
+          "enum": ["repository-fixed-adapter-math", "onnxruntime-web-training"]
+        },
+        "proofStatus": {
+          "enum": ["fixed-adapter-math-required", "ort-training-worker-proof-passed"]
+        },
+        "runtimePackage": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "repository-fixed-adapter-math"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "proofStatus": {
+                "const": "fixed-adapter-math-required"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "onnxruntime-web-training"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "proofStatus": {
+                "const": "ort-training-worker-proof-passed"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "exactBaseModelIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "manifestSha256", "graphContractSha256", "tokenizerSha256"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifestSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "graphContractSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "tokenizerSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "browserTrainingArtifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileKey", "role", "license", "provenance"],
+      "properties": {
+        "fileKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "enum": [
+            "training-model",
+            "eval-model",
+            "optimizer-model",
+            "nominal-checkpoint",
+            "runtime-adapter",
+            "contract-test-vectors",
+            "anchor-pack"
+          ]
+        },
+        "license": {
+          "$ref": "#/$defs/license"
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "generatedBy"],
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1
+            },
+            "generatedBy": {
+              "type": "string",
+              "minLength": 1
+            },
+            "createdAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "browserTrainingFeatureTap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["graphId", "outputName", "dimension", "frameShiftMs", "persistedDtype"],
+      "properties": {
+        "graphId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dimension": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameShiftMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "persistedDtype": {
+          "const": "float16"
+        }
+      }
+    },
+    "browserTrainingAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "architecture",
+        "inputDimension",
+        "rank",
+        "residualScale",
+        "parameterTensors",
+        "runtimeGraph",
+        "preferredMaxBytes",
+        "hardMaxBytes"
+      ],
+      "properties": {
+        "architecture": {
+          "const": "residual-bottleneck-lhuc-v1"
+        },
+        "inputDimension": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "residualScale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "parameterTensors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensorContract"
+          },
+          "minItems": 5,
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "const": "w_down"
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "const": "b_down"
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "const": "w_up"
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "const": "b_up"
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "const": "lhuc"
+                  }
+                },
+                "required": ["name"]
+              }
+            }
+          ]
+        },
+        "runtimeGraph": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/browserTrainingArtifactRef"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "runtime-adapter"
+                }
+              },
+              "required": ["role"]
+            }
+          ]
+        },
+        "preferredMaxBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hardMaxBytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "browserTrainingArtifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trainingModel",
+        "evalModel",
+        "optimizerModel",
+        "nominalCheckpoint",
+        "contractTestVectors",
+        "anchorPack"
+      ],
+      "properties": {
+        "trainingModel": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/browserTrainingArtifactRef"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "training-model"
+                }
+              },
+              "required": ["role"]
+            }
+          ]
+        },
+        "evalModel": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/browserTrainingArtifactRef"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "eval-model"
+                }
+              },
+              "required": ["role"]
+            }
+          ]
+        },
+        "optimizerModel": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/browserTrainingArtifactRef"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "optimizer-model"
+                }
+              },
+              "required": ["role"]
+            }
+          ]
+        },
+        "nominalCheckpoint": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/browserTrainingArtifactRef"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "const": "nominal-checkpoint"
+                  }
+                },
+                "required": ["role"]
+              }
+            ]
+          },
+          "minItems": 1
+        },
+        "contractTestVectors": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/browserTrainingArtifactRef"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "contract-test-vectors"
+                }
+              },
+              "required": ["role"]
+            }
+          ]
+        },
+        "anchorPack": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/browserTrainingArtifactRef"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "const": "anchor-pack"
+                  }
+                },
+                "required": ["role"]
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "browserTrainingLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxUtterances",
+        "maxAcceptedSeconds",
+        "maxFramesPerBatch",
+        "maxEpochs",
+        "maxOptimizerSteps",
+        "checkpointIntervalSteps"
+      ],
+      "properties": {
+        "maxUtterances": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxAcceptedSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxFramesPerBatch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxEpochs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxOptimizerSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "checkpointIntervalSteps": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "browserTraining": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "contractVersion",
+        "backend",
+        "algorithmId",
+        "minimumAppVersion",
+        "exactBaseModel",
+        "featureTap",
+        "adapter",
+        "artifacts",
+        "limits"
+      ],
+      "properties": {
+        "supported": {
+          "const": true
+        },
+        "contractVersion": {
+          "const": 1
+        },
+        "backend": {
+          "$ref": "#/$defs/browserTrainingBackend"
+        },
+        "algorithmId": {
+          "const": "browser-top-adapter-frame-ce-v1"
+        },
+        "minimumAppVersion": {
+          "const": "0.5.0"
+        },
+        "exactBaseModel": {
+          "$ref": "#/$defs/exactBaseModelIdentity"
+        },
+        "featureTap": {
+          "$ref": "#/$defs/browserTrainingFeatureTap"
+        },
+        "adapter": {
+          "$ref": "#/$defs/browserTrainingAdapter"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/browserTrainingArtifacts"
+        },
+        "limits": {
+          "$ref": "#/$defs/browserTrainingLimits"
+        }
+      }
+    }
+  }
+}
