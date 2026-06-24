@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "description": "Tiny frozen-feature affine adapter browser/Python numerical parity fixture; synthetic CI data only, no audio, transcripts, or private profile data.",
+  "dataset": {
+    "datasetId": "synthetic-frozen-feature-tiny-adapter-v1",
+    "featureDimension": 4,
+    "outputDimension": 2,
+    "examples": [
+      {
+        "id": "case-a",
+        "features": [1.0, 0.0, 0.2, -0.1],
+        "targetResidual": [0.18, -0.08]
+      },
+      {
+        "id": "case-b",
+        "features": [0.8, 0.1, 0.1, 0.2],
+        "targetResidual": [0.16, -0.02]
+      },
+      {
+        "id": "case-c",
+        "features": [0.1, 1.0, -0.2, 0.3],
+        "targetResidual": [-0.04, 0.22]
+      },
+      {
+        "id": "case-d",
+        "features": [0.2, 0.9, 0.3, -0.2],
+        "targetResidual": [0.02, 0.18]
+      },
+      {
+        "id": "case-e",
+        "features": [-0.4, 0.3, 1.0, 0.5],
+        "targetResidual": [-0.1, 0.06]
+      },
+      {
+        "id": "case-f",
+        "features": [0.3, -0.2, 0.4, 1.0],
+        "targetResidual": [0.05, -0.12]
+      }
+    ],
+    "source": {
+      "kind": "synthetic-ci-fixture",
+      "baseModelId": "mock-browser-training-base",
+      "baseModelVersion": "0.0.0-ci",
+      "graphContractSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "options": {
+    "epochs": 50,
+    "learningRate": 0.04,
+    "l2Regularization": 0.001,
+    "maxParameterCount": 1024,
+    "checkpointEveryEpochs": 10
+  },
+  "initialLoss": 0.007421,
+  "checkpoints": [
+    {
+      "epoch": 10,
+      "loss": 0.001576,
+      "weights": [
+        0.090067, -0.03266, -0.015854, -0.01441, -0.040485, 0.109649, -0.016371, -0.029025
+      ],
+      "bias": [0.03061, 0.026941],
+      "checksum": "fnv1a32:a9861bad"
+    },
+    {
+      "epoch": 20,
+      "loss": 0.000471,
+      "weights": [
+        0.127777, -0.051992, -0.024584, -0.025281, -0.065714, 0.158146, -0.028362, -0.044237
+      ],
+      "bias": [0.03366, 0.027448],
+      "checksum": "fnv1a32:0542360d"
+    },
+    {
+      "epoch": 30,
+      "loss": 0.000227,
+      "weights": [
+        0.145195, -0.061277, -0.027376, -0.031444, -0.078626, 0.181463, -0.034978, -0.050346
+      ],
+      "bias": [0.034696, 0.027301],
+      "checksum": "fnv1a32:b22393be"
+    },
+    {
+      "epoch": 40,
+      "loss": 0.000172,
+      "weights": [
+        0.153364, -0.065735, -0.027626, -0.035123, -0.085181, 0.192777, -0.038871, -0.052386
+      ],
+      "bias": [0.035111, 0.027227],
+      "checksum": "fnv1a32:57d8dbce"
+    },
+    {
+      "epoch": 50,
+      "loss": 0.00016,
+      "weights": [
+        0.157259, -0.067906, -0.026918, -0.037466, -0.088533, 0.1983, -0.041359, -0.052721
+      ],
+      "bias": [0.035243, 0.027214],
+      "checksum": "fnv1a32:441bcca8"
+    }
+  ],
+  "final": {
+    "epoch": 50,
+    "loss": 0.00016,
+    "weights": [0.157259, -0.067906, -0.026918, -0.037466, -0.088533, 0.1983, -0.041359, -0.052721],
+    "bias": [0.035243, 0.027214],
+    "checksum": "fnv1a32:441bcca8"
+  },
+  "forwardOutput": {
+    "features": [1.0, 0.0, 0.2, -0.1],
+    "prediction": [0.190865, -0.06431869999999999]
+  },
+  "privacy": {
+    "containsRawAudio": false,
+    "containsTranscriptText": false,
+    "containsPrivateFrozenFeatureValues": false,
+    "containsProfileData": false,
+    "networkUpload": false,
+    "localOnly": true
+  }
+}
