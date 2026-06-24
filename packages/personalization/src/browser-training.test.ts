@@ -1,0 +1,213 @@
+import { describe, expect, it } from 'vitest';
+import {
+  createBrowserTrainingPrivacy,
+  createSyntheticFrozenFeatureTinyAdapterDataset,
+  trainFrozenFeatureTinyAdapter,
+  validateFrozenFeatureTinyAdapterCheckpoint,
+  validateFrozenFeatureTinyAdapterDataset,
+  type FrozenFeatureTinyAdapterCheckpointV1,
+  type FrozenFeatureTinyAdapterDatasetV1,
+} from './browser-training';
+
+describe('browser frozen-feature tiny-adapter prototype', () => {
+  it('trains a deterministic tiny affine adapter over frozen synthetic features', () => {
+    const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
+    const first = trainFrozenFeatureTinyAdapter(dataset, { epochs: 60, progressEveryEpochs: 20 });
+    const second = trainFrozenFeatureTinyAdapter(dataset, { epochs: 60, progressEveryEpochs: 20 });
+
+    expect(first.schemaVersion).toBe(1);
+    expect(first.status).toBe('completed');
+    expect(first.workerOwner).toBe('dedicated-training-worker');
+    expect(first.metrics.examples).toBe(dataset.examples.length);
+    expect(first.metrics.finalLoss).toBeLessThan(first.metrics.initialLoss);
+    expect(first.metrics.lossReduction).toBeGreaterThan(0);
+    expect(first.artifact).toMatchObject({
+      schemaVersion: 1,
+      artifactType: 'frozen-feature-affine-adapter',
+      trainableScope: 'top-residual-adapter',
+      featureDimension: 4,
+      outputDimension: 2,
+      parameterCount: 10,
+      precision: 'float32',
+    });
+    expect(first.artifact.weights).toHaveLength(8);
+    expect(first.artifact.bias).toHaveLength(2);
+    expect(first.artifact.checksum).toMatch(/^fnv1a32:[a-f0-9]{8}$/);
+    expect(first.artifact).toEqual(second.artifact);
+    expect(first.checkpoint.epoch).toBe(first.metrics.epochsCompleted);
+    expect(first.recovery).toMatchObject({
+      resumable: false,
+      reloadRecoverySupported: true,
+      previousActiveProfileIntact: true,
+      activationGateRequired: true,
+    });
+    expect(first.compatibility).toMatchObject({
+      activationGateRequired: true,
+      importChecksumRequired: true,
+      trainableScope: 'top-residual-adapter',
+    });
+    expect(first.privacy).toEqual({
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsPrivateFrozenFeatureValues: false,
+      containsProfileData: false,
+      networkUpload: false,
+      telemetry: false,
+      localOnly: true,
+    });
+  });
+
+  it('emits progress and supports cooperative cancellation without mutating active profiles', () => {
+    const progressEpochs: number[] = [];
+    const checkpoints: FrozenFeatureTinyAdapterCheckpointV1[] = [];
+    const result = trainFrozenFeatureTinyAdapter(createSyntheticFrozenFeatureTinyAdapterDataset(), {
+      epochs: 30,
+      progressEveryEpochs: 5,
+      checkpointEveryEpochs: 5,
+      onProgress: (progress) => progressEpochs.push(progress.epoch),
+      onCheckpoint: (checkpoint) => checkpoints.push(checkpoint),
+      shouldCancel: (progress) => progress.epoch >= 7,
+    });
+
+    expect(result.status).toBe('cancelled');
+    expect(result.metrics.epochsCompleted).toBe(7);
+    expect(progressEpochs).toContain(5);
+    expect(progressEpochs.at(-1)).toBe(7);
+    expect(checkpoints.map((checkpoint) => checkpoint.epoch)).toEqual([5, 7]);
+    expect(result.recovery).toMatchObject({
+      checkpointEpoch: 7,
+      resumable: true,
+      previousActiveProfileIntact: true,
+      activationGateRequired: true,
+    });
+  });
+
+  it('pauses with a resumable checkpoint and resumes from checkpoint state', () => {
+    const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
+    const paused = trainFrozenFeatureTinyAdapter(dataset, {
+      epochs: 40,
+      progressEveryEpochs: 4,
+      checkpointEveryEpochs: 4,
+      targetLoss: 0,
+      shouldPause: (progress) => progress.epoch >= 12,
+    });
+
+    expect(paused.status).toBe('paused');
+    expect(paused.checkpoint.epoch).toBe(12);
+    expect(paused.recovery.resumable).toBe(true);
+    expect(validateFrozenFeatureTinyAdapterCheckpoint(dataset, paused.checkpoint)).toBe(
+      paused.checkpoint,
+    );
+
+    const resumed = trainFrozenFeatureTinyAdapter(dataset, {
+      epochs: 40,
+      progressEveryEpochs: 10,
+      checkpointEveryEpochs: 10,
+      targetLoss: 0,
+      resumeFromCheckpoint: paused.checkpoint,
+    });
+
+    expect(resumed.status).toBe('completed');
+    expect(resumed.metrics.epochsCompleted).toBe(40);
+    expect(resumed.metrics.finalLoss).toBeLessThan(paused.metrics.finalLoss);
+    expect(resumed.recovery.resumable).toBe(false);
+  });
+
+  it('validates dimensions, checksums, checkpoints, and local-only privacy before training', () => {
+    const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
+    const checkpoint = trainFrozenFeatureTinyAdapter(dataset, {
+      epochs: 12,
+      checkpointEveryEpochs: 6,
+    }).checkpoint;
+
+    expect(validateFrozenFeatureTinyAdapterDataset(dataset)).toBe(dataset);
+    expect(validateFrozenFeatureTinyAdapterCheckpoint(dataset, checkpoint)).toBe(checkpoint);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterDataset({
+        ...dataset,
+        examples: [...dataset.examples, { ...dataset.examples[0]!, id: dataset.examples[0]!.id }],
+      }),
+    ).toThrow(/Duplicate/);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterDataset({
+        ...dataset,
+        source: { ...dataset.source, graphContractSha256: 'not-a-sha' },
+      }),
+    ).toThrow(/graphContractSha256/);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterDataset({
+        ...dataset,
+        privacy: {
+          ...dataset.privacy,
+          containsRawAudio: true,
+        } as unknown as FrozenFeatureTinyAdapterDatasetV1['privacy'],
+      }),
+    ).toThrow(/raw audio/);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterCheckpoint(dataset, {
+        ...checkpoint,
+        checkpointId: 'tampered',
+      }),
+    ).toThrow(/checkpointId/);
+    expect(() =>
+      trainFrozenFeatureTinyAdapter(
+        { ...dataset, datasetId: 'different-dataset' },
+        { resumeFromCheckpoint: checkpoint },
+      ),
+    ).toThrow(/datasetId/);
+  });
+
+  it('refuses adapters that exceed the tiny parameter budget', () => {
+    expect(() =>
+      trainFrozenFeatureTinyAdapter(createSyntheticFrozenFeatureTinyAdapterDataset(), {
+        maxParameterCount: 4,
+      }),
+    ).toThrow(/parameter count/);
+  });
+
+  it('propagates private frozen-feature markers into training results and checkpoints', () => {
+    const baseDataset = createSyntheticFrozenFeatureTinyAdapterDataset();
+    const privateDataset = {
+      ...baseDataset,
+      datasetId: 'private-profile-frozen-feature-dataset',
+      source: {
+        ...baseDataset.source,
+        kind: 'profile-frozen-features' as const,
+      },
+      privacy: createBrowserTrainingPrivacy({
+        containsPrivateFrozenFeatureValues: true,
+        containsProfileData: true,
+      }),
+    } satisfies FrozenFeatureTinyAdapterDatasetV1;
+
+    const result = trainFrozenFeatureTinyAdapter(privateDataset, { epochs: 10 });
+
+    expect(result.privacy).toEqual({
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsPrivateFrozenFeatureValues: true,
+      containsProfileData: true,
+      networkUpload: false,
+      telemetry: false,
+      localOnly: true,
+    });
+    expect(result.checkpoint.privacy).toEqual(result.privacy);
+  });
+
+  it('creates explicit sensitive-feature privacy markers for future profile datasets', () => {
+    expect(
+      createBrowserTrainingPrivacy({
+        containsPrivateFrozenFeatureValues: true,
+        containsProfileData: true,
+      }),
+    ).toEqual({
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsPrivateFrozenFeatureValues: true,
+      containsProfileData: true,
+      networkUpload: false,
+      telemetry: false,
+      localOnly: true,
+    });
+  });
+});

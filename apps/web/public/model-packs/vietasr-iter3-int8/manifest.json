@@ -43,10 +43,36 @@
   "contextBiasing": {
     "supported": false,
     "algorithm": "token-trie",
+    "supportedEntryLanguages": [],
     "maxActiveEntries": 0,
     "maxPhraseTokens": 0,
+    "maxAliasesPerEntry": 0,
+    "maxAliasTokens": 0,
     "defaultWeight": 0,
-    "maxCumulativeBonus": 0
+    "maxCumulativeBonus": 0,
+    "weightRange": {
+      "min": 0,
+      "max": 0
+    },
+    "presets": {
+      "light": 0,
+      "normal": 0,
+      "strong": 0
+    },
+    "scoring": {
+      "prefixBonus": 0,
+      "completionBonus": 0,
+      "mismatchPenalty": 0
+    },
+    "wordBoundary": {
+      "mode": "none",
+      "requireForSingleToken": false
+    },
+    "revisionSwap": "utterance-boundary",
+    "diagnostics": {
+      "emitMatchedVocabularyIds": false,
+      "emitScoreBreakdown": false
+    }
   },
   "files": {
     "encoder": {

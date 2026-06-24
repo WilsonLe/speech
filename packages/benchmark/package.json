@@ -2,7 +2,7 @@
   "name": "@speech/benchmark",
   "version": "0.1.0",
   "private": true,
-  "description": "Latency, RTF, queue, memory, and benchmark export contracts.",
+  "description": "Latency, RTF, queue, memory, custom-term, and benchmark export contracts.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -12,6 +12,10 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@speech/context-bias": "workspace:*",
+    "@speech/formatter": "workspace:*"
   },
   "devDependencies": {}
 }

@@ -263,14 +263,19 @@ function ModelCard({
   readonly onDelete: () => void;
 }) {
   const installed = activeRecord !== undefined;
+  const hasManifest = model.manifestUrl !== undefined;
   const installDisabled =
-    installing || !online || !model.runtime.installable || inspection === undefined;
+    installing || !online || !model.runtime.installable || !hasManifest || inspection === undefined;
   return (
-    <article className="model-card">
+    <article className="model-card" aria-labelledby={`${model.id}-title`}>
       <div>
         <p className="eyebrow">{model.runtime.status}</p>
-        <h4>{model.displayName}</h4>
-        <p>{model.runtime.notes[0]}</p>
+        <h4 id={`${model.id}-title`}>{model.displayName}</h4>
+        <ul className="model-card-notes">
+          {model.runtime.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
       </div>
       <dl className="model-card-meta" aria-label={`${model.displayName} lifecycle details`}>
         <div>
@@ -287,24 +292,32 @@ function ModelCard({
         </div>
         <div>
           <dt>Install state</dt>
-          <dd>{installed ? `active ${activeRecord.activeVersion}` : 'not installed'}</dd>
+          <dd>
+            {!model.runtime.installable
+              ? 'not installable'
+              : installed
+                ? `active ${activeRecord.activeVersion}`
+                : 'not installed'}
+          </dd>
         </div>
         <div>
           <dt>Manifest</dt>
           <dd>
-            {inspection
-              ? `${formatBytes(inspection.requiredStorageBytes)} · ${inspection.fileCount.toString()} files`
-              : 'not inspected'}
+            {!hasManifest
+              ? 'not available'
+              : inspection
+                ? `${formatBytes(inspection.requiredStorageBytes)} · ${inspection.fileCount.toString()} files`
+                : 'not inspected'}
           </dd>
         </div>
         <div>
           <dt>Manifest checksum</dt>
-          <dd>{formatManifestChecksumStatus(inspection)}</dd>
+          <dd>{formatManifestChecksumStatus(inspection, hasManifest)}</dd>
         </div>
       </dl>
       <div className="model-card-actions">
-        <button type="button" className="secondary" onClick={onInspect}>
-          Inspect manifest
+        <button type="button" className="secondary" onClick={onInspect} disabled={!hasManifest}>
+          {hasManifest ? 'Inspect manifest' : 'Manifest unavailable'}
         </button>
         <button type="button" onClick={onInstall} disabled={installDisabled || installed}>
           {installed ? 'Installed' : 'Install model pack'}
@@ -339,7 +352,11 @@ function StatusCard({
   );
 }
 
-function formatManifestChecksumStatus(inspection: ManifestInspectionResult | undefined): string {
+function formatManifestChecksumStatus(
+  inspection: ManifestInspectionResult | undefined,
+  hasManifest: boolean,
+): string {
+  if (!hasManifest) return 'not available';
   if (inspection === undefined) return 'pending';
   return inspection.manifestSha256MatchesCatalog ? 'verified' : 'mismatch';
 }
