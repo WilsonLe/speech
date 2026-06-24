@@ -116,6 +116,60 @@ export interface SpeechProfileManifestV1 {
   };
 }
 
+/** Adaptation source runtime for browser-trained artifacts. */
+export type ProfileAdapterSource = 'python' | 'docker' | 'browser';
+
+/**
+ * Browser-trained top residual adapter adaptation (V2-only union member).
+ *
+ * The weights are voice-derived sensitive data; the manifest references them by
+ * checksum and never embeds raw audio, transcripts, frozen features, or checkpoints.
+ */
+export interface BrowserTopAdapterAdaptationV1 {
+  readonly type: 'browser-top-adapter';
+  readonly contractVersion: 1;
+  readonly algorithmId: 'browser-top-adapter-frame-ce-v1';
+  readonly source: 'browser';
+  readonly weights: ProfileFileRef;
+  readonly speakerEmbedding?: ProfileFileRef;
+  readonly vocabularyRevision?: number;
+  readonly trainingJobId: string;
+  readonly evaluationId: string;
+}
+
+/** CLI-trained residual adapter adaptation (V1-compatible member of the V2 union). */
+export type CliResidualAdapterAdaptationV1 = ResidualAdapterAdaptationV1;
+/** Legacy merged-model adaptation (V1-compatible member of the V2 union). */
+export type LegacyMergedModelAdaptationV1 = MergedModelAdaptationV1;
+
+/**
+ * V2 adaptation union. V1 adaptations remain valid V2 members; the
+ * `browser-top-adapter` member is the only addition. Existing CLI residual
+ * adapters are never rewritten or converted during migration.
+ */
+export type SpeechProfileAdaptationV2 =
+  | SpeakerEmbeddingAdaptationV1
+  | CliResidualAdapterAdaptationV1
+  | BrowserTopAdapterAdaptationV1
+  | LegacyMergedModelAdaptationV1;
+
+/**
+ * Speech profile manifest V2. Adds the browser-trained adapter adaptation while
+ * preserving every V1 field. V1 manifests remain loadable; upgrade is atomic and
+ * copy-on-write at the storage layer (profile.v2.json) so a failed migration
+ * leaves the original V1 archive intact.
+ */
+export interface SpeechProfileManifestV2 extends Omit<
+  SpeechProfileManifestV1,
+  'schemaVersion' | 'adaptation'
+> {
+  readonly schemaVersion: 2;
+  readonly adaptation: SpeechProfileAdaptationV2;
+}
+
+/** Discriminated union of supported profile manifest schema versions. */
+export type SpeechProfileManifest = SpeechProfileManifestV1 | SpeechProfileManifestV2;
+
 export interface ProfileManifestValidationResult {
   readonly ok: boolean;
   readonly errors: readonly string[];
@@ -136,12 +190,37 @@ const trainingRuntimeValues = new Set<ProfileTrainingRuntime>([
 ]);
 
 export function validateSpeechProfileManifestV1(value: unknown): ProfileManifestValidationResult {
+  return validateSpeechProfileManifestCore(value, 1, false);
+}
+
+export function validateSpeechProfileManifestV2(value: unknown): ProfileManifestValidationResult {
+  return validateSpeechProfileManifestCore(value, 2, true);
+}
+
+/** Dispatch validator across supported profile manifest schema versions. */
+export function validateSpeechProfileManifest(value: unknown): ProfileManifestValidationResult {
+  if (!isRecord(value)) {
+    return { ok: false, errors: ['profile manifest must be an object'] };
+  }
+  const version = value['schemaVersion'];
+  if (version === 1) return validateSpeechProfileManifestV1(value);
+  if (version === 2) return validateSpeechProfileManifestV2(value);
+  return { ok: false, errors: ['schemaVersion must be 1 or 2'] };
+}
+
+function validateSpeechProfileManifestCore(
+  value: unknown,
+  expectedVersion: 1 | 2,
+  allowBrowserAdapter: boolean,
+): ProfileManifestValidationResult {
   const errors: string[] = [];
   if (!isRecord(value)) {
     return { ok: false, errors: ['profile manifest must be an object'] };
   }
 
-  if (value['schemaVersion'] !== 1) errors.push('schemaVersion must be 1');
+  if (value['schemaVersion'] !== expectedVersion) {
+    errors.push(`schemaVersion must be ${expectedVersion.toString()}`);
+  }
   validatePatternString(value['id'], 'id', profileIdPattern, errors);
   validateNonEmptyString(value['displayName'], 'displayName', errors);
   validateNonEmptyString(value['createdAt'], 'createdAt', errors);
@@ -152,7 +231,7 @@ export function validateSpeechProfileManifestV1(value: unknown): ProfileManifest
   if (value['vocabularyRevision'] !== undefined) {
     validateNonNegativeInteger(value['vocabularyRevision'], 'vocabularyRevision', errors);
   }
-  validateAdaptation(value['adaptation'], errors);
+  validateAdaptation(value['adaptation'], errors, allowBrowserAdapter);
   validateEvaluation(value['evaluation'], errors);
   validatePrivacy(value['privacy'], errors);
 
@@ -167,17 +246,64 @@ export function parseSpeechProfileManifestV1(value: unknown): SpeechProfileManif
   return value as SpeechProfileManifestV1;
 }
 
-function validateAdaptation(value: unknown, errors: string[]): void {
+export function parseSpeechProfileManifestV2(value: unknown): SpeechProfileManifestV2 {
+  const result = validateSpeechProfileManifestV2(value);
+  if (!result.ok) {
+    throw new Error(`Speech profile manifest v2 is invalid: ${result.errors.join('; ')}`);
+  }
+  return value as SpeechProfileManifestV2;
+}
+
+export function parseSpeechProfileManifest(value: unknown): SpeechProfileManifest {
+  if (!isRecord(value)) {
+    throw new Error('Speech profile manifest must be an object');
+  }
+  const version = value['schemaVersion'];
+  if (version === 1) return parseSpeechProfileManifestV1(value);
+  if (version === 2) return parseSpeechProfileManifestV2(value);
+  throw new Error(
+    `Speech profile manifest schemaVersion must be 1 or 2; received ${String(version)}`,
+  );
+}
+
+/**
+ * Copy-on-write V1 -> V2 migration. Produces a new V2 manifest without mutating
+ * the input. V1 adaptation members (including CLI residual adapters) remain
+ * valid V2 members and are never rewritten or retrained. The manifest is metadata
+ * only; it never carries raw audio, transcripts, frozen features, or checkpoints.
+ */
+export function migrateSpeechProfileManifestV1ToV2(
+  manifest: SpeechProfileManifestV1,
+): SpeechProfileManifestV2 {
+  const result = validateSpeechProfileManifestV1(manifest);
+  if (!result.ok) {
+    throw new Error(`Cannot migrate an invalid V1 profile manifest: ${result.errors.join('; ')}`);
+  }
+  const { schemaVersion: _omittedSchemaVersion, ...rest } = manifest;
+  void _omittedSchemaVersion;
+  return { ...rest, schemaVersion: 2 };
+}
+
+function validateAdaptation(value: unknown, errors: string[], allowBrowserAdapter: boolean): void {
   if (!isRecord(value)) {
     errors.push('adaptation must be an object');
     return;
   }
   const type = value['type'];
-  if (type !== 'speaker-embedding' && type !== 'residual-adapter' && type !== 'merged-model') {
+  const knownV1Type =
+    type === 'speaker-embedding' || type === 'residual-adapter' || type === 'merged-model';
+  const isBrowserTopAdapter = type === 'browser-top-adapter';
+  if (!knownV1Type && !(allowBrowserAdapter && isBrowserTopAdapter)) {
     errors.push('adaptation.type is not supported');
     return;
   }
   if (value['contractVersion'] !== 1) errors.push('adaptation.contractVersion must be 1');
+
+  if (isBrowserTopAdapter) {
+    validateBrowserTopAdapterBinding(value, errors);
+    return;
+  }
+
   const fileKeys = validateProfileFiles(value['files'], 'adaptation.files', errors);
 
   if (type === 'speaker-embedding') {
@@ -188,6 +314,32 @@ function validateAdaptation(value: unknown, errors: string[]): void {
   } else {
     validateMergedModelBinding(value['mergedModel'], fileKeys, errors);
   }
+}
+
+function validateBrowserTopAdapterBinding(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push('adaptation must be an object');
+    return;
+  }
+  if (value['algorithmId'] !== 'browser-top-adapter-frame-ce-v1') {
+    errors.push('adaptation.algorithmId must be browser-top-adapter-frame-ce-v1');
+  }
+  if (value['source'] !== 'browser') {
+    errors.push('adaptation.source must be browser');
+  }
+  validateProfileFileRef(value['weights'], 'adaptation.weights', errors);
+  if (value['speakerEmbedding'] !== undefined) {
+    validateProfileFileRef(value['speakerEmbedding'], 'adaptation.speakerEmbedding', errors);
+  }
+  if (value['vocabularyRevision'] !== undefined) {
+    validateNonNegativeInteger(
+      value['vocabularyRevision'],
+      'adaptation.vocabularyRevision',
+      errors,
+    );
+  }
+  validateNonEmptyString(value['trainingJobId'], 'adaptation.trainingJobId', errors);
+  validateNonEmptyString(value['evaluationId'], 'adaptation.evaluationId', errors);
 }
 
 function validateSpeakerEmbeddingBinding(
@@ -326,6 +478,17 @@ function validateTrainingProvenance(value: unknown, errors: string[]): void {
     errors,
   );
   validateNonNegativeInteger(value['randomSeed'], 'adaptation.training.randomSeed', errors);
+}
+
+function validateProfileFileRef(value: unknown, path: string, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+  validateNonEmptyString(value['path'], `${path}.path`, errors);
+  validatePatternString(value['sha256'], `${path}.sha256`, sha256Pattern, errors);
+  validatePositiveInteger(value['sizeBytes'], `${path}.sizeBytes`, errors);
+  validateNonEmptyString(value['mediaType'], `${path}.mediaType`, errors);
 }
 
 function validateProfileFiles(value: unknown, path: string, errors: string[]): ReadonlySet<string> {
