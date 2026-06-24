@@ -12,6 +12,80 @@ def load_example_manifest() -> dict[str, object]:
     return json.loads(EXAMPLE_MANIFEST_PATH.read_text())
 
 
+def enabled_context_biasing() -> dict[str, object]:
+    return {
+        "supported": True,
+        "algorithm": "aho-corasick",
+        "supportedEntryLanguages": ["vi", "en", "mixed"],
+        "maxActiveEntries": 250,
+        "maxPhraseTokens": 12,
+        "maxAliasesPerEntry": 4,
+        "maxAliasTokens": 12,
+        "defaultWeight": 3,
+        "maxCumulativeBonus": 8,
+        "weightRange": {"min": 0, "max": 10},
+        "presets": {"light": 1.5, "normal": 3, "strong": 6},
+        "scoring": {"prefixBonus": 1, "completionBonus": 4, "mismatchPenalty": 0.5},
+        "wordBoundary": {"mode": "token", "marker": "▁", "requireForSingleToken": True},
+        "revisionSwap": "utterance-boundary",
+        "diagnostics": {"emitMatchedVocabularyIds": True, "emitScoreBreakdown": True},
+    }
+
+
+def enabled_residual_adapter() -> dict[str, object]:
+    return {
+        "supported": True,
+        "contractVersion": 1,
+        "insertionPoints": [
+            {
+                "id": "encoder-block-11",
+                "targetGraph": "encoder",
+                "inputTensor": "encoder.block11.input",
+                "outputTensor": "encoder.block11.output",
+                "application": "residual-add",
+            }
+        ],
+        "maxParameters": 500_000,
+        "maxAdapterSizeBytes": 10_000_000,
+        "allowedPrecisions": ["float32", "float16", "int8"],
+        "activationSwap": "utterance-boundary",
+    }
+
+
+def add_adapter_graph(manifest: dict[str, object]) -> None:
+    files = deepcopy(manifest["files"])
+    assert isinstance(files, dict)
+    files["adapter"] = {
+        "url": "/models/mock/adapter.onnx",
+        "sha256": "3" * 64,
+        "sizeBytes": 1,
+        "mediaType": "application/octet-stream",
+    }
+    graphs = deepcopy(manifest["graphs"])
+    assert isinstance(graphs, dict)
+    graphs["adapter"] = {
+        "fileKey": "adapter",
+        "inputs": [
+            {
+                "name": "encoder.block11.input",
+                "dataType": "float16",
+                "shape": ["batch", "frames", 256],
+                "description": "Frozen base encoder activation.",
+            }
+        ],
+        "outputs": [
+            {
+                "name": "encoder.block11.output",
+                "dataType": "float16",
+                "shape": ["batch", "frames", 256],
+                "description": "Adapter residual output.",
+            }
+        ],
+    }
+    manifest["files"] = files
+    manifest["graphs"] = graphs
+
+
 def test_validate_manifest_v2_accepts_example_manifest() -> None:
     assert validate_manifest_v2(load_example_manifest()) == []
     assert validate_manifest_minimum(load_example_manifest()) == []
@@ -52,15 +126,160 @@ def test_validate_manifest_v2_rejects_token_ids_outside_vocabulary() -> None:
     tokenizer = deepcopy(manifest["tokenizer"])
     assert isinstance(tokenizer, dict)
     tokenizer["blankId"] = 4
-    tokenizer["languageTokenIds"] = {"vi": 10, "klingon": 2}
+    tokenizer["languageTokenIds"] = {"vi": 10, "en": 2, "klingon": 2}
     manifest["tokenizer"] = tokenizer
 
     errors = validate_manifest_v2(manifest)
 
     assert "supportedLanguageModes must include language vi" in errors
+    assert "supportedLanguageModes.auto requires both vi and en languages" in errors
     assert "tokenizer.blankId must be less than tokenizer.vocabularySize" in errors
     assert "tokenizer.languageTokenIds.vi must be less than tokenizer.vocabularySize" in errors
+    assert "tokenizer.languageTokenIds.en must reference a supported language mode" in errors
     assert "tokenizer.languageTokenIds.klingon is not a supported language mode" in errors
+
+
+def test_validate_manifest_v2_accepts_enabled_context_biasing_contract() -> None:
+    manifest = load_example_manifest()
+    manifest["contextBiasing"] = enabled_context_biasing()
+
+    assert validate_manifest_v2(manifest) == []
+
+
+def test_validate_manifest_v2_rejects_unsupported_context_biasing_limits() -> None:
+    manifest = load_example_manifest()
+    context_biasing = deepcopy(manifest["contextBiasing"])
+    assert isinstance(context_biasing, dict)
+    context_biasing["supportedEntryLanguages"] = ["vi"]
+    context_biasing["maxActiveEntries"] = 1
+    context_biasing["defaultWeight"] = 1
+    context_biasing["weightRange"] = {"min": 0, "max": 10}
+    context_biasing["diagnostics"] = {
+        "emitMatchedVocabularyIds": True,
+        "emitScoreBreakdown": False,
+    }
+    manifest["contextBiasing"] = context_biasing
+
+    errors = validate_manifest_v2(manifest)
+
+    assert "contextBiasing.supportedEntryLanguages must be empty when unsupported" in errors
+    assert "contextBiasing.maxActiveEntries must be 0 when unsupported" in errors
+    assert "contextBiasing.defaultWeight must be 0 when unsupported" in errors
+    assert "contextBiasing.weightRange must be 0..0 when unsupported" in errors
+    assert "contextBiasing.diagnostics must be false when unsupported" in errors
+
+
+def test_validate_manifest_v2_rejects_context_biasing_scoring_and_language_limits() -> None:
+    manifest = load_example_manifest()
+    manifest["supportedLanguageModes"] = ["vi", "en", "mixed"]
+    context_biasing = enabled_context_biasing()
+    context_biasing["supportedEntryLanguages"] = ["vi", "auto"]
+    context_biasing["maxAliasTokens"] = 0
+    context_biasing["defaultWeight"] = 12
+    context_biasing["maxCumulativeBonus"] = 3
+    context_biasing["presets"] = {"light": 2, "normal": 1, "strong": 12}
+    context_biasing["scoring"] = {
+        "prefixBonus": 4,
+        "completionBonus": 5,
+        "mismatchPenalty": 0,
+    }
+    context_biasing["diagnostics"] = {
+        "emitMatchedVocabularyIds": False,
+        "emitScoreBreakdown": True,
+    }
+    manifest["contextBiasing"] = context_biasing
+
+    errors = validate_manifest_v2(manifest)
+
+    assert (
+        "contextBiasing.supportedEntryLanguages.auto must reference a supported language mode"
+        in errors
+    )
+    assert "contextBiasing.maxAliasTokens must be positive when aliases are enabled" in errors
+    assert "contextBiasing.defaultWeight must be within contextBiasing.weightRange" in errors
+    assert "contextBiasing.presets.strong must be within contextBiasing.weightRange" in errors
+    assert "contextBiasing.presets must be ordered light <= normal <= strong" in errors
+    assert "contextBiasing.scoring.prefixBonus must not exceed maxCumulativeBonus" in errors
+    assert "contextBiasing.scoring.completionBonus must not exceed maxCumulativeBonus" in errors
+    assert (
+        "contextBiasing.diagnostics.emitMatchedVocabularyIds must be true when supported" in errors
+    )
+
+
+def test_validate_manifest_v2_accepts_residual_adapter_contract() -> None:
+    manifest = load_example_manifest()
+    add_adapter_graph(manifest)
+    manifest["personalization"] = {"residualAdapter": enabled_residual_adapter()}
+
+    assert validate_manifest_v2(manifest) == []
+
+
+def test_validate_manifest_v2_rejects_residual_adapter_graph_binding_mismatch() -> None:
+    manifest = load_example_manifest()
+    add_adapter_graph(manifest)
+    graphs = manifest["graphs"]
+    assert isinstance(graphs, dict)
+    adapter = graphs["adapter"]
+    assert isinstance(adapter, dict)
+    adapter["inputs"] = [
+        {
+            "name": "actual.input",
+            "dataType": "float16",
+            "shape": ["batch", "frames", 256],
+            "description": "Actual adapter input.",
+        }
+    ]
+    adapter["outputs"] = [
+        {
+            "name": "actual.output",
+            "dataType": "float16",
+            "shape": ["batch", "frames", 256],
+            "description": "Actual adapter output.",
+        }
+    ]
+    manifest["personalization"] = {"residualAdapter": enabled_residual_adapter()}
+
+    errors = validate_manifest_v2(manifest)
+
+    assert (
+        "personalization.residualAdapter.insertionPoints[0].inputTensor "
+        "must reference graphs.adapter.inputs"
+    ) in errors
+    assert (
+        "personalization.residualAdapter.insertionPoints[0].outputTensor "
+        "must reference graphs.adapter.outputs"
+    ) in errors
+
+
+def test_validate_manifest_v2_rejects_residual_adapter_runtime_bounds() -> None:
+    manifest = load_example_manifest()
+    manifest["personalization"] = {
+        "residualAdapter": {
+            **enabled_residual_adapter(),
+            "insertionPoints": [],
+            "maxParameters": 0,
+            "maxAdapterSizeBytes": 0,
+            "allowedPrecisions": [],
+            "activationSwap": "while-listening",
+        }
+    }
+
+    errors = validate_manifest_v2(manifest)
+
+    assert "graphs.adapter is required when residual adapters are supported" in errors
+    assert (
+        "personalization.residualAdapter.insertionPoints must not be empty when supported" in errors
+    )
+    assert (
+        "personalization.residualAdapter.allowedPrecisions must not be empty when supported"
+        in errors
+    )
+    assert "personalization.residualAdapter.maxParameters must be positive when supported" in errors
+    assert (
+        "personalization.residualAdapter.maxAdapterSizeBytes must be positive when supported"
+        in errors
+    )
+    assert "personalization.residualAdapter.activationSwap must be utterance-boundary" in errors
 
 
 def test_validate_manifest_v2_rejects_bad_state_relationships() -> None:

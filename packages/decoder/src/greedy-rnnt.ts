@@ -6,6 +6,7 @@ export interface GreedyRnntDecoderOptions {
   readonly maxSymbolsPerFrame: number;
   readonly initialTokenId?: number;
   readonly maxTotalSymbols?: number;
+  readonly maxScoreAdjustment?: number;
 }
 
 export interface GreedyRnntDecodeContext {
@@ -14,15 +15,32 @@ export interface GreedyRnntDecodeContext {
   readonly symbolIndexForFrame: number;
   readonly lastTokenId: number;
   readonly totalSymbols: number;
+  readonly emittedTokens: readonly number[];
 }
 
 export type GreedyRnntLogitsProvider = (
   context: GreedyRnntDecodeContext,
 ) => GreedyRnntLogits | Promise<GreedyRnntLogits>;
 
+export interface GreedyRnntTokenScoreAdjustment {
+  readonly tokenId: number;
+  readonly score: number;
+  readonly matchedVocabularyIds?: readonly string[];
+}
+
+export type GreedyRnntScoreAdjuster = (
+  context: GreedyRnntDecodeContext,
+) => readonly GreedyRnntTokenScoreAdjustment[] | Promise<readonly GreedyRnntTokenScoreAdjustment[]>;
+
 export interface GreedyRnntDecodeChunkOptions {
   readonly frameCount: number;
   readonly logitsForStep: GreedyRnntLogitsProvider;
+  readonly scoreAdjustmentsForStep?: GreedyRnntScoreAdjuster;
+}
+
+export interface GreedyRnntArgmaxOptions {
+  readonly scoreAdjustments?: readonly GreedyRnntTokenScoreAdjustment[];
+  readonly maxScoreAdjustment?: number;
 }
 
 export interface GreedyRnntToken {
@@ -30,6 +48,9 @@ export interface GreedyRnntToken {
   readonly frameIndex: number;
   readonly symbolIndexForFrame: number;
   readonly score: number;
+  readonly scoreAdjustment?: number;
+  readonly adjustedScore?: number;
+  readonly matchedVocabularyIds?: readonly string[];
 }
 
 export type GreedyRnntLimitReason = 'max-symbols-per-frame' | 'max-total-symbols';
@@ -55,6 +76,7 @@ export class GreedyRnntDecoder {
   private readonly maxSymbolsPerFrame: number;
   private readonly initialTokenId: number;
   private readonly maxTotalSymbols: number | undefined;
+  private readonly maxScoreAdjustment: number | undefined;
   private lastTokenId: number;
   private nextFrameIndex = 0;
   private totalSymbols = 0;
@@ -75,6 +97,10 @@ export class GreedyRnntDecoder {
     this.maxTotalSymbols = validateOptionalPositiveInteger(
       options.maxTotalSymbols,
       'maxTotalSymbols',
+    );
+    this.maxScoreAdjustment = validateOptionalNonNegativeNumber(
+      options.maxScoreAdjustment,
+      'maxScoreAdjustment',
     );
     this.lastTokenId = this.initialTokenId;
   }
@@ -110,14 +136,23 @@ export class GreedyRnntDecoder {
         symbolIndexForFrame < this.maxSymbolsPerFrame;
         symbolIndexForFrame += 1
       ) {
-        const logits = await options.logitsForStep({
+        const context: GreedyRnntDecodeContext = {
           frameIndex,
           frameOffset,
           symbolIndexForFrame,
           lastTokenId: this.lastTokenId,
           totalSymbols: this.totalSymbols,
+          emittedTokens: [...this.tokens],
+        };
+        const logits = await options.logitsForStep(context);
+        const scoreAdjustments = await options.scoreAdjustmentsForStep?.(context);
+        const selected = argmaxToken(logits, this.vocabularySize, {
+          ...(scoreAdjustments !== undefined ? { scoreAdjustments } : {}),
+          ...(this.maxScoreAdjustment !== undefined
+            ? { maxScoreAdjustment: this.maxScoreAdjustment }
+            : {}),
         });
-        const { tokenId, score } = argmaxToken(logits, this.vocabularySize);
+        const { tokenId, score } = selected;
 
         if (tokenId === this.blankId) {
           blankSeen = true;
@@ -129,6 +164,15 @@ export class GreedyRnntDecoder {
           frameIndex,
           symbolIndexForFrame,
           score,
+          ...(selected.scoreAdjustment !== undefined
+            ? { scoreAdjustment: selected.scoreAdjustment }
+            : {}),
+          ...(selected.adjustedScore !== undefined
+            ? { adjustedScore: selected.adjustedScore }
+            : {}),
+          ...(selected.matchedVocabularyIds !== undefined
+            ? { matchedVocabularyIds: selected.matchedVocabularyIds }
+            : {}),
         };
         chunkTokens.push(token);
         this.tokens.push(tokenId);
@@ -170,24 +214,97 @@ export class GreedyRnntDecoder {
 export function argmaxToken(
   logits: GreedyRnntLogits,
   vocabularySize: number,
-): { readonly tokenId: number; readonly score: number } {
+  options: GreedyRnntArgmaxOptions = {},
+): {
+  readonly tokenId: number;
+  readonly score: number;
+  readonly scoreAdjustment?: number;
+  readonly adjustedScore?: number;
+  readonly matchedVocabularyIds?: readonly string[];
+} {
   const checkedVocabularySize = validatePositiveInteger(vocabularySize, 'vocabularySize');
+  const maxScoreAdjustment = validateOptionalNonNegativeNumber(
+    options.maxScoreAdjustment,
+    'maxScoreAdjustment',
+  );
   if (logits.length < checkedVocabularySize) {
     throw new Error(
       `RNN-T logits length ${logits.length.toString()} is smaller than vocabulary size ${checkedVocabularySize.toString()}.`,
     );
   }
 
+  const adjustments = normalizeScoreAdjustments(
+    options.scoreAdjustments ?? [],
+    checkedVocabularySize,
+    maxScoreAdjustment,
+  );
   let bestTokenId = 0;
   let bestScore = readLogit(logits, 0);
+  let bestAdjustment = adjustments.get(0);
+  let bestAdjustedScore = bestScore + (bestAdjustment?.score ?? 0);
   for (let tokenId = 1; tokenId < checkedVocabularySize; tokenId += 1) {
     const score = readLogit(logits, tokenId);
-    if (score > bestScore) {
+    const adjustment = adjustments.get(tokenId);
+    const adjustedScore = score + (adjustment?.score ?? 0);
+    if (adjustedScore > bestAdjustedScore) {
       bestTokenId = tokenId;
       bestScore = score;
+      bestAdjustment = adjustment;
+      bestAdjustedScore = adjustedScore;
     }
   }
-  return { tokenId: bestTokenId, score: bestScore };
+  return {
+    tokenId: bestTokenId,
+    score: bestScore,
+    ...(bestAdjustment !== undefined && bestAdjustment.score !== 0
+      ? {
+          scoreAdjustment: bestAdjustment.score,
+          adjustedScore: bestAdjustedScore,
+          ...(bestAdjustment.matchedVocabularyIds.length > 0
+            ? { matchedVocabularyIds: bestAdjustment.matchedVocabularyIds }
+            : {}),
+        }
+      : {}),
+  };
+}
+
+function normalizeScoreAdjustments(
+  adjustments: readonly GreedyRnntTokenScoreAdjustment[],
+  vocabularySize: number,
+  maxScoreAdjustment: number | undefined,
+): ReadonlyMap<
+  number,
+  { readonly score: number; readonly matchedVocabularyIds: readonly string[] }
+> {
+  const byToken = new Map<number, { score: number; matchedVocabularyIds: Set<string> }>();
+  for (const adjustment of adjustments) {
+    const tokenId = validateTokenId(adjustment.tokenId, 'scoreAdjustment.tokenId', vocabularySize);
+    if (!Number.isFinite(adjustment.score)) {
+      throw new Error('scoreAdjustment.score must be a finite number.');
+    }
+    const current = byToken.get(tokenId) ?? { score: 0, matchedVocabularyIds: new Set<string>() };
+    current.score += adjustment.score;
+    for (const vocabularyId of adjustment.matchedVocabularyIds ?? []) {
+      current.matchedVocabularyIds.add(vocabularyId);
+    }
+    byToken.set(tokenId, current);
+  }
+
+  return new Map(
+    [...byToken.entries()].map(([tokenId, value]) => {
+      const score =
+        maxScoreAdjustment === undefined
+          ? value.score
+          : clamp(value.score, -maxScoreAdjustment, maxScoreAdjustment);
+      return [
+        tokenId,
+        {
+          score,
+          matchedVocabularyIds: [...value.matchedVocabularyIds].sort(),
+        },
+      ];
+    }),
+  );
 }
 
 function readLogit(logits: GreedyRnntLogits, index: number): number {
@@ -215,6 +332,17 @@ function validateOptionalPositiveInteger(
   return validatePositiveInteger(value, name);
 }
 
+function validateOptionalNonNegativeNumber(
+  value: number | undefined,
+  name: string,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a finite non-negative number.`);
+  }
+  return value;
+}
+
 function validateNonNegativeInteger(value: number, name: string): number {
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(`${name} must be a non-negative integer.`);
@@ -227,4 +355,8 @@ function validateTokenId(value: number, name: string, vocabularySize: number): n
     throw new Error(`${name} must be an integer token id in [0, vocabularySize).`);
   }
   return value;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
