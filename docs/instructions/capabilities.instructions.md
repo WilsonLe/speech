@@ -1,0 +1,14 @@
+---
+description: 'Browser capability probing, execution tier selection, and diagnostics UI rules.'
+applyTo: 'apps/web/src/capabilities/**,apps/web/src/app/DiagnosticsPanel.tsx,apps/web/src/workers/capability-benchmark.worker.ts'
+---
+
+# Capability diagnostics
+
+- Probe browser APIs directly; do not infer support from user-agent strings.
+- Keep capability probes testable through injected environment objects.
+- Select execution tiers from secure context, microphone APIs, AudioWorklet, Workers, SharedArrayBuffer/cross-origin isolation, WASM SIMD/threads, and WebGPU device creation.
+- Warn visibly when cross-origin isolation is missing because the app must use transferable buffers instead of shared memory.
+- Keep the worker round-trip benchmark independent from ASR/model workers.
+- Capability report downloads must be local JSON generated in the browser; do not send diagnostics to a network service by default.
+- Passive diagnostics must not request microphone permission or persistent-storage permission; reserve those prompts for explicit user actions.

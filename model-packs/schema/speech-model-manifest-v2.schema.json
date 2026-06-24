@@ -3,6 +3,7 @@
   "$id": "https://wilsonle.github.io/speech/schemas/speech-model-manifest-v2.schema.json",
   "title": "SpeechModelManifestV2",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "schemaVersion",
     "id",
@@ -27,7 +28,7 @@
     },
     "id": {
       "type": "string",
-      "minLength": 1
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
     },
     "version": {
       "type": "string",
@@ -40,7 +41,7 @@
     "languages": {
       "type": "array",
       "items": {
-        "enum": ["vi", "en"]
+        "$ref": "#/$defs/language"
       },
       "minItems": 1,
       "uniqueItems": true
@@ -48,7 +49,7 @@
     "supportedLanguageModes": {
       "type": "array",
       "items": {
-        "enum": ["vi", "en", "auto", "mixed"]
+        "$ref": "#/$defs/languageMode"
       },
       "minItems": 1,
       "uniqueItems": true
@@ -56,15 +57,76 @@
     "architecture": {
       "const": "rnnt"
     },
+    "license": {
+      "$ref": "#/$defs/license"
+    },
     "sampleRateHz": {
       "const": 16000
     },
+    "feature": {
+      "$ref": "#/$defs/feature"
+    },
+    "tokenizer": {
+      "$ref": "#/$defs/tokenizer"
+    },
+    "streaming": {
+      "$ref": "#/$defs/streaming"
+    },
+    "contextBiasing": {
+      "$ref": "#/$defs/contextBiasing"
+    },
+    "personalization": {
+      "$ref": "#/$defs/personalization"
+    },
+    "files": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/fileRef"
+      }
+    },
+    "graphs": {
+      "$ref": "#/$defs/graphs"
+    },
+    "recommended": {
+      "$ref": "#/$defs/recommended"
+    }
+  },
+  "$defs": {
+    "language": {
+      "enum": ["vi", "en"]
+    },
+    "languageMode": {
+      "enum": ["vi", "en", "auto", "mixed"]
+    },
+    "tensorDataType": {
+      "enum": ["float32", "float16", "int32", "int64", "uint8", "int8", "bool"]
+    },
     "license": {
       "type": "object",
-      "required": ["name", "redistributionAllowed"]
+      "additionalProperties": false,
+      "required": ["name", "redistributionAllowed"],
+      "properties": {
+        "spdx": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "noticeUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "redistributionAllowed": {
+          "type": "boolean"
+        }
+      }
     },
     "feature": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "type",
         "bins",
@@ -75,38 +137,541 @@
         "highFreqHz",
         "dither",
         "snipEdges"
-      ]
+      ],
+      "properties": {
+        "type": {
+          "const": "log-mel"
+        },
+        "bins": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameLengthMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "frameShiftMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "fftSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lowFreqHz": {
+          "type": "number",
+          "minimum": 0
+        },
+        "highFreqHz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 8000
+        },
+        "dither": {
+          "type": "number",
+          "minimum": 0
+        },
+        "snipEdges": {
+          "type": "boolean"
+        }
+      }
     },
     "tokenizer": {
       "type": "object",
-      "required": ["type", "vocabularySize", "byteFallback", "blankId"]
+      "additionalProperties": false,
+      "required": ["type", "vocabularySize", "byteFallback", "blankId"],
+      "properties": {
+        "type": {
+          "enum": ["sentencepiece", "tokens"]
+        },
+        "vocabularySize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "byteFallback": {
+          "type": "boolean"
+        },
+        "blankId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unkId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bosId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "eosId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "languageTokenIds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vi": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "en": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "auto": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mixed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "wordBoundaryMarker": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "streaming": {
       "type": "object",
-      "required": ["chunkFrames", "chunkShiftFrames", "rightContextFrames", "maxSymbolsPerFrame"]
+      "additionalProperties": false,
+      "required": ["chunkFrames", "chunkShiftFrames", "rightContextFrames", "maxSymbolsPerFrame"],
+      "properties": {
+        "chunkFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chunkShiftFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rightContextFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxSymbolsPerFrame": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
     },
     "contextBiasing": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "supported",
         "algorithm",
+        "supportedEntryLanguages",
         "maxActiveEntries",
         "maxPhraseTokens",
+        "maxAliasesPerEntry",
+        "maxAliasTokens",
         "defaultWeight",
-        "maxCumulativeBonus"
-      ]
+        "maxCumulativeBonus",
+        "weightRange",
+        "presets",
+        "scoring",
+        "wordBoundary",
+        "revisionSwap",
+        "diagnostics"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "algorithm": {
+          "enum": ["token-trie", "aho-corasick"]
+        },
+        "supportedEntryLanguages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/languageMode"
+          },
+          "uniqueItems": true
+        },
+        "maxActiveEntries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxPhraseTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxAliasesPerEntry": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxAliasTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "defaultWeight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maxCumulativeBonus": {
+          "type": "number",
+          "minimum": 0
+        },
+        "weightRange": {
+          "$ref": "#/$defs/contextBiasingWeightRange"
+        },
+        "presets": {
+          "$ref": "#/$defs/contextBiasingPresets"
+        },
+        "scoring": {
+          "$ref": "#/$defs/contextBiasingScoring"
+        },
+        "wordBoundary": {
+          "$ref": "#/$defs/contextBiasingWordBoundary"
+        },
+        "revisionSwap": {
+          "const": "utterance-boundary"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/contextBiasingDiagnostics"
+        }
+      }
     },
-    "files": {
+    "fileRef": {
       "type": "object",
-      "minProperties": 1
+      "additionalProperties": false,
+      "required": ["url", "sha256", "sizeBytes", "mediaType"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "graphs": {
       "type": "object",
-      "required": ["encoder", "predictor", "joiner"]
+      "additionalProperties": false,
+      "required": ["encoder", "predictor", "joiner"],
+      "properties": {
+        "encoder": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "predictor": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "joiner": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "speakerEncoder": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "adapter": {
+          "$ref": "#/$defs/graphContract"
+        },
+        "finalizer": {
+          "$ref": "#/$defs/graphContract"
+        }
+      }
+    },
+    "graphContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileKey", "inputs", "outputs"],
+      "properties": {
+        "fileKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensorContract"
+          },
+          "minItems": 1
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensorContract"
+          },
+          "minItems": 1
+        },
+        "stateRelationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/graphStateRelationship"
+          }
+        }
+      }
+    },
+    "tensorContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "dataType", "shape", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataType": {
+          "$ref": "#/$defs/tensorDataType"
+        },
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          }
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "graphStateRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output", "resetAtUtteranceBoundary"],
+      "properties": {
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resetAtUtteranceBoundary": {
+          "type": "boolean"
+        }
+      }
+    },
+    "personalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "speakerEmbedding": {
+          "$ref": "#/$defs/speakerEmbedding"
+        },
+        "residualAdapter": {
+          "$ref": "#/$defs/residualAdapter"
+        }
+      }
+    },
+    "speakerEmbedding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported", "dimension", "inputName", "encoderFileKey"],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "dimension": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "inputName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "encoderFileKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "residualAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "contractVersion",
+        "insertionPoints",
+        "maxParameters",
+        "maxAdapterSizeBytes",
+        "allowedPrecisions",
+        "activationSwap"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "contractVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "insertionPoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/residualAdapterInsertionPoint"
+          }
+        },
+        "maxParameters": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxAdapterSizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowedPrecisions": {
+          "type": "array",
+          "items": {
+            "enum": ["float32", "float16", "int8"]
+          },
+          "uniqueItems": true
+        },
+        "activationSwap": {
+          "const": "utterance-boundary"
+        }
+      }
     },
     "recommended": {
       "type": "object",
-      "required": ["webgpu", "wasmThreads", "expectedMemoryMb"]
+      "additionalProperties": false,
+      "required": ["webgpu", "wasmThreads", "expectedMemoryMb"],
+      "properties": {
+        "webgpu": {
+          "type": "boolean"
+        },
+        "wasmThreads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expectedMemoryMb": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "contextBiasingWeightRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "contextBiasingPresets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["light", "normal", "strong"],
+      "properties": {
+        "light": {
+          "type": "number",
+          "minimum": 0
+        },
+        "normal": {
+          "type": "number",
+          "minimum": 0
+        },
+        "strong": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "contextBiasingScoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefixBonus", "completionBonus", "mismatchPenalty"],
+      "properties": {
+        "prefixBonus": {
+          "type": "number",
+          "minimum": 0
+        },
+        "completionBonus": {
+          "type": "number",
+          "minimum": 0
+        },
+        "mismatchPenalty": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "contextBiasingWordBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "requireForSingleToken"],
+      "properties": {
+        "mode": {
+          "enum": ["none", "token", "unicode-word"]
+        },
+        "marker": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requireForSingleToken": {
+          "type": "boolean"
+        }
+      }
+    },
+    "contextBiasingDiagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["emitMatchedVocabularyIds", "emitScoreBreakdown"],
+      "properties": {
+        "emitMatchedVocabularyIds": {
+          "type": "boolean"
+        },
+        "emitScoreBreakdown": {
+          "type": "boolean"
+        }
+      }
+    },
+    "residualAdapterInsertionPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "targetGraph", "inputTensor", "outputTensor", "application"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetGraph": {
+          "enum": ["encoder", "predictor", "joiner"]
+        },
+        "inputTensor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputTensor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "application": {
+          "enum": ["residual-add", "lhuc-scale", "film-affine"]
+        }
+      }
     }
   }
 }

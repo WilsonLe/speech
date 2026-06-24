@@ -1,3 +1,5 @@
+export * from './transcript';
+
 export interface FormatterPackageInfo {
   readonly name: '@speech/formatter';
   readonly status: 'planned' | 'active';
@@ -6,6 +8,6 @@ export interface FormatterPackageInfo {
 
 export const packageInfo: FormatterPackageInfo = {
   name: '@speech/formatter',
-  status: 'planned',
+  status: 'active',
   description: 'Vietnamese/English normalization, detokenization, punctuation, and ITN.',
 };

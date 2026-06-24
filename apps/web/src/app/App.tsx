@@ -1,4 +1,11 @@
 import { RUNTIME_STATES } from '@speech/protocol';
+import { BenchmarkPanel } from './BenchmarkPanel';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { MicrophonePanel } from './MicrophonePanel';
+import { ModelRuntimePanel } from './ModelRuntimePanel';
+import { OfflineModelPanel } from './OfflineModelPanel';
+import { TranscriptPanel } from './TranscriptPanel';
+import { VocabularyPanel } from './VocabularyPanel';
 import { roadmap } from './milestones';
 
 const privacyPoints = [
@@ -18,10 +25,15 @@ export function App() {
           low-flicker partials, private vocabulary steering, and guided voice personalization.
         </p>
         <div className="hero-actions" aria-label="Foundation actions">
-          <button type="button">Model install placeholder</button>
-          <button type="button" className="secondary">
-            Diagnostics placeholder
-          </button>
+          <a className="button" href="#offline-model-title">
+            Manage offline model
+          </a>
+          <a className="button secondary" href="#diagnostics">
+            View diagnostics
+          </a>
+          <a className="button secondary" href="#benchmark">
+            Run benchmark
+          </a>
         </div>
       </section>
 
@@ -44,6 +56,14 @@ export function App() {
           </ul>
         </article>
       </section>
+
+      <TranscriptPanel />
+      <VocabularyPanel />
+      <OfflineModelPanel />
+      <DiagnosticsPanel />
+      <BenchmarkPanel />
+      <MicrophonePanel />
+      <ModelRuntimePanel />
 
       <section className="roadmap" aria-labelledby="roadmap-title">
         <h2 id="roadmap-title">Implementation roadmap</h2>

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "trainerVersion": "0.4.0-local",
+  "randomSeed": 20260623,
+  "epochs": 2,
+  "learningRate": 0.001,
+  "adapter": {
+    "insertionPointIds": ["encoder-block-11"],
+    "application": "residual-add",
+    "precision": "float32",
+    "parameterCount": 16,
+    "maxParameters": 500000,
+    "trainableParameterGroups": ["residual-adapter"],
+    "zeroCenteredRegularization": 0.01
+  }
+}
