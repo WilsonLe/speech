@@ -5,7 +5,7 @@ applyTo: 'model-packs/**,apps/web/public/model-catalog.json,apps/web/public/mode
 
 # Model-pack format
 
-- Start model manifests at schema version 2. For v0.5.0 browser personal-model work, add schema version 3 read/write support under ADR 0002 while preserving V2 read compatibility.
+- Start model manifests at schema version 2. For v0.5.0 browser personal-model work, add schema version 3 read/write support under ADR 0002 while preserving V2 read compatibility; ADR 0003 means the V3 browser-training contract must name `BrowserTrainingBackend` and not assume npm-provided ORT Training artifacts until their worker proof passes.
 - Validate manifests before downloading large assets.
 - Enumerate every graph input/output tensor name, data type, shape convention, and state-cache relationship.
 - Every graph `fileKey` and speaker-embedding `encoderFileKey` must reference a declared manifest `files` entry.

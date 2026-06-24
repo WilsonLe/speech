@@ -14,7 +14,11 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(trainingSpikeStatus.getByText('not exposed', { exact: true })).toBeVisible();
   await expect(trainingSpikeStatus.getByText('Training decision', { exact: true })).toBeVisible();
   await expect(
-    trainingSpikeStatus.getByText('defer; use local trainer', { exact: true }),
+    trainingSpikeStatus.getByText('fixed adapter-math backend required', { exact: true }),
+  ).toBeVisible();
+  await expect(trainingSpikeStatus.getByText('ORT package proof', { exact: true })).toBeVisible();
+  await expect(
+    trainingSpikeStatus.getByText('blocked-no-public-js-api-or-package-artifact', { exact: true }),
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Run browser training prototype' }).click();

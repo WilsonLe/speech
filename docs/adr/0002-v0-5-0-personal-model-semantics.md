@@ -40,10 +40,10 @@ The release contract freezes these names and compatibility surfaces for follow-o
 - adapter algorithm ID: `browser-top-adapter-frame-ce-v1`;
 - adapter architecture ID: `residual-bottleneck-lhuc-v1`.
 
-The browser-training backend decision is conditional on the feasibility gate in issue #128:
+The browser-training backend decision was resolved by ADR 0003 after the issue #128 feasibility gate:
 
-1. Prefer ONNX Runtime Web's training-enabled multithreaded WASM artifact only if the current pinned or deliberately updated version exposes a supported browser training entry point and completes the tiny forward/backward/optimizer/checkpoint/export proof.
-2. If that proof fails, the project must implement a fixed local WASM backend for the exact residual-bottleneck/LHUC adapter math behind the same `BrowserTrainingBackend` interface before production work proceeds.
+1. Prefer ONNX Runtime Web's training-enabled multithreaded WASM artifact only if a current pinned or deliberately updated version exposes a supported browser training entry point and completes the tiny forward/backward/optimizer/checkpoint/export proof.
+2. The pinned `onnxruntime-web@1.27.0` npm package does not satisfy that proof, so production work must implement a fixed local backend for the exact residual-bottleneck/LHUC adapter math behind the same `BrowserTrainingBackend` interface unless a future ORT Training artifact/API is proven.
 3. Ordinary transcription must not download, initialize, or depend on training assets.
 
 The required support tier for production browser training is desktop-first Chrome and Edge with all of the following capability gates:
