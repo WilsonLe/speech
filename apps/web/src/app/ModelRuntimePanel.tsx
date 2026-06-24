@@ -119,8 +119,10 @@ export function ModelRuntimePanel() {
           lightweight provider benchmark and fallback check, but it does not import ORT or
           instantiate model sessions. The check also loads a tiny generated residual-adapter graph
           in the worker and records aggregate adapter overhead without audio or transcript data.
-          Browser-only adapter training remains a blocked experiment for the pinned ORT Web package
-          until a public training artifact and JS API are available.
+          Browser personal-model training uses the repository-owned BrowserTrainingBackend boundary.
+          The pinned ORT Web package does not expose the documented training WASM artifact or public
+          JS training API, so follow-on work must use the fixed adapter-math backend unless a
+          reviewed ORT Training artifact passes the worker proof.
         </p>
       </div>
 
@@ -199,10 +201,14 @@ function TrainingSpikeStatus() {
       <div>
         <dt>Training decision</dt>
         <dd>
-          {browserTrainingSpikeReport.recommendation === 'defer-browser-training-prototype'
-            ? 'defer; use local trainer'
-            : 'prototype in training worker'}
+          {browserTrainingSpikeReport.backendDecision === 'fixed-adapter-math-fallback-required'
+            ? 'fixed adapter-math backend required'
+            : 'ORT Training worker candidate'}
         </dd>
+      </div>
+      <div>
+        <dt>ORT package proof</dt>
+        <dd>{browserTrainingSpikeReport.tinyTrainingProof.status}</dd>
       </div>
     </dl>
   );

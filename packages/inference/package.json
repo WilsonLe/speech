@@ -2,7 +2,7 @@
   "name": "@speech/inference",
   "version": "0.1.0",
   "private": true,
-  "description": "ONNX Runtime Web session adapters, provider selection, and training artifact spike helpers.",
+  "description": "ONNX Runtime Web session adapters, provider selection, adapter runtime smoke tests, and training feasibility reports.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {

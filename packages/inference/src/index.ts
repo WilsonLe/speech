@@ -13,5 +13,6 @@ export interface InferencePackageInfo {
 export const packageInfo: InferencePackageInfo = {
   name: '@speech/inference',
   status: 'active',
-  description: 'ONNX Runtime Web session, personal-adapter, provider, and training-spike helpers.',
+  description:
+    'ONNX Runtime Web session, personal-adapter, provider, and training feasibility helpers.',
 };

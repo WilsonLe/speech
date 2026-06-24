@@ -1,10 +1,20 @@
 export type OnnxRuntimeWebTrainingCapability =
   | 'not-present-in-pinned-package'
+  | 'documented-artifact-not-packaged'
   | 'public-api-candidate-detected';
 
 export type OnnxRuntimeWebTrainingRecommendation =
-  | 'defer-browser-training-prototype'
-  | 'prototype-in-dedicated-training-worker';
+  | 'use-fixed-adapter-math-backend'
+  | 'prototype-ort-training-in-dedicated-worker';
+
+export type BrowserTrainingBackendDecision =
+  | 'fixed-adapter-math-fallback-required'
+  | 'ort-training-wasm-candidate';
+
+export type BrowserTrainingProofStatus =
+  | 'blocked-no-public-js-api-or-package-artifact'
+  | 'not-run'
+  | 'passed';
 
 export interface OnnxRuntimeWebTrainingArtifactSnapshot {
   readonly packageName: string;
@@ -16,6 +26,15 @@ export interface OnnxRuntimeWebTrainingArtifactSnapshot {
   readonly runtimeExportNames?: readonly string[];
   readonly documentationEvidence?: readonly string[];
   readonly internalTrainingMentions?: readonly string[];
+  readonly officialDeploymentDocs?: {
+    readonly listsTrainingWasmArtifact: boolean;
+    readonly trainingWasmArtifactName?: string;
+    readonly separatesTrainingFromJsepArtifact: boolean;
+  };
+  readonly onDeviceTrainingDocs?: {
+    readonly offlineArtifactGenerationRequired: boolean;
+    readonly requiredArtifacts: readonly string[];
+  };
 }
 
 export interface OnnxRuntimeWebTrainingSpikeEvidenceV1 {
@@ -26,6 +45,25 @@ export interface OnnxRuntimeWebTrainingSpikeEvidenceV1 {
   readonly publicInferenceSymbols: readonly string[];
   readonly ignoredInternalTrainingMentions: readonly string[];
   readonly documentationEvidence: readonly string[];
+  readonly officialDeploymentDocs: {
+    readonly listsTrainingWasmArtifact: boolean;
+    readonly trainingWasmArtifactName?: string;
+    readonly separatesTrainingFromJsepArtifact: boolean;
+  };
+  readonly onDeviceTrainingDocs: {
+    readonly offlineArtifactGenerationRequired: boolean;
+    readonly requiredArtifacts: readonly string[];
+  };
+}
+
+export interface BrowserTrainingTinyProofV1 {
+  readonly status: BrowserTrainingProofStatus;
+  readonly forward: boolean;
+  readonly backward: boolean;
+  readonly optimizerStep: boolean;
+  readonly checkpointSaveLoad: boolean;
+  readonly weightExport: boolean;
+  readonly reason?: string;
 }
 
 export interface OnnxRuntimeWebTrainingSpikeReportV1 {
@@ -34,10 +72,15 @@ export interface OnnxRuntimeWebTrainingSpikeReportV1 {
   readonly packageVersion: string;
   readonly packageDescription?: string;
   readonly trainingApiAvailable: boolean;
+  readonly packageIncludesTrainingWasm: boolean;
+  readonly officialDocsListTrainingWasm: boolean;
   readonly capability: OnnxRuntimeWebTrainingCapability;
   readonly recommendation: OnnxRuntimeWebTrainingRecommendation;
+  readonly backendDecision: BrowserTrainingBackendDecision;
+  readonly tinyTrainingProof: BrowserTrainingTinyProofV1;
   readonly evidence: OnnxRuntimeWebTrainingSpikeEvidenceV1;
   readonly blockerReasons: readonly string[];
+  readonly followOnIssues: readonly string[];
   readonly privacy: {
     readonly inspectedPackageMetadataOnly: true;
     readonly containsAudio: false;
@@ -57,11 +100,12 @@ export interface BrowserTrainingExperimentApiContractV1 {
   readonly lifecycleMessages: readonly BrowserTrainingLifecycleMessage[];
   readonly requiredControls: readonly BrowserTrainingRequiredControl[];
   readonly requiredGates: readonly BrowserTrainingRequiredGate[];
+  readonly backendInterface: 'BrowserTrainingBackend';
   readonly artifactRules: {
     readonly baseModelImmutable: true;
     readonly previousActiveProfileUntouchedUntilGatePasses: true;
     readonly checkpointStorage: 'private-opfs-profile-directory';
-    readonly exportFormat: 'SpeechProfileManifestV1-residual-adapter-package';
+    readonly exportFormat: 'PortableSpeechModelManifestV1-browser-top-adapter';
   };
   readonly privacy: {
     readonly localOnly: true;
@@ -115,6 +159,22 @@ const PUBLIC_TRAINING_SYMBOLS = [
 
 const PUBLIC_INFERENCE_SYMBOLS = ['InferenceSession', 'Tensor', 'env'];
 
+const DEFAULT_OFFICIAL_DEPLOYMENT_DOCS = {
+  listsTrainingWasmArtifact: true,
+  trainingWasmArtifactName: 'ort-training-wasm-simd-threaded.wasm',
+  separatesTrainingFromJsepArtifact: true,
+} as const;
+
+const DEFAULT_ON_DEVICE_TRAINING_DOCS = {
+  offlineArtifactGenerationRequired: true,
+  requiredArtifacts: [
+    'training onnx model',
+    'checkpoint state',
+    'optimizer onnx model',
+    'eval onnx model',
+  ],
+} as const;
+
 export const pinnedOnnxRuntimeWebTrainingArtifactSnapshot: OnnxRuntimeWebTrainingArtifactSnapshot =
   {
     packageName: 'onnxruntime-web',
@@ -157,13 +217,17 @@ export const pinnedOnnxRuntimeWebTrainingArtifactSnapshot: OnnxRuntimeWebTrainin
     ].join('\n'),
     runtimeExportNames: ['env', 'InferenceSession', 'Tensor'],
     documentationEvidence: [
-      'npm package description identifies onnxruntime-web as a JavaScript library for running ONNX models on browsers.',
-      'Pinned package exports inference-oriented root/all/wasm/webgl/webgpu/jspi subpaths and no public training subpath.',
+      'ONNX Runtime Web deployment docs list a training-enabled artifact named ort-training-wasm-simd-threaded.wasm.',
+      'The same deployment docs distinguish that artifact from the JSEP/WebGPU artifact; training and WebGPU are not the same WASM binary.',
+      'ON-device training docs require offline generation of training, checkpoint, optimizer, and optional eval artifacts before edge-device training can run.',
+      'Pinned npm package exports inference-oriented root/all/wasm/webgl/webgpu/jspi subpaths and no public training subpath.',
     ],
     internalTrainingMentions: [
       'ONNX protobuf TrainingInfoProto schema is bundled as model-format metadata, not a public browser training API.',
       'WebGPU BatchNormalization trainingMode path throws unsupported in the pinned package sources.',
     ],
+    officialDeploymentDocs: DEFAULT_OFFICIAL_DEPLOYMENT_DOCS,
+    onDeviceTrainingDocs: DEFAULT_ON_DEVICE_TRAINING_DOCS,
   };
 
 export const browserTrainingExperimentApiContractV1: BrowserTrainingExperimentApiContractV1 = {
@@ -204,11 +268,12 @@ export const browserTrainingExperimentApiContractV1: BrowserTrainingExperimentAp
     'adapter-size-budget',
     'rtf-overhead-budget',
   ],
+  backendInterface: 'BrowserTrainingBackend',
   artifactRules: {
     baseModelImmutable: true,
     previousActiveProfileUntouchedUntilGatePasses: true,
     checkpointStorage: 'private-opfs-profile-directory',
-    exportFormat: 'SpeechProfileManifestV1-residual-adapter-package',
+    exportFormat: 'PortableSpeechModelManifestV1-browser-top-adapter',
   },
   privacy: {
     localOnly: true,
@@ -222,14 +287,29 @@ export const browserTrainingExperimentApiContractV1: BrowserTrainingExperimentAp
 export function analyzeOnnxRuntimeWebTrainingArtifact(
   snapshot: OnnxRuntimeWebTrainingArtifactSnapshot,
 ): OnnxRuntimeWebTrainingSpikeReportV1 {
+  const officialDeploymentDocs = snapshot.officialDeploymentDocs ?? {
+    listsTrainingWasmArtifact: false,
+    separatesTrainingFromJsepArtifact: false,
+  };
+  const onDeviceTrainingDocs = snapshot.onDeviceTrainingDocs ?? {
+    offlineArtifactGenerationRequired: false,
+    requiredArtifacts: [],
+  };
   const publicTrainingSubpaths = snapshot.packageExportSubpaths.filter(isTrainingSubpath);
   const distributionTrainingFiles = snapshot.distributionFiles.filter(isTrainingDistributionFile);
   const publicTrainingSymbols = detectSymbols(snapshot, PUBLIC_TRAINING_SYMBOLS);
   const publicInferenceSymbols = detectSymbols(snapshot, PUBLIC_INFERENCE_SYMBOLS);
-  const trainingApiAvailable =
-    publicTrainingSubpaths.length > 0 ||
-    distributionTrainingFiles.length > 0 ||
-    publicTrainingSymbols.length > 0;
+  const publicTrainingApiCandidate =
+    publicTrainingSubpaths.length > 0 || publicTrainingSymbols.length > 0;
+  const packageIncludesTrainingWasm = distributionTrainingFiles.some((file) =>
+    /ort-training-wasm-simd-threaded\.wasm$/i.test(file),
+  );
+  const trainingApiAvailable = publicTrainingApiCandidate && packageIncludesTrainingWasm;
+  const documentedArtifactIsMissing =
+    officialDeploymentDocs.listsTrainingWasmArtifact && !packageIncludesTrainingWasm;
+  const backendDecision: BrowserTrainingBackendDecision = trainingApiAvailable
+    ? 'ort-training-wasm-candidate'
+    : 'fixed-adapter-math-fallback-required';
 
   return {
     schemaVersion: 1,
@@ -239,12 +319,38 @@ export function analyzeOnnxRuntimeWebTrainingArtifact(
       ? {}
       : { packageDescription: snapshot.packageDescription }),
     trainingApiAvailable,
+    packageIncludesTrainingWasm,
+    officialDocsListTrainingWasm: officialDeploymentDocs.listsTrainingWasmArtifact,
     capability: trainingApiAvailable
       ? 'public-api-candidate-detected'
-      : 'not-present-in-pinned-package',
+      : documentedArtifactIsMissing
+        ? 'documented-artifact-not-packaged'
+        : 'not-present-in-pinned-package',
     recommendation: trainingApiAvailable
-      ? 'prototype-in-dedicated-training-worker'
-      : 'defer-browser-training-prototype',
+      ? 'prototype-ort-training-in-dedicated-worker'
+      : 'use-fixed-adapter-math-backend',
+    backendDecision,
+    tinyTrainingProof: trainingApiAvailable
+      ? {
+          status: 'not-run',
+          forward: false,
+          backward: false,
+          optimizerStep: false,
+          checkpointSaveLoad: false,
+          weightExport: false,
+          reason:
+            'A public training artifact/API candidate was detected; run the dedicated worker proof before enabling production training.',
+        }
+      : {
+          status: 'blocked-no-public-js-api-or-package-artifact',
+          forward: false,
+          backward: false,
+          optimizerStep: false,
+          checkpointSaveLoad: false,
+          weightExport: false,
+          reason:
+            'The pinned npm package lacks both ort-training-wasm-simd-threaded.wasm and public TrainingSession/CheckpointState symbols.',
+        },
     evidence: {
       publicExportSubpaths: [...snapshot.packageExportSubpaths],
       publicTrainingSubpaths,
@@ -253,14 +359,27 @@ export function analyzeOnnxRuntimeWebTrainingArtifact(
       publicInferenceSymbols,
       ignoredInternalTrainingMentions: [...(snapshot.internalTrainingMentions ?? [])],
       documentationEvidence: [...(snapshot.documentationEvidence ?? [])],
+      officialDeploymentDocs,
+      onDeviceTrainingDocs,
     },
     blockerReasons: trainingApiAvailable
       ? []
       : [
-          'Pinned onnxruntime-web package does not expose a public TrainingSession or training subpath.',
-          'Only inference runtime bundles are available through the package export map.',
-          'Browser adaptation must continue to use the local Python/Docker trainer path until a real browser training API and artifact are proven.',
+          'ONNX Runtime Web deployment docs describe a training WASM artifact, but the pinned npm package does not ship or export it.',
+          'The pinned package does not expose a public TrainingSession, CheckpointState, optimizer, or training subpath in its package exports/types/runtime surface.',
+          'The required tiny forward/backward/optimizer/checkpoint/export proof cannot run against the pinned package without vendoring or custom-building a training artifact and JS API.',
         ],
+    followOnIssues:
+      backendDecision === 'fixed-adapter-math-fallback-required'
+        ? [
+            '#144 must keep BrowserTrainingBackend implementation-agnostic.',
+            '#145 must implement the fixed adapter-math backend or first add a proven custom/updated ORT Training artifact.',
+            '#134 must not promise npm-provided ORT training artifacts until the artifact/API proof passes.',
+          ]
+        : [
+            '#144 must wrap the detected ORT Training surface behind BrowserTrainingBackend.',
+            '#145 must run the full worker proof before production activation.',
+          ],
     privacy: {
       inspectedPackageMetadataOnly: true,
       containsAudio: false,
@@ -284,6 +403,9 @@ export function assertBrowserTrainingExperimentContract(
   }
   if (contract.owner !== 'dedicated-training-worker') {
     throw new Error('Browser training must be owned by a dedicated training worker.');
+  }
+  if (contract.backendInterface !== 'BrowserTrainingBackend') {
+    throw new Error('Browser training must be hidden behind BrowserTrainingBackend.');
   }
   for (const forbiddenOwner of ['main-ui-thread', 'audio-worklet', 'asr-worker'] as const) {
     if (!contract.forbiddenOwners.includes(forbiddenOwner)) {
