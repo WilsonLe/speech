@@ -28,9 +28,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,json,wasm}'],
+        maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
       },
     }),
   ],
+  worker: {
+    format: 'es',
+  },
   test: {
     environment: 'node',
     globals: true,

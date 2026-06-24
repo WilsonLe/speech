@@ -1,9 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const chromiumExecutablePath = process.env['PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH'];
-const executableLaunchOptions = chromiumExecutablePath
-  ? { launchOptions: { executablePath: chromiumExecutablePath } }
-  : {};
+const launchOptions = {
+  ...(chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : {}),
+  args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+};
 
 export default defineConfig({
   testDir: './e2e',
@@ -12,7 +13,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
-    ...executableLaunchOptions,
+    launchOptions,
   },
   webServer: {
     command: 'pnpm build && pnpm preview --host 127.0.0.1',

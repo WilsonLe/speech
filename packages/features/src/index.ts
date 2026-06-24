@@ -1,11 +1,13 @@
+export * from './log-mel';
+
 export interface FeaturesPackageInfo {
   readonly name: '@speech/features';
-  readonly status: 'planned' | 'active';
+  readonly status: 'active';
   readonly description: string;
 }
 
 export const packageInfo: FeaturesPackageInfo = {
   name: '@speech/features',
-  status: 'planned',
+  status: 'active',
   description: 'Streaming acoustic feature extraction contracts and implementations.',
 };

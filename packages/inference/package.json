@@ -1,17 +1,22 @@
 {
   "name": "@speech/inference",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "ONNX Runtime Web session adapters and provider selection.",
+  "description": "ONNX Runtime Web session adapters, provider selection, and training artifact spike helpers.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./mock-adapter-fixture": "./src/mock-adapter-fixture.ts",
+    "./training-artifact-spike": "./src/training-artifact-spike.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
-  "devDependencies": {}
+  "dependencies": {
+    "@speech/protocol": "workspace:*",
+    "onnxruntime-web": "1.27.0"
+  }
 }
