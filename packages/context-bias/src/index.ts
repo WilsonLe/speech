@@ -1,3 +1,6 @@
+export * from './token-automaton';
+export * from './vocabulary-schema';
+
 export interface ContextBiasPackageInfo {
   readonly name: '@speech/context-bias';
   readonly status: 'planned' | 'active';
@@ -6,6 +9,6 @@ export interface ContextBiasPackageInfo {
 
 export const packageInfo: ContextBiasPackageInfo = {
   name: '@speech/context-bias',
-  status: 'planned',
+  status: 'active',
   description: 'Vocabulary schemas, token automata, and bounded contextual bias scoring.',
 };

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "minPersonalRelativeWerImprovement": 0.05,
+  "minPersonalRelativeCerImprovement": 0.05,
+  "minCustomTermRecallImprovement": 0.1,
+  "maxAnchorWerRegression": 0.02,
+  "maxRtfOverheadRatio": 0.15,
+  "maxAdapterSizeBytes": 10000000,
+  "requireAnchorPack": true
+}

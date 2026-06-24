@@ -1,0 +1,32 @@
+# Keep local Docker build contexts small and prevent accidental private speech data copies.
+.git
+.venv
+node_modules
+**/node_modules
+**/dist
+coverage
+playwright-report
+test-results
+.pytest_cache
+.ruff_cache
+
+# Generated model/profile/audio artifacts must not enter the trainer image context.
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.opus
+*.speechprofile
+*.speechprofile.json
+*.jsonl
+profiles/
+recordings/
+adapters/
+evaluations/
+out/
+artifacts/

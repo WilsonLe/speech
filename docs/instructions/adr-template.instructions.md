@@ -1,11 +1,11 @@
 ---
 description: 'ADR-style decision record template for architecture, privacy, model, deployment, and benchmark decisions.'
-applyTo: 'docs/instructions/*.instructions.md'
+applyTo: 'docs/adr/*.md,docs/instructions/adr-template.instructions.md'
 ---
 
 # ADR template
 
-Use this structure for durable decisions that affect architecture, privacy guarantees, model/profile contracts, benchmark methodology, deployment headers, or licensing gates.
+Use this structure for durable decisions under `docs/adr/*.md` that affect architecture, privacy guarantees, model/profile contracts, benchmark methodology, deployment headers, or licensing gates.
 
 ```markdown
 # ADR: <decision title>
