@@ -16,8 +16,12 @@
   "dependencies": {
     "@speech/audio": "workspace:*",
     "@speech/benchmark": "workspace:*",
+    "@speech/context-bias": "workspace:*",
+    "@speech/enrollment": "workspace:*",
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
+    "@speech/personalization": "workspace:*",
+    "@speech/profile-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
     "@vitejs/plugin-react": "^6.0.2",
     "react": "^19.1.0",

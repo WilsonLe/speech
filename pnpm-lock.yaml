@@ -47,12 +47,24 @@ importers:
       '@speech/benchmark':
         specifier: workspace:*
         version: link:../../packages/benchmark
+      '@speech/context-bias':
+        specifier: workspace:*
+        version: link:../../packages/context-bias
+      '@speech/enrollment':
+        specifier: workspace:*
+        version: link:../../packages/enrollment
       '@speech/inference':
         specifier: workspace:*
         version: link:../../packages/inference
       '@speech/model-manager':
         specifier: workspace:*
         version: link:../../packages/model-manager
+      '@speech/personalization':
+        specifier: workspace:*
+        version: link:../../packages/personalization
+      '@speech/profile-manager':
+        specifier: workspace:*
+        version: link:../../packages/profile-manager
       '@speech/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -91,13 +103,28 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-  packages/benchmark: {}
+  packages/benchmark:
+    dependencies:
+      '@speech/context-bias':
+        specifier: workspace:*
+        version: link:../context-bias
+      '@speech/formatter':
+        specifier: workspace:*
+        version: link:../formatter
 
-  packages/context-bias: {}
+  packages/context-bias:
+    dependencies:
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/decoder: {}
 
-  packages/enrollment: {}
+  packages/enrollment:
+    dependencies:
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/features: {}
 
@@ -118,9 +145,20 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-  packages/personalization: {}
+  packages/personalization:
+    dependencies:
+      '@speech/enrollment':
+        specifier: workspace:*
+        version: link:../enrollment
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
-  packages/profile-manager: {}
+  packages/profile-manager:
+    dependencies:
+      '@speech/enrollment':
+        specifier: workspace:*
+        version: link:../enrollment
 
   packages/protocol: {}
 

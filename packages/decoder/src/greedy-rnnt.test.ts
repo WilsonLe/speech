@@ -119,6 +119,67 @@ describe('GreedyRnntDecoder', () => {
     expect(decoder.snapshotState().tokens).toEqual([]);
   });
 
+  it('applies bounded contextual score adjustments during token selection', async () => {
+    const decoder = new GreedyRnntDecoder({
+      blankId,
+      vocabularySize,
+      maxSymbolsPerFrame: 2,
+      maxScoreAdjustment: 4,
+    });
+    const observedEmittedTokens: number[][] = [];
+
+    const result = await decoder.decodeChunk({
+      frameCount: 1,
+      logitsForStep: ({ symbolIndexForFrame }) => {
+        if (symbolIndexForFrame === 0) return logits([0, 4, 6, 0, 0]);
+        return blank();
+      },
+      scoreAdjustmentsForStep: (context) => {
+        observedEmittedTokens.push([...context.emittedTokens]);
+        if (context.symbolIndexForFrame !== 0) return [];
+        return [{ tokenId: 1, score: 4, matchedVocabularyIds: ['term-pangea'] }];
+      },
+    });
+
+    expect(result.tokens).toEqual([
+      {
+        tokenId: 1,
+        frameIndex: 0,
+        symbolIndexForFrame: 0,
+        score: 4,
+        scoreAdjustment: 4,
+        adjustedScore: 8,
+        matchedVocabularyIds: ['term-pangea'],
+      },
+    ]);
+    expect(observedEmittedTokens).toEqual([[], [1]]);
+  });
+
+  it('caps cumulative contextual score adjustments before argmax tie-breaking', () => {
+    expect(
+      argmaxToken(logits([0, 4, 7, 0, 0]), vocabularySize, {
+        maxScoreAdjustment: 2,
+        scoreAdjustments: [
+          { tokenId: 1, score: 5, matchedVocabularyIds: ['term-a'] },
+          { tokenId: 1, score: 5, matchedVocabularyIds: ['term-b'] },
+        ],
+      }),
+    ).toEqual({ tokenId: 2, score: 7 });
+
+    expect(
+      argmaxToken(logits([0, 5, 7, 0, 0]), vocabularySize, {
+        maxScoreAdjustment: 2,
+        scoreAdjustments: [{ tokenId: 1, score: 10, matchedVocabularyIds: ['term-a'] }],
+      }),
+    ).toEqual({
+      tokenId: 1,
+      score: 5,
+      scoreAdjustment: 2,
+      adjustedScore: 7,
+      matchedVocabularyIds: ['term-a'],
+    });
+  });
+
   it('accepts an empty chunk without requesting logits', async () => {
     const decoder = new GreedyRnntDecoder({ blankId, vocabularySize, maxSymbolsPerFrame: 1 });
     let requested = false;
@@ -143,6 +204,15 @@ describe('GreedyRnntDecoder', () => {
     expect(() => new GreedyRnntDecoder({ blankId, vocabularySize, maxSymbolsPerFrame: 0 })).toThrow(
       /maxSymbolsPerFrame/,
     );
+    expect(
+      () =>
+        new GreedyRnntDecoder({
+          blankId,
+          vocabularySize,
+          maxSymbolsPerFrame: 1,
+          maxScoreAdjustment: -1,
+        }),
+    ).toThrow(/maxScoreAdjustment/);
 
     const decoder = new GreedyRnntDecoder({ blankId, vocabularySize, maxSymbolsPerFrame: 1 });
     await expect(decoder.decodeChunk({ frameCount: -1, logitsForStep: blank })).rejects.toThrow(
@@ -153,6 +223,20 @@ describe('GreedyRnntDecoder', () => {
     ).rejects.toThrow(/logits length/);
     await expect(
       decoder.decodeChunk({ frameCount: 1, logitsForStep: () => [0, Number.NaN, 0, 0, 0] }),
+    ).rejects.toThrow(/finite/);
+    await expect(
+      decoder.decodeChunk({
+        frameCount: 1,
+        logitsForStep: blank,
+        scoreAdjustmentsForStep: () => [{ tokenId: 99, score: 1 }],
+      }),
+    ).rejects.toThrow(/scoreAdjustment\.tokenId/);
+    await expect(
+      decoder.decodeChunk({
+        frameCount: 1,
+        logitsForStep: blank,
+        scoreAdjustmentsForStep: () => [{ tokenId: 1, score: Number.POSITIVE_INFINITY }],
+      }),
     ).rejects.toThrow(/finite/);
   });
 });
@@ -168,9 +252,13 @@ describe('argmaxToken', () => {
 });
 
 function token(tokenId: number): Float32Array {
-  const logits = new Float32Array(vocabularySize).fill(-10);
-  logits[tokenId] = 10;
-  return logits;
+  const values = new Float32Array(vocabularySize).fill(-10);
+  values[tokenId] = 10;
+  return values;
+}
+
+function logits(values: readonly number[]): Float32Array {
+  return Float32Array.from(values);
 }
 
 function blank(): Float32Array {

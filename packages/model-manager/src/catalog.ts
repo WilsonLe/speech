@@ -13,8 +13,8 @@ export interface ModelCatalogEntryV1 {
   readonly version: string;
   readonly displayName: string;
   readonly languages: readonly SpeechLanguage[];
-  readonly manifestUrl: string;
-  readonly manifestSha256: string;
+  readonly manifestUrl?: string;
+  readonly manifestSha256?: string;
   readonly license: {
     readonly spdx?: string;
     readonly name: string;
@@ -84,10 +84,9 @@ function validateCatalogEntry(
   validateNonEmptyString(value['version'], `${path}.version`, errors);
   validateNonEmptyString(value['displayName'], `${path}.displayName`, errors);
   validateEnumArray(value['languages'], `${path}.languages`, languageValues, errors);
-  validateNonEmptyString(value['manifestUrl'], `${path}.manifestUrl`, errors);
-  validatePatternString(value['manifestSha256'], `${path}.manifestSha256`, sha256Pattern, errors);
+  const runtime = validateRuntime(value['runtime'], `${path}.runtime`, errors);
+  validateCatalogManifestPointers(value, path, runtime, errors);
   validateLicense(value['license'], `${path}.license`, errors);
-  validateRuntime(value['runtime'], `${path}.runtime`, errors);
 }
 
 function validateLicense(value: unknown, path: string, errors: string[]): void {
@@ -102,23 +101,67 @@ function validateLicense(value: unknown, path: string, errors: string[]): void {
   }
 }
 
-function validateRuntime(value: unknown, path: string, errors: string[]): void {
+interface RuntimeValidationSummary {
+  readonly status: ModelCatalogRuntimeStatus | undefined;
+  readonly installable: boolean | undefined;
+  readonly streamingReady: boolean | undefined;
+}
+
+function validateRuntime(
+  value: unknown,
+  path: string,
+  errors: string[],
+): RuntimeValidationSummary | undefined {
   if (!isRecord(value)) {
     errors.push(`${path} must be an object`);
-    return;
+    return undefined;
   }
-  validateEnumValue(value['status'], `${path}.status`, statusValues, errors);
-  if (typeof value['installable'] !== 'boolean') errors.push(`${path}.installable must be boolean`);
-  if (typeof value['streamingReady'] !== 'boolean') {
-    errors.push(`${path}.streamingReady must be boolean`);
+  const status = validateEnumValue(value['status'], `${path}.status`, statusValues, errors);
+  const installable = validateBoolean(value['installable'], `${path}.installable`, errors);
+  const streamingReady = validateBoolean(value['streamingReady'], `${path}.streamingReady`, errors);
+  if (status === 'blocked') {
+    if (installable === true)
+      errors.push(`${path}.installable must be false when status is blocked`);
+    if (streamingReady === true) {
+      errors.push(`${path}.streamingReady must be false when status is blocked`);
+    }
   }
   const notes = value['notes'];
   if (!Array.isArray(notes) || notes.length === 0) {
     errors.push(`${path}.notes must be a non-empty array`);
+  } else {
+    for (const [index, note] of notes.entries()) {
+      validateNonEmptyString(note, `${path}.notes[${index.toString()}]`, errors);
+    }
+  }
+  return { status, installable, streamingReady };
+}
+
+function validateCatalogManifestPointers(
+  value: Record<string, unknown>,
+  path: string,
+  runtime: RuntimeValidationSummary | undefined,
+  errors: string[],
+): void {
+  const manifestUrl = value['manifestUrl'];
+  const manifestSha256 = value['manifestSha256'];
+  const hasManifestUrl = manifestUrl !== undefined;
+  const hasManifestSha256 = manifestSha256 !== undefined;
+
+  if (runtime?.installable === true) {
+    validateNonEmptyString(manifestUrl, `${path}.manifestUrl`, errors);
+    validatePatternString(manifestSha256, `${path}.manifestSha256`, sha256Pattern, errors);
     return;
   }
-  for (const [index, note] of notes.entries()) {
-    validateNonEmptyString(note, `${path}.notes[${index.toString()}]`, errors);
+
+  if (hasManifestUrl || hasManifestSha256) {
+    validateNonEmptyString(manifestUrl, `${path}.manifestUrl`, errors);
+    validatePatternString(manifestSha256, `${path}.manifestSha256`, sha256Pattern, errors);
+    return;
+  }
+
+  if (runtime?.status !== undefined && runtime.status !== 'blocked') {
+    errors.push(`${path}.manifestUrl is required unless runtime.status is blocked`);
   }
 }
 
@@ -168,6 +211,14 @@ function validatePatternString(
   }
   if (!pattern.test(value)) {
     errors.push(`${path} has invalid format`);
+    return undefined;
+  }
+  return value;
+}
+
+function validateBoolean(value: unknown, path: string, errors: string[]): boolean | undefined {
+  if (typeof value !== 'boolean') {
+    errors.push(`${path} must be boolean`);
     return undefined;
   }
   return value;

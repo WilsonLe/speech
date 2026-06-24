@@ -7,7 +7,7 @@
       "displayName": "VietASR Iteration 3 Vietnamese INT8 candidate",
       "languages": ["vi"],
       "manifestUrl": "/model-packs/vietasr-iter3-int8/manifest.json",
-      "manifestSha256": "1bcb686a76028e61fb9ca523b2ebe0dfaf19a42684af4c425d00cdad0de9a66e",
+      "manifestSha256": "0cbafc714706596d70f3f3e1ab4e1b65dd287e403a2af9c94a64a24f3ecbf538",
       "license": {
         "spdx": "Apache-2.0",
         "name": "Apache-2.0",
@@ -23,7 +23,27 @@
           "No model weights are committed to this repository."
         ]
       }
+    },
+    {
+      "id": "nvidia-parakeet-ctc-vietnamese-research",
+      "version": "2026-06-hf-metadata-review",
+      "displayName": "NVIDIA Parakeet CTC Vietnamese research candidate",
+      "languages": ["vi"],
+      "license": {
+        "name": "Other / not release-cleared",
+        "redistributionAllowed": false
+      },
+      "runtime": {
+        "status": "blocked",
+        "installable": false,
+        "streamingReady": false,
+        "notes": [
+          "Research-only intake for the bilingual/code-switch roadmap; no browser-ready Vietnamese/English RNN-T ONNX model pack has been verified.",
+          "Upstream metadata describes a NeMo/FastConformer CTC Vietnamese checkpoint, not this repository's manifest v2 encoder/predictor/joiner streaming graph contract.",
+          "Hugging Face license metadata is \"other\"; redistribution and release use are not cleared, and the PWA will not download or install this candidate."
+        ]
+      }
     }
   ],
-  "note": "Catalog entries may point to external model files only when license and checksum metadata are documented."
+  "note": "Catalog entries may point to external model files only when license and checksum metadata are documented. Blocked research candidates must remain non-installable until a browser-compatible manifest, license clearance, and runtime validation exist."
 }
