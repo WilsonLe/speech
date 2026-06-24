@@ -1,6 +1,6 @@
 {
   "name": "@speech/web",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Installable local-first speech-to-text PWA shell.",
   "type": "module",
@@ -14,12 +14,21 @@
     "chromium-smoke": "playwright test"
   },
   "dependencies": {
+    "@speech/audio": "workspace:*",
+    "@speech/benchmark": "workspace:*",
+    "@speech/context-bias": "workspace:*",
+    "@speech/enrollment": "workspace:*",
+    "@speech/inference": "workspace:*",
+    "@speech/model-manager": "workspace:*",
+    "@speech/personalization": "workspace:*",
+    "@speech/profile-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
     "@vitejs/plugin-react": "^4.5.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^1.0.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "workbox-window": "^7.4.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.1",

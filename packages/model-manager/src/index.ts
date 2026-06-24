@@ -1,12 +1,16 @@
+export * from './catalog';
+export * from './install';
+export * from './storage';
+
 export interface ModelManagerPackageInfo {
   readonly name: '@speech/model-manager';
-  readonly status: 'planned' | 'active';
+  readonly status: 'active';
   readonly description: string;
 }
 
 export const packageInfo: ModelManagerPackageInfo = {
   name: '@speech/model-manager',
-  status: 'planned',
+  status: 'active',
   description:
     'Model catalog, install, checksum, storage, activation, rollback, and deletion lifecycle.',
 };

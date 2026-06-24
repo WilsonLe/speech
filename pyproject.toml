@@ -25,4 +25,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tools", "training"]
 python_files = ["test_*.py"]
-pythonpath = ["tools/model-pack"]
+pythonpath = [
+  "tools/model-pack",
+  "tools/feature-reference",
+  "tools/transcript-reference",
+  "tools/profile-trainer",
+]

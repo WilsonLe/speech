@@ -1,6 +1,6 @@
 {
   "name": "@speech/profile-manager",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Private profile storage, import/export, rollback, and deletion.",
   "type": "module",
@@ -12,6 +12,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@speech/enrollment": "workspace:*"
   },
   "devDependencies": {}
 }

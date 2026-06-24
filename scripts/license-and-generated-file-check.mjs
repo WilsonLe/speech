@@ -35,6 +35,11 @@ const allowedRootMarkdown = new Set([
   'MODEL_LICENSES.md',
   'THIRD_PARTY_NOTICES.md',
 ]);
+const allowedMockOnnxFiles = new Set([
+  'model-packs/example-manifest/files/encoder.onnx',
+  'model-packs/example-manifest/files/joiner.onnx',
+  'model-packs/example-manifest/files/predictor.onnx',
+]);
 
 const failures = [];
 
@@ -51,7 +56,7 @@ async function walk(directory) {
     }
 
     const extension = path.extname(entry.name).toLowerCase();
-    if (forbiddenExtensions.has(extension)) {
+    if (forbiddenExtensions.has(extension) && !allowedMockOnnxFiles.has(relativePath)) {
       failures.push(`Forbidden speech/model artifact committed: ${relativePath}`);
     }
 
@@ -61,6 +66,7 @@ async function walk(directory) {
       );
       const inAllowedTroubleshootingDocs =
         /^docs\/troubleshooting\/troubleshoot-[^/]+\.instructions\.md$/.test(relativePath);
+      const inAllowedAdrDocs = /^docs\/adr\/[^/]+\.md$/.test(relativePath);
       const rootCommunityFile =
         !relativePath.includes(path.sep) && allowedRootMarkdown.has(relativePath);
       const githubMetadata = relativePath.startsWith('.github/');
@@ -69,12 +75,13 @@ async function walk(directory) {
       if (
         !inAllowedInstructionDocs &&
         !inAllowedTroubleshootingDocs &&
+        !inAllowedAdrDocs &&
         !rootCommunityFile &&
         !githubMetadata &&
         !testDataLicense
       ) {
         failures.push(
-          `Markdown docs must live in docs/instructions/*.instructions.md or docs/troubleshooting/troubleshoot-*.instructions.md: ${relativePath}`,
+          `Markdown docs must live in docs/instructions/*.instructions.md, docs/troubleshooting/troubleshoot-*.instructions.md, or docs/adr/*.md: ${relativePath}`,
         );
       }
     }

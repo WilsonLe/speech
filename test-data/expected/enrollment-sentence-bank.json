@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "id": "synthetic-enrollment-bank-v1",
+  "version": "0.1.0",
+  "displayName": "Synthetic bilingual enrollment sentence bank",
+  "description": "Small project-authored fixture used to validate the sentence-bank schema only.",
+  "createdAt": "2026-06-23T00:00:00.000Z",
+  "updatedAt": "2026-06-23T00:00:00.000Z",
+  "licenses": [
+    {
+      "id": "project-apache-2.0",
+      "name": "Apache License 2.0",
+      "source": "project-authored",
+      "redistributionAllowed": true,
+      "derivativeAllowed": true,
+      "spdx": "Apache-2.0",
+      "url": "../../LICENSE",
+      "attribution": "wilsonle/speech contributors",
+      "notes": "Synthetic prompts authored for schema tests; no corpus excerpt or private transcript."
+    }
+  ],
+  "sentences": [
+    {
+      "id": "sent-vi-room-noise-check",
+      "version": 1,
+      "text": "Tôi kiểm tra âm thanh trước khi bắt đầu.",
+      "language": "vi",
+      "normalizedText": "Tôi kiểm tra âm thanh trước khi bắt đầu.",
+      "allowedVoiceConditions": ["normal", "projected"],
+      "estimatedSeconds": 3.2,
+      "difficulty": 1,
+      "tags": ["calibration", "vietnamese", "statement"],
+      "repeatGroup": "calibration-check",
+      "coverage": {
+        "vietnameseInitials": ["t", "k", "tr", "b", "đ"],
+        "vietnameseRimes": ["ôi", "iểm", "anh", "ước", "ầu"],
+        "vietnameseTones": ["ngang", "hỏi", "sắc", "huyền"],
+        "punctuationForms": ["period"]
+      },
+      "licenseId": "project-apache-2.0",
+      "review": {
+        "humanReviewed": true,
+        "reviewedAt": "2026-06-23T00:00:00.000Z",
+        "reviewer": "wilsonle/speech maintainers"
+      }
+    },
+    {
+      "id": "sent-en-pace-check",
+      "version": 1,
+      "text": "Please read this sentence at a steady pace.",
+      "language": "en",
+      "normalizedText": "Please read this sentence at a steady pace.",
+      "allowedVoiceConditions": ["whisper", "normal", "projected"],
+      "estimatedSeconds": 3.4,
+      "difficulty": 1,
+      "tags": ["calibration", "english", "pace"],
+      "repeatGroup": "calibration-check",
+      "coverage": {
+        "englishPhones": ["p", "l", "iy", "z", "r", "eh", "d", "s", "t"],
+        "phoneBigrams": ["p-l", "r-eh", "s-t"],
+        "punctuationForms": ["period"]
+      },
+      "licenseId": "project-apache-2.0",
+      "review": {
+        "humanReviewed": true,
+        "reviewedAt": "2026-06-23T00:00:00.000Z",
+        "reviewer": "wilsonle/speech maintainers"
+      }
+    },
+    {
+      "id": "sent-mixed-dashboard-review",
+      "version": 1,
+      "text": "Tôi mở dashboard và review kết quả mới.",
+      "language": "mixed",
+      "normalizedText": "Tôi mở dashboard và review kết quả mới.",
+      "allowedVoiceConditions": ["normal"],
+      "estimatedSeconds": 3.8,
+      "difficulty": 2,
+      "tags": ["mixed", "code-switch", "work"],
+      "coverage": {
+        "vietnameseInitials": ["t", "m", "v", "k", "qu"],
+        "englishPhones": ["d", "ae", "sh", "b", "ao", "r", "v"],
+        "languageSwitchPatterns": ["vi-en", "en-vi"],
+        "punctuationForms": ["period"]
+      },
+      "licenseId": "project-apache-2.0",
+      "review": {
+        "humanReviewed": true,
+        "reviewedAt": "2026-06-23T00:00:00.000Z",
+        "reviewer": "wilsonle/speech maintainers"
+      }
+    },
+    {
+      "id": "sent-vi-held-out-clear-words",
+      "version": 1,
+      "text": "Hãy nói rõ từng từ trong câu này.",
+      "language": "vi",
+      "normalizedText": "Hãy nói rõ từng từ trong câu này.",
+      "allowedVoiceConditions": ["whisper", "normal", "projected"],
+      "estimatedSeconds": 2.9,
+      "difficulty": 1,
+      "tags": ["held-out", "vietnamese", "clarity"],
+      "coverage": {
+        "vietnameseInitials": ["h", "n", "r", "t", "c"],
+        "vietnameseRimes": ["ãy", "ói", "õ", "ừng", "âu"],
+        "vietnameseTones": ["sắc", "ngã", "huyền"],
+        "punctuationForms": ["period"]
+      },
+      "licenseId": "project-apache-2.0",
+      "review": {
+        "humanReviewed": true,
+        "reviewedAt": "2026-06-23T00:00:00.000Z",
+        "reviewer": "wilsonle/speech maintainers"
+      }
+    }
+  ],
+  "heldOutSentenceIds": ["sent-vi-held-out-clear-words"]
+}
