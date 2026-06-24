@@ -2,7 +2,7 @@
   "name": "@speech/personalization",
   "version": "0.1.0",
   "private": true,
-  "description": "Speaker profile and adapter runtime contracts.",
+  "description": "Speaker profile, adapter runtime, browser-vs-Python comparison, and experimental browser-training contracts.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -12,6 +12,10 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@speech/enrollment": "workspace:*",
+    "@speech/protocol": "workspace:*"
   },
   "devDependencies": {}
 }

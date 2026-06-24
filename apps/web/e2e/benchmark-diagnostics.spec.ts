@@ -9,6 +9,8 @@ test('runs the synthetic benchmark and downloads local JSON reports', async ({ p
   await expect(page.getByLabel(/benchmark summary metrics/i)).toContainText(
     /First partial latency/i,
   );
+  await expect(page.getByLabel(/benchmark summary metrics/i)).toContainText(/Custom-term recall/i);
+  await expect(page.getByLabel(/custom-term benchmark results/i)).toContainText(/2\/3 \(66\.7%\)/);
   await expect(page.getByLabel(/benchmark metadata/i)).toContainText(
     /No audio, transcript, or network upload/i,
   );
@@ -22,6 +24,12 @@ test('runs the synthetic benchmark and downloads local JSON reports', async ({ p
     schemaVersion: 1,
     reportType: 'speech-benchmark',
     privacy: { containsAudio: false, containsTranscript: false, networkUpload: false },
+    customTermEvaluation: {
+      reportType: 'custom-term-benchmark',
+      synthetic: true,
+      recall: { numerator: 2, denominator: 3 },
+      falseInsertion: { numerator: 1, denominator: 3 },
+    },
   });
 
   const diagnosticsDownload = page.waitForEvent('download');

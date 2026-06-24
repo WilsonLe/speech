@@ -30,3 +30,14 @@ No production model weights are committed to this repository.
 - Committed artifacts: catalog and manifest metadata only; no production model weights are stored in Git.
 - Runtime status: candidate baseline. The inspected ONNX encoder exposes full-sequence `x`/`x_lens` inputs and does not expose streaming cache tensors, so streaming parity must be proven before this pack is presented as a low-latency streaming model.
 - Evaluation status: no repository-published WER/CER, code-switch, latency, RTF, memory, or named-entity recall results yet. Synthetic benchmark reports validate export plumbing only.
+
+## NVIDIA Parakeet CTC Vietnamese research candidate
+
+`apps/web/public/model-catalog.json` includes `nvidia-parakeet-ctc-vietnamese-research` as a blocked, non-installable research intake record only. It has no manifest URL, no manifest checksum, and no model weights committed to Git.
+
+- Local model card: `docs/instructions/model-card-nvidia-parakeet-ctc-vietnamese.instructions.md`
+- Model files / model card: https://huggingface.co/nvidia/parakeet-ctc-0.6b-Vietnamese
+- Inspected metadata: Hugging Face API/model card metadata identifies a NeMo/FastConformer CTC Vietnamese ASR checkpoint with `license:other` metadata and large `.nemo` artifacts.
+- Committed artifacts: catalog metadata only; the PWA must not download or install this candidate.
+- Runtime status: blocked. The published artifact is not this repository's manifest v2 RNN-T encoder/predictor/joiner streaming graph contract, English/code-switch support has not been verified, browser ONNX Runtime Web compatibility has not been validated, and redistribution/release clearance is not complete.
+- Evaluation status: no repository-published WER/CER, mixed-language, latency, RTF, memory, or named-entity recall results. Do not use this entry for performance or quality claims.

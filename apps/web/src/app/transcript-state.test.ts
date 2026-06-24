@@ -10,6 +10,7 @@ import {
   initialTranscriptWorkspaceState,
   markTranscriptStopping,
   recordTranscriptAudioChunk,
+  setTranscriptLanguageMode,
   startTranscriptRequest,
   startTranscriptUtterance,
 } from './transcript-state';
@@ -39,10 +40,19 @@ describe('transcript workspace state', () => {
       committed: 'xin chào',
       provisional: ' việt nam',
       emittedAtMs: 1_180,
+      languageSpans: [
+        { startToken: 0, endToken: 2, language: 'vi' },
+        { startToken: 2, endToken: 4, language: 'en' },
+      ],
     });
     expect(partial.committed).toBe('xin chào');
     expect(partial.provisional).toBe(' việt nam');
     expect(partial.timings.firstPartialLatencyMs).toBe(180);
+    expect(partial.languageDiagnostics.spanSummary).toMatchObject({
+      spanCount: 2,
+      switchCount: 1,
+      tokenCounts: { vi: 2, en: 2, mixed: 0 },
+    });
 
     const final = finishTranscriptUtterance(partial, {
       text: 'xin chào việt nam',
@@ -113,8 +123,22 @@ describe('transcript workspace state', () => {
       spokenCommandsEnabled: false,
     });
     expect(withMetadata).toContain('Language mode: Auto/code-switch');
+    expect(withMetadata).toContain('Effective language mode: auto');
+    expect(withMetadata).toContain('Language spans: none');
     expect(withMetadata).toContain('Captured chunks: 2');
     expect(withMetadata).toContain('Finalization latency: 42 ms');
+  });
+
+  it('updates language mode diagnostics without touching transcript text', () => {
+    const state = {
+      ...initialTranscriptWorkspaceState,
+      committed: 'draft',
+    };
+
+    const mixed = setTranscriptLanguageMode(state, 'mixed');
+    expect(mixed.committed).toBe('draft');
+    expect(mixed.languageDiagnostics.requestedMode).toBe('mixed');
+    expect(mixed.languageDiagnostics.effectiveMode).toBe('mixed');
   });
 
   it('clears text while preserving an active capture session', () => {

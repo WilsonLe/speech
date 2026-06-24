@@ -6,14 +6,24 @@ test('loads the model catalog and inspects manifest metadata in the lifecycle wo
   await page.goto('/');
 
   const panel = page.getByRole('region', { name: /offline readiness and model lifecycle/i });
-  await expect(panel.getByText(/VietASR Iteration 3 Vietnamese INT8 candidate/i)).toBeVisible({
-    timeout: 10_000,
+  const vietasrCard = panel.getByRole('article', {
+    name: /VietASR Iteration 3 Vietnamese INT8 candidate/i,
   });
-  await expect(panel.getByText(/not installed/i)).toBeVisible();
+  await expect(vietasrCard).toBeVisible({ timeout: 10_000 });
+  await expect(vietasrCard.getByText(/not installed/i)).toBeVisible();
 
-  await panel.getByRole('button', { name: /inspect manifest/i }).click();
-  await expect(panel.getByText(/5 files/i)).toBeVisible({ timeout: 10_000 });
-  await expect(panel.getByText('verified', { exact: true })).toBeVisible();
+  await vietasrCard.getByRole('button', { name: /inspect manifest/i }).click();
+  await expect(vietasrCard.getByText(/5 files/i)).toBeVisible({ timeout: 10_000 });
+  await expect(vietasrCard.getByText('verified', { exact: true })).toBeVisible();
+
+  const blockedCard = panel.getByRole('article', {
+    name: /NVIDIA Parakeet CTC Vietnamese research candidate/i,
+  });
+  await expect(blockedCard).toBeVisible();
+  await expect(blockedCard.getByText(/not installable/i)).toBeVisible();
+  await expect(blockedCard.getByText('not available', { exact: true })).toHaveCount(2);
+  await expect(blockedCard.getByRole('button', { name: /manifest unavailable/i })).toBeDisabled();
+  await expect(blockedCard.getByRole('button', { name: /install model pack/i })).toBeDisabled();
 });
 
 test('reloads the precached app shell while offline', async ({ context, page }) => {
