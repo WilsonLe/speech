@@ -30,4 +30,5 @@ pythonpath = [
   "tools/feature-reference",
   "tools/transcript-reference",
   "tools/profile-trainer",
+  "tools/training-parity",
 ]
