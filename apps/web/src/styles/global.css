@@ -32,7 +32,8 @@ body {
 }
 
 button,
-.button {
+.button,
+.file-button {
   border: 0;
   border-radius: 999px;
   padding: 0.85rem 1.25rem;
@@ -45,21 +46,32 @@ button,
 }
 
 button:focus-visible,
-.button:focus-visible {
+.button:focus-visible,
+.file-button:focus-within {
   outline: 3px solid #facc15;
   outline-offset: 3px;
 }
 
 button.secondary,
-.button.secondary {
+.button.secondary,
+.file-button.secondary {
   color: #dbeafe;
   background: rgba(15, 23, 42, 0.88);
   border: 1px solid var(--panel-border);
 }
 
-button:disabled {
+button:disabled,
+.file-button:has(input:disabled) {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .app-shell {
@@ -154,6 +166,7 @@ h2 {
 .microphone,
 .runtime,
 .transcript,
+.vocabulary,
 .offline-model {
   margin-bottom: 1rem;
 }
@@ -305,6 +318,58 @@ h2 {
   text-align: right;
 }
 
+.enrollment-calibration,
+.enrollment-recorder,
+.profile-store-status,
+.quality-report {
+  margin-top: 1rem;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+}
+
+.text-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.text-field textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.8);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.text-field textarea:focus-visible,
+.select-field select:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 3px;
+}
+
+.select-field {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 18rem;
+  margin-top: 1rem;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.select-field select {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.8);
+  font: inherit;
+}
+
 .transcript-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.45fr);
@@ -427,12 +492,13 @@ h2 {
 
 .transcript-settings-privacy {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.75fr);
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.75fr) minmax(18rem, 0.75fr);
   gap: 1rem;
   margin-top: 1.25rem;
 }
 
 .transcript-settings-card,
+.transcript-language-card,
 .transcript-privacy-card {
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 1rem;
@@ -446,6 +512,7 @@ h2 {
 }
 
 .transcript-settings-card legend,
+.transcript-language-card h3,
 .transcript-privacy-card h3 {
   margin-bottom: 0.5rem;
   color: #f8fafc;
@@ -479,6 +546,33 @@ h2 {
   width: 1.05rem;
   height: 1.05rem;
   accent-color: var(--accent-strong);
+}
+
+.transcript-language-card dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0 0 0.75rem;
+}
+
+.transcript-language-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.transcript-language-card dt {
+  color: #94a3b8;
+}
+
+.transcript-language-card dd {
+  margin: 0;
+  color: #e2e8f0;
+  font-weight: 800;
+  text-align: right;
+}
+
+.transcript-language-card p {
+  color: #cbd5e1;
 }
 
 .transcript-privacy-card ul {
@@ -517,6 +611,132 @@ h2 {
   margin: 0.25rem 0 0;
   color: #e2e8f0;
   font-weight: 800;
+}
+
+.vocabulary-summary,
+.vocabulary-layout,
+.vocabulary-form-grid,
+.vocabulary-actions,
+.vocabulary-checkbox-row,
+.vocabulary-entry-actions {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.vocabulary-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 1.25rem 0;
+}
+
+.vocabulary-layout {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 1rem 0;
+}
+
+.vocabulary-card,
+.vocabulary-entry {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.42);
+}
+
+.vocabulary-card h3,
+.vocabulary-entry h4 {
+  margin-bottom: 0.6rem;
+  color: #f8fafc;
+}
+
+.vocabulary-card p,
+.vocabulary-entry p {
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.vocabulary-card label {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.vocabulary-card input,
+.vocabulary-card select,
+.vocabulary-card textarea {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 0.75rem;
+  padding: 0.72rem 0.85rem;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.88);
+  font: inherit;
+}
+
+.vocabulary-card textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.vocabulary-card input:focus-visible,
+.vocabulary-card select:focus-visible,
+.vocabulary-card textarea:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 3px;
+}
+
+.vocabulary-card input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent-strong);
+}
+
+.vocabulary-card label:has(input[type='checkbox']),
+.vocabulary-checkbox-row label {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.vocabulary-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vocabulary-actions,
+.vocabulary-checkbox-row,
+.vocabulary-entry-actions {
+  grid-template-columns: repeat(auto-fit, minmax(9rem, max-content));
+  align-items: center;
+}
+
+button.danger,
+.button.danger {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.vocabulary-entry-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.vocabulary-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+}
+
+.vocabulary-entry h4,
+.vocabulary-entry p {
+  margin-bottom: 0.3rem;
 }
 
 .offline-grid {
@@ -563,6 +783,18 @@ h2 {
 
 .model-card p {
   margin-bottom: 0;
+}
+
+.model-card-notes {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #cbd5e1;
+}
+
+.model-card-notes li::marker {
+  color: #38bdf8;
 }
 
 .model-card-meta {
@@ -728,6 +960,10 @@ h2 {
   .transcript-layout,
   .transcript-settings-privacy,
   .transcript-footer,
+  .vocabulary-summary,
+  .vocabulary-layout,
+  .vocabulary-form-grid,
+  .vocabulary-entry,
   .offline-grid,
   .model-card {
     grid-template-columns: 1fr;
@@ -738,6 +974,9 @@ h2 {
   }
 
   .transcript-controls button,
+  .vocabulary-actions button,
+  .vocabulary-entry-actions button,
+  .inline-form button,
   .model-card-actions button,
   .benchmark-actions button,
   .update-message button {

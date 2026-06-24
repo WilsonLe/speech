@@ -1,3 +1,10 @@
+import {
+  createLanguageModeDiagnostics,
+  type LanguageModeDiagnostics,
+  type LanguageSpan,
+  type SpeechLanguageMode,
+} from '@speech/protocol';
+
 export type TranscriptCaptureStatus = 'idle' | 'requesting' | 'listening' | 'stopping' | 'error';
 
 export interface TranscriptTimingState {
@@ -17,6 +24,7 @@ export interface TranscriptWorkspaceState {
   readonly provisional: string;
   readonly statusMessage: string;
   readonly errorMessage: string | null;
+  readonly languageDiagnostics: LanguageModeDiagnostics;
   readonly timings: TranscriptTimingState;
 }
 
@@ -30,6 +38,19 @@ export const initialTranscriptTimingState: TranscriptTimingState = {
   sampleRateHz: null,
 };
 
+export const supportedTranscriptLanguageModes = [
+  'vi',
+  'en',
+  'auto',
+  'mixed',
+] as const satisfies readonly SpeechLanguageMode[];
+
+export const initialTranscriptLanguageDiagnostics: LanguageModeDiagnostics =
+  createLanguageModeDiagnostics({
+    requestedMode: 'auto',
+    supportedLanguageModes: supportedTranscriptLanguageModes,
+  });
+
 export const initialTranscriptWorkspaceState: TranscriptWorkspaceState = {
   status: 'idle',
   utteranceId: null,
@@ -37,6 +58,7 @@ export const initialTranscriptWorkspaceState: TranscriptWorkspaceState = {
   provisional: '',
   statusMessage: 'Ready. Hold the push-to-talk control or press Space while the page is focused.',
   errorMessage: null,
+  languageDiagnostics: initialTranscriptLanguageDiagnostics,
   timings: initialTranscriptTimingState,
 };
 
@@ -54,10 +76,12 @@ export interface TranscriptPartialOptions {
   readonly committed: string;
   readonly provisional: string;
   readonly emittedAtMs: number;
+  readonly languageSpans?: readonly LanguageSpan[];
 }
 
 export interface TranscriptFinalOptions {
   readonly text?: string;
+  readonly languageSpans?: readonly LanguageSpan[];
   readonly releasedAtMs?: number;
   readonly endedAtMs: number;
 }
@@ -68,6 +92,20 @@ export interface TranscriptDownloadOptions {
   readonly languageModeLabel: string;
   readonly formattingEnabled: boolean;
   readonly spokenCommandsEnabled: boolean;
+}
+
+export function setTranscriptLanguageMode(
+  state: TranscriptWorkspaceState,
+  mode: SpeechLanguageMode,
+): TranscriptWorkspaceState {
+  return {
+    ...state,
+    languageDiagnostics: createLanguageModeDiagnostics({
+      requestedMode: mode,
+      supportedLanguageModes: supportedTranscriptLanguageModes,
+      languageSpans: state.languageDiagnostics.spans,
+    }),
+  };
 }
 
 export function startTranscriptRequest(state: TranscriptWorkspaceState): TranscriptWorkspaceState {
@@ -117,6 +155,7 @@ export function applyTranscriptPartial(
     committed: options.committed,
     provisional: options.provisional,
     statusMessage: 'Live partial received from the ASR worker.',
+    languageDiagnostics: updateLanguageDiagnosticsForSpans(state, options.languageSpans),
     timings: {
       ...state.timings,
       firstPartialLatencyMs,
@@ -160,6 +199,7 @@ export function finishTranscriptUtterance(
     utteranceId: null,
     committed: finalText,
     provisional: '',
+    languageDiagnostics: updateLanguageDiagnosticsForSpans(state, options.languageSpans),
     statusMessage: hasFinalOutput
       ? 'Utterance finalized locally.'
       : 'Audio capture ended. Transcript output is pending model integration.',
@@ -202,7 +242,10 @@ export function failTranscriptCapture(
 
 export function clearTranscript(state: TranscriptWorkspaceState): TranscriptWorkspaceState {
   if (state.status === 'idle') {
-    return initialTranscriptWorkspaceState;
+    return {
+      ...initialTranscriptWorkspaceState,
+      languageDiagnostics: state.languageDiagnostics,
+    };
   }
 
   return {
@@ -242,6 +285,8 @@ export function buildTranscriptDownloadText(
     '---',
     `Generated: ${options.generatedAtIso}`,
     `Language mode: ${options.languageModeLabel}`,
+    `Effective language mode: ${state.languageDiagnostics.effectiveMode}`,
+    `Language spans: ${formatLanguageSpanMetadata(state.languageDiagnostics)}`,
     `Formatting: ${options.formattingEnabled ? 'enabled' : 'disabled'}`,
     `Spoken commands: ${options.spokenCommandsEnabled ? 'enabled' : 'disabled'}`,
     `Captured chunks: ${state.timings.capturedChunks.toString()}`,
@@ -251,6 +296,30 @@ export function buildTranscriptDownloadText(
     `Finalization latency: ${formatOptionalLatency(state.timings.finalizationLatencyMs)}`,
     '',
   ].join('\n');
+}
+
+function updateLanguageDiagnosticsForSpans(
+  state: TranscriptWorkspaceState,
+  languageSpans: readonly LanguageSpan[] | undefined,
+): LanguageModeDiagnostics {
+  if (languageSpans === undefined) return state.languageDiagnostics;
+  return createLanguageModeDiagnostics({
+    requestedMode: state.languageDiagnostics.requestedMode,
+    supportedLanguageModes: supportedTranscriptLanguageModes,
+    languageSpans,
+  });
+}
+
+function formatLanguageSpanMetadata(diagnostics: LanguageModeDiagnostics): string {
+  const { spanSummary } = diagnostics;
+  if (spanSummary.spanCount === 0) return 'none';
+  return [
+    `${spanSummary.spanCount.toString()} spans`,
+    `${spanSummary.switchCount.toString()} switches`,
+    `vi=${spanSummary.tokenCounts.vi.toString()}`,
+    `en=${spanSummary.tokenCounts.en.toString()}`,
+    `mixed=${spanSummary.tokenCounts.mixed.toString()}`,
+  ].join(', ');
 }
 
 function formatOptionalLatency(value: number | null): string {

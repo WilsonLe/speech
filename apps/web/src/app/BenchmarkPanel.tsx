@@ -4,6 +4,7 @@ import {
   type BenchmarkMetricName,
   type BenchmarkMetricSummary,
   type BenchmarkReportV1,
+  type CustomTermBenchmarkScore,
 } from '@speech/benchmark';
 import { useMemo, useState } from 'react';
 import {
@@ -32,6 +33,8 @@ const featuredMetrics: readonly BenchmarkMetricName[] = [
   'stableTokenLatencyMs',
   'finalizationLatencyMs',
   'realTimeFactor',
+  'customTermRecall',
+  'customTermFalseInsertionRate',
   'queueDepthFrames',
   'audioOverruns',
   'jsHeapUsedBytes',
@@ -44,6 +47,8 @@ const metricLabels: Record<BenchmarkMetricName, string> = {
   encoderChunkMs: 'Encoder time per chunk',
   decoderChunkMs: 'Decoder time per chunk',
   realTimeFactor: 'Real-time factor',
+  customTermRecall: 'Custom-term recall',
+  customTermFalseInsertionRate: 'Custom-term false insertion rate',
   queueDepthFrames: 'Queue depth',
   audioOverruns: 'Audio overruns',
   jsHeapUsedBytes: 'JS heap used',
@@ -192,6 +197,27 @@ export function BenchmarkPanel() {
             </div>
           </dl>
 
+          {report.customTermEvaluation ? (
+            <dl className="benchmark-metadata" aria-label="Custom-term benchmark results">
+              <div>
+                <dt>Custom-term suite</dt>
+                <dd>{report.customTermEvaluation.caseCount} synthetic cases</dd>
+              </div>
+              <div>
+                <dt>Custom-term recall</dt>
+                <dd>{formatScore(report.customTermEvaluation.recall)}</dd>
+              </div>
+              <div>
+                <dt>False insertions</dt>
+                <dd>{formatScore(report.customTermEvaluation.falseInsertion)}</dd>
+              </div>
+              <div>
+                <dt>Display replacements</dt>
+                <dd>{report.customTermEvaluation.displayReplacementCount}</dd>
+              </div>
+            </dl>
+          ) : null}
+
           <div className="benchmark-summary-grid" aria-label="Benchmark summary metrics">
             {featuredSummaries.map((summary) => (
               <article className="benchmark-metric" key={summary.name}>
@@ -261,6 +287,11 @@ function summariesByName(
 
 function formatSummaryValue(summary: BenchmarkMetricSummary): string {
   return formatMetricValue(summary.median, summary.unit);
+}
+
+function formatScore(score: CustomTermBenchmarkScore): string {
+  const rate = score.rate === null ? 'n/a' : `${(score.rate * 100).toFixed(1)}%`;
+  return `${score.numerator}/${score.denominator} (${rate})`;
 }
 
 function formatMetricValue(value: number, unit: BenchmarkMetricSummary['unit']): string {
