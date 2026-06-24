@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Superseded
+
+Superseded by [ADR 0002: v0.5.0 personal voice model semantics and release gates](./0002-v0-5-0-personal-model-semantics.md) for the new v0.5.0 implementation plan. This ADR remains historically accurate for the current shipped baseline until v0.5.0 is implemented and released.
 
 ## Context
 
@@ -21,7 +23,7 @@ The supported `v0.4.0` personalization path is the local Python/Docker trainer p
 
 Defer browser-only adapter training as a shipping user path.
 
-The project will retain the browser frozen-feature tiny-adapter prototype as an experimental diagnostics/developer surface only. It must not be described as production training, must not automatically activate artifacts, and must not replace the local Python/Docker trainer. The local trainer remains the supported adapter-training path until a future ADR supersedes this decision.
+The project will retain the browser frozen-feature tiny-adapter prototype as an experimental diagnostics/developer surface only. It must not be described as production training, must not automatically activate artifacts, and must not replace the local Python/Docker trainer. The local trainer remains the supported adapter-training path until v0.5.0 implementation work satisfies ADR 0002's production browser-training gates and the release is published.
 
 Any future proposal to ship browser training must first satisfy all of these gates:
 
@@ -37,5 +39,5 @@ Any future proposal to ship browser training must first satisfy all of these gat
 - Product copy and documentation must state that browser-only training is deferred and experimental; short enrollment/adaptation must not be described as training a new ASR base model from scratch.
 - The runtime diagnostics panel may keep the synthetic browser-training prototype for worker/checkpoint validation, but it is not a supported profile activation route.
 - The roadmap remains local-first: vocabulary steering, no-gradient speaker profiles, and Python/Docker residual-adapter packages are the supported personalization paths.
-- Future work that touches browser training must update or supersede this ADR instead of silently changing the decision.
+- Future work that touches browser training must follow ADR 0002 or supersede it instead of silently changing the decision.
 - Validation for this decision is documentation/static only unless implementation changes are introduced; the standard repository gate still keeps `main` green.
