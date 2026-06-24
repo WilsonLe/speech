@@ -30,7 +30,7 @@ interface ModelLifecycleState {
 }
 
 const initialLifecycleState: ModelLifecycleState = {
-  status: 'idle',
+  status: 'loading',
   catalog: null,
   backendKind: null,
   installed: [],
@@ -62,7 +62,6 @@ export function OfflineModelPanel() {
   useEffect(() => {
     const worker = createModelLifecycleWorker();
     workerRef.current = worker;
-    setLifecycle((current) => ({ ...current, status: 'loading', errorMessage: null }));
     worker.addEventListener('message', handleWorkerMessage);
     worker.addEventListener('error', handleWorkerError);
     worker.postMessage({ type: 'INIT' });

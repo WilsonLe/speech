@@ -50,11 +50,20 @@ export function VocabularyPanel() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const result = loadVocabularyStore(window.localStorage);
-    setSnapshot(result.snapshot);
-    setSelectedSetId(result.snapshot.activeSetIds[0] ?? result.snapshot.sets[0]?.id ?? 'set-work');
-    setStatusMessage(result.message);
-    setIsLoaded(true);
+    let isMounted = true;
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      const result = loadVocabularyStore(window.localStorage);
+      setSnapshot(result.snapshot);
+      setSelectedSetId(
+        result.snapshot.activeSetIds[0] ?? result.snapshot.sets[0]?.id ?? 'set-work',
+      );
+      setStatusMessage(result.message);
+      setIsLoaded(true);
+    });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {

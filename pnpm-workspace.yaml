@@ -7,3 +7,5 @@ onlyBuiltDependencies:
 allowBuilds:
   esbuild: true
   protobufjs: true
+minimumReleaseAgeExclude:
+  - vite@8.1.0
