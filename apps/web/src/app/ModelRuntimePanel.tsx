@@ -3,7 +3,7 @@ import type {
   FrozenFeatureTinyAdapterProgressV1,
   FrozenFeatureTinyAdapterTrainingResultV1,
 } from '@speech/personalization';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   checkAsrWorkerRuntime,
   type AsrWorkerRuntimeCheckResult,
@@ -41,13 +41,9 @@ export function ModelRuntimePanel() {
     readonly BrowserTrainingRuntimeWarningV1[]
   >([]);
   const [trainingRecovery, setTrainingRecovery] = useState<BrowserTrainingRecoveryRecordV1 | null>(
-    null,
+    () => readBrowserTrainingRecovery(),
   );
   const trainingRun = useRef<BrowserTrainingPrototypeRunController | null>(null);
-
-  useEffect(() => {
-    setTrainingRecovery(readBrowserTrainingRecovery());
-  }, []);
 
   async function handleCheckRuntime() {
     setStatus({ state: 'loading' });
