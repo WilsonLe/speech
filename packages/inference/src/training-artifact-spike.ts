@@ -372,8 +372,8 @@ export function analyzeOnnxRuntimeWebTrainingArtifact(
     followOnIssues:
       backendDecision === 'fixed-adapter-math-fallback-required'
         ? [
-            '#144 must keep BrowserTrainingBackend implementation-agnostic.',
-            '#145 must implement the fixed adapter-math backend or first add a proven custom/updated ORT Training artifact.',
+            '#144 introduced @speech/browser-training as the implementation-agnostic BrowserTrainingBackend boundary.',
+            '#145 routes the pinned ORT Training path to the fixed adapter-math fallback until a real artifact/API proof and implementation exist.',
             '#134 must not promise npm-provided ORT training artifacts until the artifact/API proof passes.',
           ]
         : [

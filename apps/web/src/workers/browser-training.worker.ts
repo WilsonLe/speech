@@ -1,14 +1,17 @@
 /// <reference lib="webworker" />
 
+import { createPinnedOnnxRuntimeWebTrainingSpikeReport } from '@speech/inference/training-artifact-spike';
 import {
-  createDefaultBrowserTrainingBackend,
   createSyntheticFrozenFeatureTinyAdapterDataset,
+  selectBrowserTrainingBackend,
+  type BrowserTrainingBackendSelectionV1,
   type BrowserTrainingBackendSession,
   type FrozenFeatureTinyAdapterCheckpointV1,
   type FrozenFeatureTinyAdapterDatasetV1,
   type FrozenFeatureTinyAdapterProgressV1,
   type FrozenFeatureTinyAdapterTrainingOptions,
   type FrozenFeatureTinyAdapterTrainingResultV1,
+  type OnnxRuntimeTrainingBackendProofV1,
 } from '@speech/browser-training';
 
 export interface StartBrowserTrainingPrototypeMessage {
@@ -36,7 +39,8 @@ export interface BrowserTrainingRuntimeWarningV1 {
   readonly code:
     | 'THERMAL_STATUS_UNAVAILABLE'
     | 'BATTERY_STATUS_UNAVAILABLE'
-    | 'CHECKPOINT_STORAGE_VOLATILE';
+    | 'CHECKPOINT_STORAGE_VOLATILE'
+    | 'ORT_TRAINING_BACKEND_FALLBACK';
   readonly message: string;
 }
 
@@ -122,8 +126,11 @@ ctx.addEventListener('message', (event: MessageEvent<BrowserTrainingWorkerMessag
       );
     }
     const { epochDelayMs, ...trainingOptions } = message.options ?? {};
-    const backend = createDefaultBrowserTrainingBackend();
-    const session = backend.createSession(dataset, trainingOptions);
+    const backendSelection = selectBrowserTrainingBackend({
+      preferredKind: 'onnxruntime-web-training',
+      onnxRuntimeTrainingProof: createPinnedOnnxRuntimeTrainingBackendProof(),
+    });
+    const session = backendSelection.backend.createSession(dataset, trainingOptions);
     const run: ActiveBrowserTrainingRun = {
       requestId: message.requestId,
       session,
@@ -135,7 +142,7 @@ ctx.addEventListener('message', (event: MessageEvent<BrowserTrainingWorkerMessag
     ctx.postMessage({
       type: 'BROWSER_TRAINING_WARNING',
       requestId: message.requestId,
-      warnings: createRuntimeWarnings(),
+      warnings: createRuntimeWarnings(backendSelection),
     } satisfies BrowserTrainingWarningMessage);
     void runTrainingLoop(run);
   } catch (error) {
@@ -197,8 +204,11 @@ function postError(requestId: string, message: string): void {
   } satisfies BrowserTrainingErrorMessage);
 }
 
-function createRuntimeWarnings(): readonly BrowserTrainingRuntimeWarningV1[] {
+function createRuntimeWarnings(
+  backendSelection: BrowserTrainingBackendSelectionV1,
+): readonly BrowserTrainingRuntimeWarningV1[] {
   return [
+    ...createBackendFallbackWarnings(backendSelection),
     {
       code: 'THERMAL_STATUS_UNAVAILABLE',
       message:
@@ -215,6 +225,48 @@ function createRuntimeWarnings(): readonly BrowserTrainingRuntimeWarningV1[] {
         'Prototype checkpoint recovery uses browser-local storage for synthetic diagnostics and is not an activation path.',
     },
   ];
+}
+
+function createBackendFallbackWarnings(
+  selection: BrowserTrainingBackendSelectionV1,
+): readonly BrowserTrainingRuntimeWarningV1[] {
+  if (selection.fallback === undefined) return [];
+  return [
+    {
+      code: 'ORT_TRAINING_BACKEND_FALLBACK',
+      message: selection.fallback.message,
+    },
+  ];
+}
+
+function createPinnedOnnxRuntimeTrainingBackendProof(): OnnxRuntimeTrainingBackendProofV1 {
+  const report = createPinnedOnnxRuntimeWebTrainingSpikeReport();
+  return {
+    schemaVersion: 1,
+    packageName: report.packageName,
+    packageVersion: report.packageVersion,
+    trainingApiAvailable: report.trainingApiAvailable,
+    packageIncludesTrainingWasm: report.packageIncludesTrainingWasm,
+    workerProof: {
+      status: report.tinyTrainingProof.status,
+      forward: report.tinyTrainingProof.forward,
+      backward: report.tinyTrainingProof.backward,
+      optimizerStep: report.tinyTrainingProof.optimizerStep,
+      checkpointSaveLoad: report.tinyTrainingProof.checkpointSaveLoad,
+      weightExport: report.tinyTrainingProof.weightExport,
+      ...(report.tinyTrainingProof.reason === undefined
+        ? {}
+        : { reason: report.tinyTrainingProof.reason }),
+    },
+    privacy: {
+      inspectedPackageMetadataOnly: true,
+      containsAudio: false,
+      containsTranscript: false,
+      containsProfileData: false,
+      networkRequiredForProbe: false,
+      localOnly: true,
+    },
+  };
 }
 
 function normalizeEpochDelay(value: number | undefined): number {

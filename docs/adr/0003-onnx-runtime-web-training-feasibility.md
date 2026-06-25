@@ -25,9 +25,9 @@ For the current v0.5.0 implementation path, production browser training must pro
 - deployment compatibility with the existing CSP, COOP/COEP, WebAssembly threads, and no-network local-training rules; and
 - browser/Python numerical parity within the declared tolerance.
 
-Issue #144 introduces `@speech/browser-training` as the implementation-agnostic `BrowserTrainingBackend` package boundary. Follow-on backend work must implement through that interface, or first introduce and prove a real ORT Training artifact/API before it can be used. Issue #134 must not promise npm-provided ORT Training artifacts until that proof passes.
+Issue #144 introduces `@speech/browser-training` as the implementation-agnostic `BrowserTrainingBackend` package boundary. Issue #145 routes the pinned ORT Training request through a metadata-only proof selector to the fixed adapter-math fallback because the installed package still lacks the artifact/API/worker proof. Future backend work must implement through that interface, or first introduce and prove a real ORT Training artifact/API before it can be used. Issue #134 must not promise npm-provided ORT Training artifacts until that proof passes.
 
-The existing TypeScript worker prototype remains useful only as a synthetic capability and lifecycle harness. It is not the production adapter-training backend until the fixed adapter math, parity tests, checkpoint format, activation gates, and security reviews land behind `BrowserTrainingBackend`.
+The existing TypeScript worker prototype remains useful only as a synthetic capability and lifecycle harness. It is not the production adapter-training backend until the fixed adapter math, parity tests, checkpoint format, activation gates, and security reviews land behind `BrowserTrainingBackend`. ORT Training fallback warnings may surface in prototype diagnostics, but they are proof metadata only and not a runtime attempt to import or execute ORT Training.
 
 ## Consequences
 
