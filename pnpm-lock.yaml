@@ -47,6 +47,9 @@ importers:
       '@speech/benchmark':
         specifier: workspace:*
         version: link:../../packages/benchmark
+      '@speech/browser-training':
+        specifier: workspace:*
+        version: link:../../packages/browser-training
       '@speech/context-bias':
         specifier: workspace:*
         version: link:../../packages/context-bias
@@ -115,6 +118,12 @@ importers:
         specifier: workspace:*
         version: link:../formatter
 
+  packages/browser-training:
+    dependencies:
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/context-bias:
     dependencies:
       '@speech/protocol':
@@ -150,6 +159,9 @@ importers:
 
   packages/personalization:
     dependencies:
+      '@speech/browser-training':
+        specifier: workspace:*
+        version: link:../browser-training
       '@speech/enrollment':
         specifier: workspace:*
         version: link:../enrollment

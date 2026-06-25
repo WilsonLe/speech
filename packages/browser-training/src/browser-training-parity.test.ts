@@ -4,7 +4,7 @@ import {
   createSyntheticFrozenFeatureTinyAdapterDataset,
   trainFrozenFeatureTinyAdapter,
   type FrozenFeatureTinyAdapterCheckpointV1,
-} from './browser-training';
+} from './index';
 
 const referenceFixtureUrl = new URL(
   '../../../test-data/expected/tiny-adapter-parity.json',

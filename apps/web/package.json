@@ -16,6 +16,7 @@
   "dependencies": {
     "@speech/audio": "workspace:*",
     "@speech/benchmark": "workspace:*",
+    "@speech/browser-training": "workspace:*",
     "@speech/context-bias": "workspace:*",
     "@speech/enrollment": "workspace:*",
     "@speech/features": "workspace:*",

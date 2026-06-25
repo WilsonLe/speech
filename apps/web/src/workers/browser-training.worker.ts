@@ -1,14 +1,15 @@
 /// <reference lib="webworker" />
 
 import {
-  createFrozenFeatureTinyAdapterTrainingSession,
+  createDefaultBrowserTrainingBackend,
   createSyntheticFrozenFeatureTinyAdapterDataset,
+  type BrowserTrainingBackendSession,
   type FrozenFeatureTinyAdapterCheckpointV1,
   type FrozenFeatureTinyAdapterDatasetV1,
   type FrozenFeatureTinyAdapterProgressV1,
   type FrozenFeatureTinyAdapterTrainingOptions,
   type FrozenFeatureTinyAdapterTrainingResultV1,
-} from '@speech/personalization';
+} from '@speech/browser-training';
 
 export interface StartBrowserTrainingPrototypeMessage {
   readonly type: 'START_BROWSER_TRAINING_PROTOTYPE';
@@ -81,7 +82,7 @@ export type BrowserTrainingWorkerResponse =
 
 interface ActiveBrowserTrainingRun {
   readonly requestId: string;
-  readonly session: ReturnType<typeof createFrozenFeatureTinyAdapterTrainingSession>;
+  readonly session: BrowserTrainingBackendSession;
   readonly epochDelayMs: number;
   cancelled: boolean;
   paused: boolean;
@@ -121,7 +122,8 @@ ctx.addEventListener('message', (event: MessageEvent<BrowserTrainingWorkerMessag
       );
     }
     const { epochDelayMs, ...trainingOptions } = message.options ?? {};
-    const session = createFrozenFeatureTinyAdapterTrainingSession(dataset, trainingOptions);
+    const backend = createDefaultBrowserTrainingBackend();
+    const session = backend.createSession(dataset, trainingOptions);
     const run: ActiveBrowserTrainingRun = {
       requestId: message.requestId,
       session,

@@ -3,7 +3,7 @@ import type {
   FrozenFeatureTinyAdapterDatasetV1,
   FrozenFeatureTinyAdapterProgressV1,
   FrozenFeatureTinyAdapterTrainingResultV1,
-} from '@speech/personalization';
+} from '@speech/browser-training';
 import browserTrainingWorkerUrl from './browser-training.worker.ts?worker&url';
 import type {
   BrowserTrainingRuntimeWarningV1,

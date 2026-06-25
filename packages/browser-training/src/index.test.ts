@@ -1,15 +1,47 @@
 import { describe, expect, it } from 'vitest';
 import {
   createBrowserTrainingPrivacy,
+  createDefaultBrowserTrainingBackend,
+  createRepositoryFixedAdapterMathBackend,
   createSyntheticFrozenFeatureTinyAdapterDataset,
+  repositoryFixedAdapterMathBackendDescriptorV1,
   trainFrozenFeatureTinyAdapter,
   validateFrozenFeatureTinyAdapterCheckpoint,
   validateFrozenFeatureTinyAdapterDataset,
   type FrozenFeatureTinyAdapterCheckpointV1,
   type FrozenFeatureTinyAdapterDatasetV1,
-} from './browser-training';
+} from './index';
 
-describe('browser frozen-feature tiny-adapter prototype', () => {
+describe('browser frozen-feature tiny-adapter backend', () => {
+  it('exposes an implementation-agnostic BrowserTrainingBackend descriptor', () => {
+    const backend = createDefaultBrowserTrainingBackend();
+
+    expect(backend.descriptor).toEqual(repositoryFixedAdapterMathBackendDescriptorV1);
+    expect(createRepositoryFixedAdapterMathBackend().descriptor).toBe(
+      repositoryFixedAdapterMathBackendDescriptorV1,
+    );
+    expect(backend.descriptor).toMatchObject({
+      schemaVersion: 1,
+      interface: 'BrowserTrainingBackend',
+      backendId: 'repository-fixed-adapter-math-v1',
+      kind: 'repository-fixed-adapter-math',
+      proofStatus: 'fixed-adapter-math-required',
+      algorithmId: 'browser-top-adapter-frame-ce-v1',
+      owner: 'dedicated-training-worker',
+      capabilities: {
+        checkpoint: true,
+        fixedAdapterMath: true,
+        onnxRuntimeTraining: false,
+      },
+      privacy: {
+        localOnly: true,
+        networkUpload: false,
+        telemetry: false,
+        exposesConcreteRuntimeToUi: false,
+      },
+    });
+  });
+
   it('trains a deterministic tiny affine adapter over frozen synthetic features', () => {
     const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
     const first = trainFrozenFeatureTinyAdapter(dataset, { epochs: 60, progressEveryEpochs: 20 });

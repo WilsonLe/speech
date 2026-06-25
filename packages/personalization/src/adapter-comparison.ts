@@ -1,4 +1,4 @@
-import type { FrozenFeatureTinyAdapterTrainingResultV1 } from './browser-training';
+import type { FrozenFeatureTinyAdapterTrainingResultV1 } from '@speech/browser-training';
 
 export type AdapterComparisonMetricName =
   | 'wordErrorRate'
