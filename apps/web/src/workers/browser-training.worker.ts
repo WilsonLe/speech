@@ -19,6 +19,11 @@ import {
   type BrowserTrainingCoordinationEventV1,
   type BrowserTrainingCoordinationScopeV1,
 } from './browser-training-coordination';
+import {
+  createAsrRuntimePriorityMonitor,
+  type AsrRuntimePriorityEventV1,
+  type AsrRuntimePriorityMonitorV1,
+} from './asr-runtime-priority';
 
 export interface StartBrowserTrainingPrototypeMessage {
   readonly type: 'START_BROWSER_TRAINING_PROTOTYPE';
@@ -53,7 +58,8 @@ export interface BrowserTrainingRuntimeWarningV1 {
     | 'BATTERY_STATUS_UNAVAILABLE'
     | 'CHECKPOINT_STORAGE_VOLATILE'
     | 'ORT_TRAINING_BACKEND_FALLBACK'
-    | 'WEB_LOCKS_UNAVAILABLE';
+    | 'WEB_LOCKS_UNAVAILABLE'
+    | 'ASR_PRIORITY_PAUSE';
   readonly message: string;
 }
 
@@ -109,8 +115,11 @@ interface ActiveBrowserTrainingRun {
   readonly session: BrowserTrainingBackendSession;
   readonly epochDelayMs: number;
   readonly coordinationScope: BrowserTrainingCoordinationScopeV1;
+  readonly asrPriorityMonitor: AsrRuntimePriorityMonitorV1;
   cancelled: boolean;
   paused: boolean;
+  asrPriorityPauseNotified: boolean;
+  asrPriorityEvent?: AsrRuntimePriorityEventV1;
 }
 
 const ctx = self as DedicatedWorkerGlobalScope;
@@ -172,15 +181,26 @@ async function startCoordinatedTrainingRun(
           onnxRuntimeTrainingProof: createPinnedOnnxRuntimeTrainingBackendProof(),
         });
         const session = backendSelection.backend.createSession(dataset, trainingOptions);
+        const asrPriorityMonitor = createAsrRuntimePriorityMonitor({
+          dependencies: { requestId: message.requestId },
+          onEvent: (event) => {
+            const current = activeRun;
+            if (current?.requestId !== message.requestId) return;
+            handleAsrPriorityEvent(current, event);
+          },
+        });
         const run: ActiveBrowserTrainingRun = {
           requestId: message.requestId,
           session,
           epochDelayMs: normalizeEpochDelay(epochDelayMs),
           coordinationScope,
+          asrPriorityMonitor,
           cancelled: false,
           paused: false,
+          asrPriorityPauseNotified: false,
         };
         activeRun = run;
+        asrPriorityMonitor.requestState();
         ctx.postMessage({
           type: 'BROWSER_TRAINING_WARNING',
           requestId: message.requestId,
@@ -201,7 +221,7 @@ async function startCoordinatedTrainingRun(
 async function runTrainingLoop(run: ActiveBrowserTrainingRun): Promise<void> {
   try {
     while (activeRun === run && run.session.epoch < run.session.options.epochs) {
-      if (run.cancelled || run.paused) {
+      if (run.cancelled || run.paused || maybePauseForActiveAsr(run)) {
         break;
       }
       const progress = run.session.runEpoch();
@@ -213,7 +233,7 @@ async function runTrainingLoop(run: ActiveBrowserTrainingRun): Promise<void> {
       if (run.session.shouldCheckpoint()) {
         postCheckpoint(run.requestId, run.session.createCheckpoint());
       }
-      if (run.session.hasReachedTargetLoss()) {
+      if (run.session.hasReachedTargetLoss() || maybePauseForActiveAsr(run)) {
         break;
       }
       await sleep(run.epochDelayMs);
@@ -230,10 +250,52 @@ async function runTrainingLoop(run: ActiveBrowserTrainingRun): Promise<void> {
   } catch (error) {
     postError(run.requestId, error instanceof Error ? error.message : String(error));
   } finally {
+    run.session.dispose();
+    run.asrPriorityMonitor.close();
     if (activeRun === run) {
       activeRun = undefined;
     }
   }
+}
+
+function maybePauseForActiveAsr(run: ActiveBrowserTrainingRun): boolean {
+  if (run.asrPriorityMonitor.isActive()) {
+    run.paused = true;
+    const latest = run.asrPriorityMonitor.lastEvent();
+    if (latest !== undefined) {
+      run.asrPriorityEvent = latest;
+      postAsrPriorityPauseWarning(run, latest);
+    }
+  }
+  return run.paused;
+}
+
+function handleAsrPriorityEvent(
+  run: ActiveBrowserTrainingRun,
+  event: AsrRuntimePriorityEventV1,
+): void {
+  if (!event.active) return;
+  run.asrPriorityEvent = event;
+  run.paused = true;
+  postAsrPriorityPauseWarning(run, event);
+}
+
+function postAsrPriorityPauseWarning(
+  run: ActiveBrowserTrainingRun,
+  event: AsrRuntimePriorityEventV1,
+): void {
+  if (run.asrPriorityPauseNotified) return;
+  run.asrPriorityPauseNotified = true;
+  ctx.postMessage({
+    type: 'BROWSER_TRAINING_WARNING',
+    requestId: run.requestId,
+    warnings: [
+      {
+        code: 'ASR_PRIORITY_PAUSE',
+        message: `ASR runtime is active (${event.reason}); browser training will pause cooperatively and release training resources.`,
+      },
+    ],
+  } satisfies BrowserTrainingWarningMessage);
 }
 
 function postCheckpoint(requestId: string, checkpoint: FrozenFeatureTinyAdapterCheckpointV1): void {
