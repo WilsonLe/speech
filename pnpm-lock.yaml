@@ -53,6 +53,9 @@ importers:
       '@speech/enrollment':
         specifier: workspace:*
         version: link:../../packages/enrollment
+      '@speech/features':
+        specifier: workspace:*
+        version: link:../../packages/features
       '@speech/inference':
         specifier: workspace:*
         version: link:../../packages/inference
@@ -168,6 +171,9 @@ importers:
       '@speech/enrollment':
         specifier: workspace:*
         version: link:../enrollment
+      '@speech/features':
+        specifier: workspace:*
+        version: link:../features
       '@speech/protocol':
         specifier: workspace:*
         version: link:../protocol

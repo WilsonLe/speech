@@ -14,6 +14,13 @@ import {
   type TrainingReadinessIdentityOptions,
   type TrainingReadinessPolicyV1,
 } from '@speech/enrollment';
+import {
+  encodeFloat16Array,
+  extractLogMelFeatures,
+  resolveLogMelFeatureConfig,
+  type LogMelFeatureConfig,
+  type ResolvedLogMelFeatureConfig,
+} from '@speech/features';
 import type { VocabularyRevisionV1, VocabularyStoreSnapshotV1 } from '@speech/protocol';
 
 export type ProfileStorageBackendKind = 'opfs' | 'memory';
@@ -306,6 +313,147 @@ export interface TrainingJobPromptIdentitySplitSummaryV1 {
     readonly networkUpload: false;
     readonly telemetry: false;
   };
+}
+
+export interface PrepareTrainingJobFeatureShardsInput {
+  readonly jobId: string;
+  readonly featureSetId?: string;
+  readonly featureConfig?: LogMelFeatureConfig;
+  readonly splitConfig?: PromptIdentitySplitConfigV1;
+  readonly maxFramesPerShard?: number;
+}
+
+export interface TrainingJobFeatureShardUtteranceV1 {
+  readonly utteranceId: string;
+  readonly promptId: string;
+  readonly split: 'train' | 'validation' | 'test';
+  readonly frameOffset: number;
+  readonly frameCount: number;
+  readonly durationMs: number;
+  readonly audioSha256: string;
+}
+
+export interface TrainingJobFeatureShardV1 {
+  readonly schemaVersion: 1;
+  readonly shardId: string;
+  readonly split: 'train' | 'validation' | 'test';
+  readonly path: string;
+  readonly dtype: 'float16-le';
+  readonly frameCount: number;
+  readonly melBinCount: number;
+  readonly utteranceCount: number;
+  readonly sizeBytes: number;
+  readonly sha256: string;
+  readonly utterances: readonly TrainingJobFeatureShardUtteranceV1[];
+}
+
+export interface TrainingJobFeatureSplitTotalsV1 {
+  readonly utterances: number;
+  readonly frames: number;
+  readonly shards: number;
+  readonly durationSeconds: number;
+  readonly sizeBytes: number;
+}
+
+export interface TrainingJobFeaturePreparationManifestV1 {
+  readonly schemaVersion: 1;
+  readonly manifestType: 'training-job-feature-shards';
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly featureSetId: string;
+  readonly createdAt: string;
+  readonly enrollmentRevisionSha256: string;
+  readonly promptSplit: {
+    readonly seed: string;
+    readonly assignmentSha256: string;
+    readonly totals: PromptIdentitySplitPlanV1['totals'];
+  };
+  readonly feature: ResolvedLogMelFeatureConfig;
+  readonly dtype: 'float16-le';
+  readonly maxFramesPerShard: number;
+  readonly totals: {
+    readonly utterances: number;
+    readonly frames: number;
+    readonly shards: number;
+    readonly durationSeconds: number;
+    readonly sizeBytes: number;
+    readonly splits: Readonly<
+      Record<'train' | 'validation' | 'test', TrainingJobFeatureSplitTotalsV1>
+    >;
+  };
+  readonly shards: readonly TrainingJobFeatureShardV1[];
+  readonly manifestSha256: string;
+  readonly privacy: {
+    readonly localOnly: true;
+    readonly defaultExportIncludesFeatures: false;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly referencesFeatureTensorFiles: true;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawPromptIds: true;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+  };
+}
+
+export interface TrainingJobFeaturePreparationSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly manifestType: 'training-job-feature-shards';
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly featureSetId: string;
+  readonly createdAt: string;
+  readonly enrollmentRevisionSha256: string;
+  readonly manifestSha256: string;
+  readonly dtype: 'float16-le';
+  readonly feature: Pick<
+    ResolvedLogMelFeatureConfig,
+    'sampleRateHz' | 'melBinCount' | 'frameLengthMs' | 'frameShiftMs' | 'fftSize' | 'snipEdges'
+  >;
+  readonly totals: TrainingJobFeaturePreparationManifestV1['totals'];
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly localOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawPromptIds: false;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+  };
+}
+
+export interface VerifyTrainingJobFeatureShardsInput {
+  readonly jobId: string;
+  readonly featureSetId: string;
+}
+
+export interface DeleteTrainingJobFeatureShardsInput {
+  readonly jobId: string;
+  readonly featureSetId: string;
+}
+
+export interface TrainingJobFeatureShardVerificationResultV1 {
+  readonly schemaVersion: 1;
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly checkedAt: string;
+  readonly ok: boolean;
+  readonly manifestStatus: 'match' | 'changed';
+  readonly expectedManifestSha256: string;
+  readonly actualManifestSha256: string;
+  readonly shards: readonly {
+    readonly shardId: string;
+    readonly status: 'match' | 'changed' | 'missing';
+    readonly expectedSha256: string;
+    readonly actualSha256?: string;
+  }[];
+  readonly errors: readonly string[];
+  readonly privacy: TrainingJobFeaturePreparationSummaryV1['privacy'];
 }
 
 export interface SaveEnrollmentUtteranceInput {
@@ -961,8 +1109,152 @@ export class EnrollmentProfileStore {
     return buildTrainingJobPromptIdentitySplitPlan(revision, input.config);
   }
 
+  async prepareTrainingJobFeatureShards(
+    input: PrepareTrainingJobFeatureShardsInput,
+  ): Promise<TrainingJobFeaturePreparationManifestV1> {
+    const jobId = normalizeSegment(input.jobId, 'trainingJobId');
+    const featureSetId = normalizeSegment(
+      input.featureSetId ?? this.createFeatureSetId(),
+      'featureSetId',
+    );
+    const manifestPath = trainingJobFeatureManifestPath(jobId, featureSetId);
+    if ((await this.backend.getFile(manifestPath)) !== undefined) {
+      throw new Error(`Training job feature set ${featureSetId} already exists for ${jobId}.`);
+    }
+    const revision = await this.getTrainingJobRevision(jobId);
+    if (revision === undefined) {
+      throw new Error(`Training job revision ${jobId} was not found.`);
+    }
+    const split = buildTrainingJobPromptIdentitySplitPlan(revision, input.splitConfig);
+    const featureConfig = resolveLogMelFeatureConfig(input.featureConfig);
+    const maxFramesPerShard = normalizeMaxFramesPerShard(input.maxFramesPerShard);
+    const tempPrefix = trainingJobFeatureTempPath(
+      jobId,
+      `${featureSetId}-${Date.now().toString(36)}`,
+    );
+
+    try {
+      const prepared = await prepareFeatureShardFiles({
+        revision,
+        split,
+        featureSetId,
+        featureConfig,
+        maxFramesPerShard,
+        readFile: (path) => this.backend.getFile(path),
+        writeStagedFile: (path, bytes, sha256) =>
+          writeCheckedFileAtomically(this.backend, path, bytes, sha256, (body) =>
+            this.digest(body),
+          ),
+        digest: (bytes) => this.digest(bytes),
+        now: this.options.now?.() ?? new Date().toISOString(),
+        tempPrefix,
+      });
+
+      for (const shard of prepared.shards) {
+        const stagedBytes = await this.backend.getFile(portablePathToSegments(shard.stagedPath));
+        if (stagedBytes === undefined) {
+          throw new Error(`Prepared feature shard ${shard.shardId} is missing from staging.`);
+        }
+        await writeCheckedFileAtomically(
+          this.backend,
+          portablePathToSegments(shard.finalPath),
+          stagedBytes,
+          shard.sha256,
+          (bytes) => this.digest(bytes),
+        );
+      }
+
+      const manifest = await finalizeFeaturePreparationManifest(
+        prepared.manifest,
+        prepared.shards.map(toCommittedFeatureShard),
+        (bytes) => this.digest(bytes),
+      );
+      await writeJsonAtomically(this.backend, manifestPath, manifest);
+      await this.backend.deleteDirectory(tempPrefix);
+      return manifest;
+    } catch (error) {
+      await this.backend.deleteDirectory(tempPrefix);
+      await this.backend.deleteDirectory(trainingJobFeatureSetPath(jobId, featureSetId));
+      throw error;
+    }
+  }
+
+  async getTrainingJobFeaturePreparationManifest(
+    input: VerifyTrainingJobFeatureShardsInput,
+  ): Promise<TrainingJobFeaturePreparationManifestV1 | undefined> {
+    const bytes = await this.backend.getFile(
+      trainingJobFeatureManifestPath(input.jobId, input.featureSetId),
+    );
+    return bytes === undefined
+      ? undefined
+      : parseJson<TrainingJobFeaturePreparationManifestV1>(bytes);
+  }
+
+  async verifyTrainingJobFeatureShards(
+    input: VerifyTrainingJobFeatureShardsInput,
+  ): Promise<TrainingJobFeatureShardVerificationResultV1> {
+    const jobId = normalizeSegment(input.jobId, 'trainingJobId');
+    const featureSetId = normalizeSegment(input.featureSetId, 'featureSetId');
+    const manifest = await this.getTrainingJobFeaturePreparationManifest({ jobId, featureSetId });
+    if (manifest === undefined) {
+      throw new Error(`Training job feature set ${featureSetId} was not found for ${jobId}.`);
+    }
+    const errors: string[] = [];
+    const actualManifestSha256 = await calculateFeaturePreparationManifestSha256(
+      manifest,
+      (bytes) => this.digest(bytes),
+    );
+    const manifestStatus = actualManifestSha256 === manifest.manifestSha256 ? 'match' : 'changed';
+    if (manifestStatus !== 'match') {
+      errors.push('Feature preparation manifest checksum changed.');
+    }
+    const shards: Array<TrainingJobFeatureShardVerificationResultV1['shards'][number]> = [];
+    for (const shard of manifest.shards) {
+      const bytes = await this.backend.getFile(portablePathToSegments(shard.path));
+      if (bytes === undefined) {
+        errors.push(`Feature shard ${shard.shardId} is missing.`);
+        shards.push({
+          shardId: shard.shardId,
+          status: 'missing',
+          expectedSha256: shard.sha256,
+        });
+        continue;
+      }
+      const actualSha256 = await this.digest(bytes);
+      const status =
+        actualSha256 === shard.sha256 && bytes.byteLength === shard.sizeBytes ? 'match' : 'changed';
+      if (status !== 'match') {
+        errors.push(`Feature shard ${shard.shardId} checksum or size changed.`);
+      }
+      shards.push({
+        shardId: shard.shardId,
+        status,
+        expectedSha256: shard.sha256,
+        actualSha256,
+      });
+    }
+    return {
+      schemaVersion: 1,
+      jobId,
+      featureSetId,
+      checkedAt: this.options.now?.() ?? new Date().toISOString(),
+      ok: errors.length === 0,
+      manifestStatus,
+      expectedManifestSha256: manifest.manifestSha256,
+      actualManifestSha256,
+      shards,
+      errors,
+      privacy: createFeatureSummaryPrivacy(),
+    };
+  }
+
+  async deleteTrainingJobFeatureShards(input: DeleteTrainingJobFeatureShardsInput): Promise<void> {
+    await this.backend.deleteDirectory(trainingJobFeatureSetPath(input.jobId, input.featureSetId));
+  }
+
   async deleteProfile(profileId: string): Promise<void> {
     const normalizedProfileId = normalizeSegment(profileId, 'profileId');
+    await this.deleteTrainingJobDataForProfile(normalizedProfileId);
     await this.backend.deleteDirectory(['profiles', normalizedProfileId]);
     const activeState = await this.getActiveProfileState();
     if (
@@ -986,6 +1278,13 @@ export class EnrollmentProfileStore {
         profileLifecyclePath('active-profile.json'),
         nextState,
       );
+    }
+  }
+
+  private async deleteTrainingJobDataForProfile(profileId: string): Promise<void> {
+    const revisions = await this.listTrainingJobRevisions(profileId);
+    for (const revision of revisions) {
+      await this.backend.deleteDirectory(['training-jobs', revision.jobId]);
     }
   }
 
@@ -1078,6 +1377,13 @@ export class EnrollmentProfileStore {
     return (
       this.options.randomId?.() ??
       `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    );
+  }
+
+  private createFeatureSetId(): string {
+    return (
+      this.options.randomId?.() ??
+      `features-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
     );
   }
 }
@@ -1215,6 +1521,411 @@ export function summarizeTrainingJobPromptIdentitySplitPlan(
   };
 }
 
+export function summarizeTrainingJobFeaturePreparationManifest(
+  manifest: TrainingJobFeaturePreparationManifestV1,
+): TrainingJobFeaturePreparationSummaryV1 {
+  return {
+    schemaVersion: 1,
+    manifestType: manifest.manifestType,
+    jobId: manifest.jobId,
+    profileId: manifest.profileId,
+    featureSetId: manifest.featureSetId,
+    createdAt: manifest.createdAt,
+    enrollmentRevisionSha256: manifest.enrollmentRevisionSha256,
+    manifestSha256: manifest.manifestSha256,
+    dtype: manifest.dtype,
+    feature: {
+      sampleRateHz: manifest.feature.sampleRateHz,
+      melBinCount: manifest.feature.melBinCount,
+      frameLengthMs: manifest.feature.frameLengthMs,
+      frameShiftMs: manifest.feature.frameShiftMs,
+      fftSize: manifest.feature.fftSize,
+      snipEdges: manifest.feature.snipEdges,
+    },
+    totals: manifest.totals,
+    privacy: createFeatureSummaryPrivacy(),
+  };
+}
+
+interface PreparedFeatureShardRecord extends Omit<TrainingJobFeatureShardV1, 'path'> {
+  readonly stagedPath: string;
+  readonly finalPath: string;
+}
+
+interface PrepareFeatureShardFilesInput {
+  readonly revision: TrainingJobRevisionV1;
+  readonly split: TrainingJobPromptIdentitySplitPlanV1;
+  readonly featureSetId: string;
+  readonly featureConfig: ResolvedLogMelFeatureConfig;
+  readonly maxFramesPerShard: number;
+  readonly readFile: (path: readonly string[]) => Promise<ArrayBuffer | undefined>;
+  readonly writeStagedFile: (
+    path: readonly string[],
+    bytes: ArrayBuffer,
+    sha256: string,
+  ) => Promise<void>;
+  readonly digest: (bytes: ArrayBuffer) => Promise<string>;
+  readonly now: string;
+  readonly tempPrefix: readonly string[];
+}
+
+interface PreparedFeatureShardFiles {
+  readonly manifest: Omit<TrainingJobFeaturePreparationManifestV1, 'shards' | 'manifestSha256'>;
+  readonly shards: readonly PreparedFeatureShardRecord[];
+}
+
+async function prepareFeatureShardFiles(
+  input: PrepareFeatureShardFilesInput,
+): Promise<PreparedFeatureShardFiles> {
+  const assignmentByPrompt = new Map(
+    input.split.split.assignments.map((assignment) => [assignment.promptId, assignment.split]),
+  );
+  const builders = createFeatureShardBuilders(input.featureConfig.melBinCount);
+  const shards: PreparedFeatureShardRecord[] = [];
+
+  for (const utterance of input.revision.enrollment.utterances) {
+    const split = assignmentByPrompt.get(utterance.promptId) ?? 'train';
+    const audioBytes = await readAndVerifyFrozenAudio(utterance, input.readFile, input.digest);
+    const samples = decodePcm16MonoWav(audioBytes, input.featureConfig.sampleRateHz);
+    const features = extractLogMelFeatures(samples, input.featureConfig);
+    const builder = builders[split];
+    if (
+      builder.frameCount > 0 &&
+      builder.frameCount + features.frameCount > input.maxFramesPerShard
+    ) {
+      await flushFeatureShardBuilder(builder, input, shards);
+    }
+    addUtteranceFeaturesToShardBuilders(builder, utterance, features);
+    if (builder.frameCount >= input.maxFramesPerShard) {
+      await flushFeatureShardBuilder(builder, input, shards);
+    }
+  }
+
+  for (const split of featureSplitNames) {
+    const builder = builders[split];
+    if (builder.utterances.length > 0) {
+      await flushFeatureShardBuilder(builder, input, shards);
+    }
+  }
+
+  const totals = summarizeFeatureShardTotals(shards);
+  return {
+    manifest: {
+      schemaVersion: 1,
+      manifestType: 'training-job-feature-shards',
+      jobId: input.revision.jobId,
+      profileId: input.revision.profileId,
+      featureSetId: input.featureSetId,
+      createdAt: input.now,
+      enrollmentRevisionSha256: input.revision.enrollment.revisionSha256,
+      promptSplit: {
+        seed: input.split.split.seed,
+        assignmentSha256: await input.digest(stableJsonBytes(input.split.split.assignments)),
+        totals: input.split.split.totals,
+      },
+      feature: input.featureConfig,
+      dtype: 'float16-le',
+      maxFramesPerShard: input.maxFramesPerShard,
+      totals,
+      privacy: {
+        localOnly: true,
+        defaultExportIncludesFeatures: false,
+        containsRawAudio: false,
+        containsTranscriptText: false,
+        containsFeatureTensors: false,
+        referencesFeatureTensorFiles: true,
+        containsCheckpoints: false,
+        containsAdapterWeights: false,
+        exposesRawPromptIds: true,
+        networkUpload: false,
+        telemetry: false,
+      },
+    },
+    shards,
+  };
+}
+
+async function finalizeFeaturePreparationManifest(
+  manifest: Omit<TrainingJobFeaturePreparationManifestV1, 'shards' | 'manifestSha256'>,
+  shards: readonly TrainingJobFeatureShardV1[],
+  digest: (bytes: ArrayBuffer) => Promise<string>,
+): Promise<TrainingJobFeaturePreparationManifestV1> {
+  const unsigned = { ...manifest, shards };
+  return {
+    ...unsigned,
+    manifestSha256: await digest(stableJsonBytes(unsigned)),
+  };
+}
+
+async function calculateFeaturePreparationManifestSha256(
+  manifest: TrainingJobFeaturePreparationManifestV1,
+  digest: (bytes: ArrayBuffer) => Promise<string>,
+): Promise<string> {
+  const { manifestSha256: _manifestSha256, ...unsigned } = manifest;
+  return digest(stableJsonBytes(unsigned));
+}
+
+function toCommittedFeatureShard(shard: PreparedFeatureShardRecord): TrainingJobFeatureShardV1 {
+  return {
+    schemaVersion: shard.schemaVersion,
+    shardId: shard.shardId,
+    split: shard.split,
+    path: shard.finalPath,
+    dtype: shard.dtype,
+    frameCount: shard.frameCount,
+    melBinCount: shard.melBinCount,
+    utteranceCount: shard.utteranceCount,
+    sizeBytes: shard.sizeBytes,
+    sha256: shard.sha256,
+    utterances: shard.utterances,
+  };
+}
+
+const featureSplitNames = ['train', 'validation', 'test'] as const;
+
+interface MutableFeatureShardBuilder {
+  readonly split: (typeof featureSplitNames)[number];
+  readonly melBinCount: number;
+  shardIndex: number;
+  frameCount: number;
+  readonly frames: number[];
+  readonly utterances: TrainingJobFeatureShardUtteranceV1[];
+}
+
+function createFeatureShardBuilders(
+  melBinCount: number,
+): Record<(typeof featureSplitNames)[number], MutableFeatureShardBuilder> {
+  return {
+    train: createFeatureShardBuilder('train', melBinCount),
+    validation: createFeatureShardBuilder('validation', melBinCount),
+    test: createFeatureShardBuilder('test', melBinCount),
+  };
+}
+
+function createFeatureShardBuilder(
+  split: (typeof featureSplitNames)[number],
+  melBinCount: number,
+): MutableFeatureShardBuilder {
+  return {
+    split,
+    melBinCount,
+    shardIndex: 0,
+    frameCount: 0,
+    frames: [],
+    utterances: [],
+  };
+}
+
+function addUtteranceFeaturesToShardBuilders(
+  builder: MutableFeatureShardBuilder,
+  utterance: TrainingJobEnrollmentUtteranceRefV1,
+  features: ReturnType<typeof extractLogMelFeatures>,
+): void {
+  const frameOffset = builder.frameCount;
+  for (const value of features.frames) {
+    builder.frames.push(value);
+  }
+  builder.frameCount += features.frameCount;
+  builder.utterances.push({
+    utteranceId: utterance.id,
+    promptId: utterance.promptId,
+    split: builder.split,
+    frameOffset,
+    frameCount: features.frameCount,
+    durationMs: utterance.durationMs,
+    audioSha256: utterance.audio.sha256,
+  });
+}
+
+async function flushFeatureShardBuilder(
+  builder: MutableFeatureShardBuilder,
+  input: PrepareFeatureShardFilesInput,
+  output: PreparedFeatureShardRecord[],
+): Promise<void> {
+  const shardId = `${builder.split}-${String(builder.shardIndex + 1).padStart(4, '0')}`;
+  const finalPath = pathToPortableString([
+    ...trainingJobFeatureSetPath(input.revision.jobId, input.featureSetId),
+    'shards',
+    `${shardId}.f16`,
+  ]);
+  const stagedPath = pathToPortableString([...input.tempPrefix, `${shardId}.f16`]);
+  const bytes = encodeFloat16Array(builder.frames);
+  const sha256 = await input.digest(bytes);
+  await input.writeStagedFile(portablePathToSegments(stagedPath), bytes, sha256);
+  output.push({
+    schemaVersion: 1,
+    shardId,
+    split: builder.split,
+    stagedPath,
+    finalPath,
+    dtype: 'float16-le',
+    frameCount: builder.frameCount,
+    melBinCount: builder.melBinCount,
+    utteranceCount: builder.utterances.length,
+    sizeBytes: bytes.byteLength,
+    sha256,
+    utterances: [...builder.utterances],
+  });
+  builder.shardIndex += 1;
+  builder.frameCount = 0;
+  builder.frames.length = 0;
+  builder.utterances.length = 0;
+}
+
+interface MutableFeatureSplitTotals {
+  utterances: number;
+  frames: number;
+  shards: number;
+  durationSeconds: number;
+  sizeBytes: number;
+}
+
+function summarizeFeatureShardTotals(
+  shards: readonly PreparedFeatureShardRecord[] | readonly TrainingJobFeatureShardV1[],
+): TrainingJobFeaturePreparationManifestV1['totals'] {
+  const splits: Record<(typeof featureSplitNames)[number], MutableFeatureSplitTotals> = {
+    train: createEmptyFeatureSplitTotals(),
+    validation: createEmptyFeatureSplitTotals(),
+    test: createEmptyFeatureSplitTotals(),
+  };
+  let utterances = 0;
+  let frames = 0;
+  let sizeBytes = 0;
+  let durationSeconds = 0;
+  for (const shard of shards) {
+    const split = splits[shard.split];
+    split.utterances += shard.utteranceCount;
+    split.frames += shard.frameCount;
+    split.shards += 1;
+    split.sizeBytes += shard.sizeBytes;
+    const shardDurationSeconds = roundSeconds(
+      shard.utterances.reduce((sum, utterance) => sum + utterance.durationMs, 0) / 1_000,
+    );
+    split.durationSeconds = roundSeconds(split.durationSeconds + shardDurationSeconds);
+    utterances += shard.utteranceCount;
+    frames += shard.frameCount;
+    sizeBytes += shard.sizeBytes;
+    durationSeconds = roundSeconds(durationSeconds + shardDurationSeconds);
+  }
+  return {
+    utterances,
+    frames,
+    shards: shards.length,
+    durationSeconds,
+    sizeBytes,
+    splits,
+  };
+}
+
+function createEmptyFeatureSplitTotals(): MutableFeatureSplitTotals {
+  return { utterances: 0, frames: 0, shards: 0, durationSeconds: 0, sizeBytes: 0 };
+}
+
+function roundSeconds(value: number): number {
+  return Math.round(value * 1_000) / 1_000;
+}
+
+async function readAndVerifyFrozenAudio(
+  utterance: TrainingJobEnrollmentUtteranceRefV1,
+  readFile: (path: readonly string[]) => Promise<ArrayBuffer | undefined>,
+  digest: (bytes: ArrayBuffer) => Promise<string>,
+): Promise<ArrayBuffer> {
+  const bytes = await readFile(portablePathToSegments(utterance.audio.path));
+  if (bytes === undefined) {
+    throw new Error(`Enrollment audio file ${utterance.audio.path} is missing.`);
+  }
+  const sha256 = await digest(bytes);
+  if (sha256 !== utterance.audio.sha256 || bytes.byteLength !== utterance.audio.sizeBytes) {
+    throw new Error(`Enrollment audio file ${utterance.audio.path} changed after job freeze.`);
+  }
+  return bytes;
+}
+
+function decodePcm16MonoWav(bytes: ArrayBuffer, expectedSampleRateHz: number): Float32Array {
+  const view = new DataView(bytes);
+  if (
+    bytes.byteLength < 44 ||
+    readAscii(view, 0, 4) !== 'RIFF' ||
+    readAscii(view, 8, 12) !== 'WAVE'
+  ) {
+    throw new Error('Enrollment audio must be a RIFF/WAVE file.');
+  }
+  let offset = 12;
+  let sampleRateHz: number | undefined;
+  let channels: number | undefined;
+  let bitsPerSample: number | undefined;
+  let dataOffset: number | undefined;
+  let dataBytes: number | undefined;
+  while (offset + 8 <= bytes.byteLength) {
+    const chunkId = readAscii(view, offset, offset + 4);
+    const chunkBytes = view.getUint32(offset + 4, true);
+    const chunkDataOffset = offset + 8;
+    if (chunkDataOffset + chunkBytes > bytes.byteLength) {
+      throw new Error('Enrollment WAV file has an invalid chunk size.');
+    }
+    if (chunkId === 'fmt ') {
+      if (chunkBytes < 16) {
+        throw new Error('Enrollment WAV fmt chunk is too short.');
+      }
+      const audioFormat = view.getUint16(chunkDataOffset, true);
+      channels = view.getUint16(chunkDataOffset + 2, true);
+      sampleRateHz = view.getUint32(chunkDataOffset + 4, true);
+      bitsPerSample = view.getUint16(chunkDataOffset + 14, true);
+      if (audioFormat !== 1) {
+        throw new Error('Enrollment WAV audio must use PCM format.');
+      }
+    } else if (chunkId === 'data') {
+      dataOffset = chunkDataOffset;
+      dataBytes = chunkBytes;
+    }
+    offset = chunkDataOffset + chunkBytes + (chunkBytes % 2);
+  }
+  if (channels !== 1 || bitsPerSample !== 16 || sampleRateHz !== expectedSampleRateHz) {
+    throw new Error(
+      `Enrollment WAV must be mono 16-bit PCM at ${expectedSampleRateHz.toString()} Hz.`,
+    );
+  }
+  if (dataOffset === undefined || dataBytes === undefined || dataBytes % 2 !== 0) {
+    throw new Error('Enrollment WAV file is missing valid PCM data.');
+  }
+  const samples = new Float32Array(dataBytes / 2);
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = view.getInt16(dataOffset + index * 2, true) / 0x8000;
+  }
+  return samples;
+}
+
+function readAscii(view: DataView, start: number, end: number): string {
+  let text = '';
+  for (let index = start; index < end; index += 1) {
+    text += String.fromCharCode(view.getUint8(index));
+  }
+  return text;
+}
+
+function normalizeMaxFramesPerShard(value: number | undefined): number {
+  const maxFrames = value ?? 512;
+  if (!Number.isInteger(maxFrames) || maxFrames <= 0) {
+    throw new Error('maxFramesPerShard must be a positive integer.');
+  }
+  return maxFrames;
+}
+
+function createFeatureSummaryPrivacy(): TrainingJobFeaturePreparationSummaryV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    localOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsFeatureTensors: false,
+    containsCheckpoints: false,
+    containsAdapterWeights: false,
+    exposesRawPromptIds: false,
+    networkUpload: false,
+    telemetry: false,
+  };
+}
+
 async function buildTrainingJobEnrollmentRevision(
   summary: EnrollmentProfileSummaryV1,
   digest: (bytes: ArrayBuffer) => Promise<string>,
@@ -1326,7 +2037,7 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, frozen training-job revisions, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
+    'Private profile storage, frozen training-job revisions, FP16 feature shards, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
 };
 
 async function writeJsonAtomically(
@@ -1360,6 +2071,26 @@ async function writeFileAtomically(
   }
   await backend.putFile(normalizedPath, tempBytes);
   await backend.deleteFile(tempPath);
+}
+
+async function writeCheckedFileAtomically(
+  backend: ProfileStorageBackend,
+  path: readonly string[],
+  bytes: ProfileBinaryFile,
+  expectedSha256: string,
+  digest: (bytes: ArrayBuffer) => Promise<string>,
+): Promise<void> {
+  await writeFileAtomically(backend, path, bytes);
+  const storedBytes = await backend.getFile(path);
+  if (storedBytes === undefined) {
+    throw new Error(`Profile storage write failed for ${pathToPortableString(path)}.`);
+  }
+  const actualSha256 = await digest(storedBytes);
+  if (actualSha256 !== expectedSha256) {
+    throw new Error(
+      `Profile storage checksum verification failed for ${pathToPortableString(path)}.`,
+    );
+  }
 }
 
 function createEmptyChecksumIndex(
@@ -1433,6 +2164,28 @@ function trainingJobRevisionPath(jobId?: string): string[] {
   return jobId === undefined
     ? ['training-jobs']
     : ['training-jobs', normalizeSegment(jobId, 'trainingJobId'), 'revision.json'];
+}
+
+function trainingJobFeatureSetPath(jobId: string, featureSetId: string): string[] {
+  return [
+    'training-jobs',
+    normalizeSegment(jobId, 'trainingJobId'),
+    'features',
+    normalizeSegment(featureSetId, 'featureSetId'),
+  ];
+}
+
+function trainingJobFeatureManifestPath(jobId: string, featureSetId: string): string[] {
+  return [...trainingJobFeatureSetPath(jobId, featureSetId), 'manifest.json'];
+}
+
+function trainingJobFeatureTempPath(jobId: string, tempId: string): string[] {
+  return [
+    'training-jobs',
+    normalizeSegment(jobId, 'trainingJobId'),
+    'feature-staging',
+    normalizeSegment(tempId, 'featureTempId'),
+  ];
 }
 
 function stableJsonBytes(value: unknown): ArrayBuffer {
@@ -1586,7 +2339,7 @@ function stableJson(value: unknown): string {
 function mediaTypeForProfilePath(path: string): string {
   if (path.endsWith('.wav')) return 'audio/wav';
   if (path.endsWith('.json') || path.endsWith('.jsonl')) return 'application/json';
-  if (path.endsWith('.f32')) return 'application/octet-stream';
+  if (path.endsWith('.f16') || path.endsWith('.f32')) return 'application/octet-stream';
   return 'application/octet-stream';
 }
 
