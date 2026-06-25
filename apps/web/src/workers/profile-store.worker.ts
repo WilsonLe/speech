@@ -3,6 +3,7 @@ import {
   createDefaultProfileStorageBackend,
   encodePcm16Wav,
   requestPersistentProfileStorage,
+  summarizeTrainingJobPromptIdentitySplitPlan,
   summarizeTrainingJobRevision,
   type ActiveEnrollmentProfileStateV1,
   type EnrollmentCaptureMetadataV1,
@@ -11,6 +12,7 @@ import {
   type EnrollmentUtteranceV1,
   type ProfileStorageBackend,
   type ProfileStorageBackendKind,
+  type TrainingJobPromptIdentitySplitSummaryV1,
   type TrainingJobRevisionSummaryV1,
   type TrainingJobRevisionVerificationResultV1,
 } from '@speech/profile-manager';
@@ -19,6 +21,7 @@ import type {
   EnrollmentQualityReportV1,
   EnrollmentSentenceLanguage,
   EnrollmentVoiceCondition,
+  PromptIdentitySplitConfigV1,
 } from '@speech/enrollment';
 
 export type ProfileStoreWorkerRequest =
@@ -62,6 +65,12 @@ export type ProfileStoreWorkerRequest =
       readonly requestId: string;
       readonly jobId: string;
       readonly vocabularyStore?: VocabularyStoreSnapshotV1;
+    }
+  | {
+      readonly type: 'BUILD_TRAINING_JOB_PROMPT_SPLIT';
+      readonly requestId: string;
+      readonly jobId: string;
+      readonly config?: PromptIdentitySplitConfigV1;
     }
   | { readonly type: 'DELETE_PROFILE'; readonly requestId: string; readonly profileId: string };
 
@@ -129,6 +138,14 @@ export type ProfileStoreWorkerResponse =
       readonly persistentStorageGranted: boolean;
       readonly activeState: ActiveEnrollmentProfileStateV1;
       readonly verification: TrainingJobRevisionVerificationResultV1;
+    }
+  | {
+      readonly type: 'PROFILE_STORE_TRAINING_JOB_PROMPT_SPLIT_READY';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly split: TrainingJobPromptIdentitySplitSummaryV1;
     }
   | {
       readonly type: 'PROFILE_STORE_ERROR';
@@ -282,6 +299,22 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
           persistentStorageGranted,
           activeState: await store.getActiveProfileState(),
           verification,
+        });
+        return;
+      }
+      case 'BUILD_TRAINING_JOB_PROMPT_SPLIT': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const split = await store.buildTrainingJobPromptIdentitySplit({
+          jobId: message.jobId,
+          ...(message.config === undefined ? {} : { config: message.config }),
+        });
+        post({
+          type: 'PROFILE_STORE_TRAINING_JOB_PROMPT_SPLIT_READY',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          split: summarizeTrainingJobPromptIdentitySplitPlan(split),
         });
         return;
       }

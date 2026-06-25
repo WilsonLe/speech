@@ -110,9 +110,7 @@ def build_profile_dataset(
     utterances = package["utterances"]
     if not isinstance(utterances, list):
         raise ValueError("Validated profile package did not contain an utterance array.")
-    prompt_splits = split_prompt_ids(
-        sorted({str(utterance["promptId"]) for utterance in utterances}), split_config
-    )
+    prompt_splits = split_prompt_identities(utterances, split_config)
     split_by_prompt = {entry.prompt_id: entry.split for entry in prompt_splits}
     records: list[ProfileDatasetRecord] = []
     for utterance in sorted(utterances, key=lambda item: (str(item["promptId"]), str(item["id"]))):
@@ -155,39 +153,239 @@ def split_prompt_ids(
     prompt_ids: list[str],
     config: DatasetSplitConfig = DEFAULT_SPLIT_CONFIG,
 ) -> tuple[ProfilePromptSplit, ...]:
-    if not prompt_ids:
+    groups = [
+        _PromptIdentityGroup(
+            prompt_id=prompt_id,
+            utterances=1,
+            duration_ms=0,
+            language_counts={language: 0 for language in _LANGUAGES},
+            voice_condition_counts={condition: 0 for condition in _VOICE_CONDITIONS},
+        )
+        for prompt_id in sorted({str(prompt_id) for prompt_id in prompt_ids})
+    ]
+    return _split_prompt_groups(groups, config)
+
+
+def split_prompt_identities(
+    utterances: list[dict[str, Any]],
+    config: DatasetSplitConfig = DEFAULT_SPLIT_CONFIG,
+) -> tuple[ProfilePromptSplit, ...]:
+    grouped: dict[str, _PromptIdentityGroup] = {}
+    for utterance in utterances:
+        prompt_id = str(utterance["promptId"])
+        group = grouped.get(prompt_id)
+        if group is None:
+            group = _PromptIdentityGroup(
+                prompt_id=prompt_id,
+                utterances=0,
+                duration_ms=0,
+                language_counts={language: 0 for language in _LANGUAGES},
+                voice_condition_counts={condition: 0 for condition in _VOICE_CONDITIONS},
+            )
+            grouped[prompt_id] = group
+        language = str(utterance.get("language", ""))
+        voice_condition = str(utterance.get("voiceCondition", ""))
+        if language in group.language_counts:
+            group.language_counts[language] += 1
+        if voice_condition in group.voice_condition_counts:
+            group.voice_condition_counts[voice_condition] += 1
+        audio = utterance.get("audio", {})
+        duration_ms = int(audio.get("durationMs", 0)) if isinstance(audio, dict) else 0
+        group.utterances += 1
+        group.duration_ms += max(0, duration_ms)
+    return _split_prompt_groups(list(grouped.values()), config)
+
+
+_LANGUAGES = ("vi", "en", "mixed")
+_VOICE_CONDITIONS = ("whisper", "normal", "projected")
+_SPLITS: tuple[ProfileDatasetSplit, ...] = ("train", "validation", "test")
+
+
+@dataclass
+class _PromptIdentityGroup:
+    prompt_id: str
+    utterances: int
+    duration_ms: int
+    language_counts: dict[str, int]
+    voice_condition_counts: dict[str, int]
+
+
+@dataclass
+class _MutableSplitBucket:
+    prompt_identities: int
+    utterances: int
+    duration_ms: int
+    language_counts: dict[str, int]
+    voice_condition_counts: dict[str, int]
+
+
+def _split_prompt_groups(
+    groups: list[_PromptIdentityGroup],
+    config: DatasetSplitConfig,
+) -> tuple[ProfilePromptSplit, ...]:
+    if not groups:
         return ()
+    ratios = _normalized_ratios(config)
+    targets = _allocate_prompt_targets(len(groups), ratios)
+    ordered = sorted(groups, key=lambda group: _group_sort_key(group, config.seed))
+    totals = _summarize_groups(groups)
+    buckets = {split: _empty_bucket() for split in _SPLITS}
+    assignments: dict[str, ProfileDatasetSplit] = {}
+    for group in ordered:
+        split = _choose_split(group, buckets, targets, totals, ratios, config.seed)
+        _add_group(buckets[split], group)
+        assignments[group.prompt_id] = split
+    return tuple(
+        ProfilePromptSplit(prompt_id=prompt_id, split=assignments[prompt_id])
+        for prompt_id in sorted(assignments)
+    )
+
+
+def _normalized_ratios(config: DatasetSplitConfig) -> dict[ProfileDatasetSplit, float]:
     total = config.train_ratio + config.validation_ratio + config.test_ratio
     if total <= 0:
         raise ValueError("Dataset split ratios must have a positive sum.")
-    normalized = (
-        config.train_ratio / total,
-        config.validation_ratio / total,
-        config.test_ratio / total,
-    )
-    ordered = sorted(prompt_ids, key=lambda prompt_id: _stable_prompt_score(prompt_id, config.seed))
-    train_cutoff = round(len(ordered) * normalized[0])
-    validation_cutoff = train_cutoff + round(len(ordered) * normalized[1])
-    if len(ordered) >= 3:
-        train_cutoff = max(1, min(train_cutoff, len(ordered) - 2))
-        validation_cutoff = max(train_cutoff + 1, min(validation_cutoff, len(ordered) - 1))
-    elif len(ordered) == 2:
-        train_cutoff = 1
-        validation_cutoff = 1
-    else:
-        train_cutoff = 1
-        validation_cutoff = 1
+    ratios = {
+        "train": config.train_ratio / total,
+        "validation": config.validation_ratio / total,
+        "test": config.test_ratio / total,
+    }
+    if any(value < 0 for value in ratios.values()):
+        raise ValueError("Dataset split ratios must be non-negative.")
+    return ratios
 
-    splits: list[ProfilePromptSplit] = []
-    for index, prompt_id in enumerate(ordered):
-        if index < train_cutoff:
-            split: ProfileDatasetSplit = "train"
-        elif index < validation_cutoff:
-            split = "validation"
-        else:
-            split = "test"
-        splits.append(ProfilePromptSplit(prompt_id=prompt_id, split=split))
-    return tuple(sorted(splits, key=lambda item: item.prompt_id))
+
+def _allocate_prompt_targets(
+    prompt_identity_count: int,
+    ratios: dict[ProfileDatasetSplit, float],
+) -> dict[ProfileDatasetSplit, int]:
+    if prompt_identity_count <= 0:
+        return {split: 0 for split in _SPLITS}
+    raw = {split: prompt_identity_count * ratios[split] for split in _SPLITS}
+    targets = {split: int(raw[split] // 1) for split in _SPLITS}
+    assigned = sum(targets.values())
+    remainder_order = sorted(
+        _SPLITS,
+        key=lambda split: (-(raw[split] - targets[split]), -ratios[split], _SPLITS.index(split)),
+    )
+    while assigned < prompt_identity_count:
+        for split in remainder_order:
+            if assigned >= prompt_identity_count:
+                break
+            targets[split] += 1
+            assigned += 1
+    active_splits = [split for split in _SPLITS if ratios[split] > 0]
+    if prompt_identity_count < len(active_splits):
+        tiny_targets = {split: 0 for split in _SPLITS}
+        tiny_order = sorted(active_splits, key=lambda split: (-ratios[split], _SPLITS.index(split)))
+        for split in tiny_order[:prompt_identity_count]:
+            tiny_targets[split] = 1
+        return tiny_targets
+    for split in active_splits:
+        if targets[split] > 0:
+            continue
+        donors = [candidate for candidate in active_splits if targets[candidate] > 1]
+        if not donors:
+            continue
+        donor = sorted(donors, key=lambda candidate: targets[candidate], reverse=True)[0]
+        targets[donor] -= 1
+        targets[split] += 1
+    return targets
+
+
+def _group_sort_key(group: _PromptIdentityGroup, seed: int) -> tuple[int, int, int, str]:
+    return (
+        -group.utterances,
+        -sum(1 for count in group.voice_condition_counts.values() if count > 0),
+        -sum(1 for count in group.language_counts.values() if count > 0),
+        _stable_prompt_score(group.prompt_id, seed),
+    )
+
+
+def _choose_split(
+    group: _PromptIdentityGroup,
+    buckets: dict[ProfileDatasetSplit, _MutableSplitBucket],
+    targets: dict[ProfileDatasetSplit, int],
+    totals: _MutableSplitBucket,
+    ratios: dict[ProfileDatasetSplit, float],
+    seed: int,
+) -> ProfileDatasetSplit:
+    available = [split for split in _SPLITS if buckets[split].prompt_identities < targets[split]]
+    candidates = available or list(_SPLITS)
+    return min(
+        candidates,
+        key=lambda split: (
+            _candidate_score(group, split, buckets, targets, totals, ratios),
+            _stable_prompt_score(f"{group.prompt_id}:{split}", seed),
+        ),
+    )
+
+
+def _candidate_score(
+    group: _PromptIdentityGroup,
+    split: ProfileDatasetSplit,
+    buckets: dict[ProfileDatasetSplit, _MutableSplitBucket],
+    targets: dict[ProfileDatasetSplit, int],
+    totals: _MutableSplitBucket,
+    ratios: dict[ProfileDatasetSplit, float],
+) -> float:
+    score = 0.0
+    for candidate in _SPLITS:
+        prompt_identities = buckets[candidate].prompt_identities + int(candidate == split)
+        score += ((prompt_identities - targets[candidate]) ** 2) * 20
+        duration_ms = buckets[candidate].duration_ms
+        if candidate == split:
+            duration_ms += group.duration_ms
+        score += _normalized_square(duration_ms, totals.duration_ms * ratios[candidate])
+        for language in _LANGUAGES:
+            actual = buckets[candidate].language_counts[language]
+            if candidate == split:
+                actual += group.language_counts[language]
+            score += (
+                _normalized_square(actual, totals.language_counts[language] * ratios[candidate]) * 3
+            )
+        for condition in _VOICE_CONDITIONS:
+            actual = buckets[candidate].voice_condition_counts[condition]
+            if candidate == split:
+                actual += group.voice_condition_counts[condition]
+            score += (
+                _normalized_square(
+                    actual, totals.voice_condition_counts[condition] * ratios[candidate]
+                )
+                * 3
+            )
+    return score
+
+
+def _summarize_groups(groups: list[_PromptIdentityGroup]) -> _MutableSplitBucket:
+    bucket = _empty_bucket()
+    for group in groups:
+        _add_group(bucket, group)
+    return bucket
+
+
+def _empty_bucket() -> _MutableSplitBucket:
+    return _MutableSplitBucket(
+        prompt_identities=0,
+        utterances=0,
+        duration_ms=0,
+        language_counts={language: 0 for language in _LANGUAGES},
+        voice_condition_counts={condition: 0 for condition in _VOICE_CONDITIONS},
+    )
+
+
+def _add_group(bucket: _MutableSplitBucket, group: _PromptIdentityGroup) -> None:
+    bucket.prompt_identities += 1
+    bucket.utterances += group.utterances
+    bucket.duration_ms += group.duration_ms
+    for language in _LANGUAGES:
+        bucket.language_counts[language] += group.language_counts[language]
+    for condition in _VOICE_CONDITIONS:
+        bucket.voice_condition_counts[condition] += group.voice_condition_counts[condition]
+
+
+def _normalized_square(actual: float, expected: float) -> float:
+    return ((actual - expected) ** 2) / max(1.0, expected)
 
 
 def _stable_prompt_score(prompt_id: str, seed: int) -> str:

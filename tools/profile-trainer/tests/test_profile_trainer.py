@@ -11,6 +11,8 @@ from speech_profile_trainer import (
     build_profile_dataset,
     compute_base_model_identity,
     load_profile_dataset,
+    split_prompt_identities,
+    split_prompt_ids,
     validate_profile_package,
 )
 from speech_profile_trainer.__main__ import main as trainer_main
@@ -105,6 +107,67 @@ def test_profile_dataset_loader_splits_by_prompt_identity_without_leakage(tmp_pa
         "Please open Wilson Speech.",
     }
     assert all(record.audio_bytes.startswith(b"RIFF") for record in dataset.records)
+
+
+def test_split_prompt_identities_stratifies_without_splitting_repeated_takes() -> None:
+    utterances = [
+        _utterance("utt-dashboard-normal", "prompt-dashboard", "Local prompt.", "mixed", "normal"),
+        _utterance(
+            "utt-dashboard-whisper",
+            "prompt-dashboard-repeat",
+            "Local prompt.",
+            "mixed",
+            "whisper",
+            prompt_id="prompt-dashboard",
+        ),
+        _utterance(
+            "utt-dashboard-projected",
+            "prompt-dashboard-projected",
+            "Local prompt.",
+            "mixed",
+            "projected",
+            prompt_id="prompt-dashboard",
+        ),
+        _utterance("utt-vi-normal", "prompt-vi-normal", "Xin chào.", "vi", "normal"),
+        _utterance("utt-vi-whisper", "prompt-vi-whisper", "Xin chào nhỏ.", "vi", "whisper"),
+        _utterance("utt-en-normal", "prompt-en-normal", "Hello.", "en", "normal"),
+        _utterance("utt-en-projected", "prompt-en-projected", "Hello loud.", "en", "projected"),
+        _utterance("utt-mixed-normal", "prompt-mixed-normal", "Code switch.", "mixed", "normal"),
+    ]
+
+    first = split_prompt_identities(
+        utterances,
+        DatasetSplitConfig(train_ratio=0.5, validation_ratio=0.25, test_ratio=0.25, seed=7),
+    )
+    second = split_prompt_identities(
+        list(reversed(utterances)),
+        DatasetSplitConfig(train_ratio=0.5, validation_ratio=0.25, test_ratio=0.25, seed=7),
+    )
+
+    assert first == second
+    assert len(first) == 6
+    assert {entry.split for entry in first} == {"train", "validation", "test"}
+    split_by_prompt = {entry.prompt_id: entry.split for entry in first}
+    assert split_by_prompt["prompt-dashboard"] in {"train", "validation", "test"}
+    assert "prompt-dashboard-repeat" not in split_by_prompt
+    assert "prompt-dashboard-projected" not in split_by_prompt
+    assert (
+        split_prompt_identities(
+            utterances,
+            DatasetSplitConfig(train_ratio=0.5, validation_ratio=0.25, test_ratio=0.25, seed=8),
+        )
+        != first
+    )
+
+
+def test_split_prompt_ids_deduplicates_prompt_identity_inputs() -> None:
+    splits = split_prompt_ids(
+        ["prompt-b", "prompt-a", "prompt-a"],
+        DatasetSplitConfig(train_ratio=0.5, validation_ratio=0.5, test_ratio=0, seed=3),
+    )
+
+    assert [entry.prompt_id for entry in splits] == ["prompt-a", "prompt-b"]
+    assert {entry.split for entry in splits} == {"train", "validation"}
 
 
 def test_build_profile_dataset_warns_when_base_model_manifest_is_missing() -> None:

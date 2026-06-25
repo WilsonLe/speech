@@ -2,7 +2,7 @@
   "name": "@speech/enrollment",
   "version": "0.1.0",
   "private": true,
-  "description": "Guided enrollment scheduling, quality reporting, and coverage accounting.",
+  "description": "Guided enrollment scheduling, quality reporting, prompt-identity splitting, and coverage accounting.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {

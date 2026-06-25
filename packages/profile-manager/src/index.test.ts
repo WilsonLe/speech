@@ -9,6 +9,7 @@ import {
   buildTrainingReadinessCoverageReportForProfile,
   encodePcm16Wav,
   requestPersistentProfileStorage,
+  summarizeTrainingJobPromptIdentitySplitPlan,
   summarizeTrainingJobRevision,
   type EnrollmentCaptureMetadataV1,
   type OpfsDirectoryHandleLike,
@@ -247,6 +248,78 @@ describe('enrollment profile store', () => {
         vocabularyStore,
       }),
     ).rejects.toThrow(/already exists/);
+  });
+
+  it('builds deterministic prompt-identity splits from frozen training job revisions', async () => {
+    const store = createStore(new InMemoryProfileStorageBackend());
+    await saveSplitTake(
+      store,
+      'utt-dashboard-normal',
+      'prompt-repeat-dashboard',
+      'mixed',
+      'normal',
+    );
+    await saveSplitTake(
+      store,
+      'utt-dashboard-whisper',
+      'prompt-repeat-dashboard',
+      'mixed',
+      'whisper',
+    );
+    await saveSplitTake(
+      store,
+      'utt-dashboard-projected',
+      'prompt-repeat-dashboard',
+      'mixed',
+      'projected',
+    );
+    await saveSplitTake(store, 'utt-vi-normal', 'prompt-vi-normal', 'vi', 'normal');
+    await saveSplitTake(store, 'utt-vi-whisper', 'prompt-vi-whisper', 'vi', 'whisper');
+    await saveSplitTake(store, 'utt-en-normal', 'prompt-en-normal', 'en', 'normal');
+    await saveSplitTake(store, 'utt-en-projected', 'prompt-en-projected', 'en', 'projected');
+    await saveSplitTake(store, 'utt-mixed-normal', 'prompt-mixed-normal', 'mixed', 'normal');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-split',
+      jobId: 'job-split',
+    });
+
+    const plan = await store.buildTrainingJobPromptIdentitySplit({
+      jobId: revision.jobId,
+      config: {
+        seed: 'profile-split-seed',
+        trainRatio: 0.5,
+        validationRatio: 0.25,
+        testRatio: 0.25,
+      },
+    });
+
+    expect(plan).toMatchObject({
+      schemaVersion: 1,
+      jobId: revision.jobId,
+      profileId: 'profile-split',
+      enrollmentRevisionSha256: revision.enrollment.revisionSha256,
+      privacy: { localOnly: true, exposesRawPromptIds: true, containsRawAudio: false },
+    });
+    expect(plan.split.targetPromptIdentities).toEqual({ train: 3, validation: 2, test: 1 });
+    expect(plan.split.totals).toEqual({ promptIdentities: 6, utterances: 8, durationSeconds: 9.6 });
+    expect(
+      plan.split.assignments.find(
+        (assignment) => assignment.promptId === 'prompt-repeat-dashboard',
+      ),
+    ).toMatchObject({
+      utterances: 3,
+      voiceConditions: ['whisper', 'normal', 'projected'],
+    });
+    const summary = summarizeTrainingJobPromptIdentitySplitPlan(plan);
+    const serialized = JSON.stringify(summary);
+    expect(summary).toMatchObject({
+      jobId: revision.jobId,
+      privacy: { aggregateOnly: true, exposesRawPromptIds: false, containsTranscriptText: false },
+      split: { privacy: { aggregateOnly: true, exposesRawPromptIds: false } },
+    });
+    expect(summary.split.assignments[0]?.label).toBe('prompt-001');
+    expect(serialized).not.toContain('prompt-repeat-dashboard');
+    expect(serialized).not.toContain('utt-dashboard-normal');
   });
 
   it('detects enrollment and vocabulary edits after a training job revision is frozen', async () => {
@@ -559,6 +632,33 @@ async function saveFixtureTake(
     acceptedBy: 'manual',
     utteranceId,
     ...(model === undefined ? {} : { baseModel: model }),
+  });
+}
+
+async function saveSplitTake(
+  store: EnrollmentProfileStore,
+  utteranceId: string,
+  promptId: string,
+  language: 'vi' | 'en' | 'mixed',
+  voiceCondition: 'whisper' | 'normal' | 'projected',
+): Promise<void> {
+  await store.saveEnrollmentUtterance({
+    profileId: 'profile-split',
+    profileDisplayName: 'Profile split',
+    sentenceBankVersion: 'synthetic-v1',
+    promptId,
+    promptVersion: 1,
+    referenceText: 'Synthetic local prompt for split accounting.',
+    language,
+    voiceCondition,
+    repetitionIndex: 1,
+    wavBytes: encodePcm16Wav(makeTone(1_200, 0.1), 16_000),
+    sampleRateHz: 16_000,
+    durationMs: 1_200,
+    capture,
+    quality,
+    acceptedBy: 'manual',
+    utteranceId,
   });
 }
 
