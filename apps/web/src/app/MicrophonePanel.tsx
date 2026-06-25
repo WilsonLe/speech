@@ -19,13 +19,15 @@ import {
   type EnrollmentQualityReportV1,
   type EnrollmentSentenceLanguage,
   type EnrollmentVoiceCondition,
+  type TrainingReadinessCoverageReportV1,
 } from '@speech/enrollment';
-import type {
-  ActiveEnrollmentProfileStateV1,
-  EnrollmentCaptureMetadataV1,
-  EnrollmentProfileExportPackageV1,
-  EnrollmentProfileSummaryV1,
-  ProfileStorageBackendKind,
+import {
+  buildTrainingReadinessCoverageReportForProfile,
+  type ActiveEnrollmentProfileStateV1,
+  type EnrollmentCaptureMetadataV1,
+  type EnrollmentProfileExportPackageV1,
+  type EnrollmentProfileSummaryV1,
+  type ProfileStorageBackendKind,
 } from '@speech/profile-manager';
 import { analyzeEnrollmentTakeInWorker } from '../workers/enrollment-quality-worker-client';
 import {
@@ -204,6 +206,13 @@ export function MicrophonePanel() {
     },
     calibrationBaseline,
     voiceCondition,
+  );
+  const trainingReadinessReport = useMemo(
+    () =>
+      profileStore.summary === null
+        ? null
+        : buildTrainingReadinessCoverageReportForProfile(profileStore.summary),
+    [profileStore.summary],
   );
 
   useEffect(() => {
@@ -1129,6 +1138,13 @@ export function MicrophonePanel() {
               <dd>{getStoredProfileBytes(profileStore.summary).toLocaleString()} bytes</dd>
             </div>
           </dl>
+          {trainingReadinessReport ? (
+            <TrainingReadinessReportSummary report={trainingReadinessReport} />
+          ) : (
+            <p className="status-message" aria-label="Training readiness report">
+              Training readiness coverage will appear after accepted takes are stored locally.
+            </p>
+          )}
           <p className="status-message">{profileStore.message}</p>
           <div className="hero-actions" aria-label="Enrollment profile lifecycle controls">
             <button
@@ -1219,6 +1235,105 @@ export function MicrophonePanel() {
         </dl>
       ) : null}
     </section>
+  );
+}
+
+function TrainingReadinessReportSummary({
+  report,
+}: {
+  readonly report: TrainingReadinessCoverageReportV1;
+}) {
+  const missingSummary = report.missingRequirements
+    .slice(0, 3)
+    .map(
+      (requirement) => `${requirement.label} needs ${formatReadinessNumber(requirement.missing)}`,
+    )
+    .join('; ');
+  return (
+    <div className="quality-report" aria-label="Training readiness report">
+      <h4>Training readiness report</h4>
+      <p>
+        {report.status === 'ready'
+          ? 'Accepted takes meet the current browser training-readiness policy.'
+          : 'Accepted takes are stored locally, but more coverage is needed before browser training can auto-start.'}
+      </p>
+      <dl className="probe-list microphone-settings">
+        <div>
+          <dt>Readiness status</dt>
+          <dd>{report.status}</dd>
+        </div>
+        <div>
+          <dt>Automatic training</dt>
+          <dd>{report.automaticTrainingAllowed ? 'allowed' : 'blocked until coverage passes'}</dd>
+        </div>
+        <div>
+          <dt>Accepted takes</dt>
+          <dd>
+            {report.totals.acceptedUtterances} / {report.policy.minAcceptedUtterances}
+          </dd>
+        </div>
+        <div>
+          <dt>Accepted duration</dt>
+          <dd>
+            {report.totals.totalDurationSeconds.toFixed(1)} /{' '}
+            {report.policy.minTotalDurationSeconds.toFixed(1)} s
+          </dd>
+        </div>
+        <div>
+          <dt>Unique prompts</dt>
+          <dd>
+            {report.promptCoverage.uniquePromptIdentities} /{' '}
+            {report.promptCoverage.minUniquePromptIdentities}
+          </dd>
+        </div>
+        <div className="readiness-row">
+          <dt>Language coverage</dt>
+          <dd>
+            {report.languageCoverage.length > 0 ? (
+              <ul className="readiness-lines">
+                {report.languageCoverage.map((bucket) => (
+                  <li key={bucket.value}>{formatReadinessBucket(bucket)}</li>
+                ))}
+              </ul>
+            ) : (
+              'not required'
+            )}
+          </dd>
+        </div>
+        <div className="readiness-row">
+          <dt>Voice coverage</dt>
+          <dd>
+            {report.voiceConditionCoverage.length > 0 ? (
+              <ul className="readiness-lines">
+                {report.voiceConditionCoverage.map((bucket) => (
+                  <li key={bucket.value}>{formatReadinessBucket(bucket)}</li>
+                ))}
+              </ul>
+            ) : (
+              'not required'
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Vocabulary coverage</dt>
+          <dd>
+            {report.vocabularyCoverage.coveredEntryCount} /{' '}
+            {Math.max(
+              report.vocabularyCoverage.minCoveredEntries,
+              report.vocabularyCoverage.targetedEntryCount,
+            )}{' '}
+            redacted entries
+          </dd>
+        </div>
+        <div className="readiness-row">
+          <dt>Report privacy</dt>
+          <dd>Aggregate counts only; no audio, transcript text, prompt IDs, or vocabulary terms</dd>
+        </div>
+      </dl>
+      <p className="status-message">
+        {missingSummary.length > 0 ? `Next coverage gaps: ${missingSummary}.` : 'No coverage gaps.'}
+      </p>
+    </div>
   );
 }
 
@@ -1339,6 +1454,22 @@ function formatProfileStoreBackend(kind: ProfileStorageBackendKind | null): stri
 function formatPersistentStorage(value: boolean | null): string {
   if (value === null) return 'checking';
   return value ? 'granted' : 'not granted';
+}
+
+function formatReadinessBucket(bucket: {
+  readonly value: string;
+  readonly utterances: number;
+  readonly minUtterances: number;
+  readonly durationSeconds: number;
+  readonly minDurationSeconds: number;
+}): string {
+  const utterancePart = `${bucket.value}: ${bucket.utterances}/${bucket.minUtterances} takes`;
+  if (bucket.minDurationSeconds === 0) return utterancePart;
+  return `${utterancePart}, ${bucket.durationSeconds.toFixed(1)}/${bucket.minDurationSeconds.toFixed(1)} s`;
+}
+
+function formatReadinessNumber(value: number): string {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
 }
 
 function getAudioContextConstructor(): typeof AudioContext {

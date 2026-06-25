@@ -1,7 +1,12 @@
-import type {
-  EnrollmentQualityReportV1,
-  EnrollmentSentenceLanguage,
-  EnrollmentVoiceCondition,
+import {
+  buildTrainingReadinessCoverageReport,
+  type EnrollmentQualityReportV1,
+  type EnrollmentSentenceLanguage,
+  type EnrollmentVoiceCondition,
+  type TrainingReadinessAcceptedUtteranceV1,
+  type TrainingReadinessCoverageReportV1,
+  type TrainingReadinessIdentityOptions,
+  type TrainingReadinessPolicyV1,
 } from '@speech/enrollment';
 
 export type ProfileStorageBackendKind = 'opfs' | 'memory';
@@ -757,6 +762,32 @@ export async function sha256ArrayBuffer(bytes: ArrayBuffer): Promise<string> {
   throw new Error('SHA-256 digest is unavailable in this runtime. Provide a digest dependency.');
 }
 
+export function buildTrainingReadinessCoverageReportForProfile(
+  summary: EnrollmentProfileSummaryV1,
+  policy?: TrainingReadinessPolicyV1,
+  identityOptions?: TrainingReadinessIdentityOptions,
+): TrainingReadinessCoverageReportV1 {
+  return buildTrainingReadinessCoverageReport(
+    summary.utterances.map(toTrainingReadinessUtterance),
+    policy,
+    identityOptions,
+  );
+}
+
+function toTrainingReadinessUtterance(
+  utterance: EnrollmentUtteranceV1,
+): TrainingReadinessAcceptedUtteranceV1 {
+  return {
+    schemaVersion: 1,
+    utteranceId: utterance.id,
+    promptId: utterance.promptId,
+    language: utterance.language,
+    voiceCondition: utterance.voiceCondition,
+    durationMs: utterance.audio.durationMs,
+    qualityStatus: utterance.quality.status,
+  };
+}
+
 export interface ProfileManagerPackageInfo {
   readonly name: '@speech/profile-manager';
   readonly status: 'planned' | 'active';
@@ -766,7 +797,8 @@ export interface ProfileManagerPackageInfo {
 export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
-  description: 'Private profile storage, import/export, rollback, and deletion.',
+  description:
+    'Private profile storage, import/export, readiness reporting, rollback, and deletion.',
 };
 
 async function writeJsonAtomically(

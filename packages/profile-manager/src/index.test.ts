@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { analyzeEnrollmentTakeQuality } from '@speech/enrollment';
+import { analyzeEnrollmentTakeQuality, defaultTrainingReadinessPolicyV1 } from '@speech/enrollment';
 import {
   EnrollmentProfileStore,
   InMemoryProfileStorageBackend,
   OpfsProfileStorageBackend,
+  buildTrainingReadinessCoverageReportForProfile,
   encodePcm16Wav,
   requestPersistentProfileStorage,
   type EnrollmentCaptureMetadataV1,
@@ -103,6 +104,75 @@ describe('enrollment profile store', () => {
     expect(
       await readBytes(backend, ['profiles', 'profile-local', 'recordings', 'utt-001.wav']),
     ).toEqual(Array.from(new Uint8Array(wavBytes)));
+  });
+
+  it('builds a privacy-safe training-readiness report from stored utterance metadata', async () => {
+    const store = createStore(new InMemoryProfileStorageBackend());
+    await saveReadinessTake(store, {
+      utteranceId: 'utt-001',
+      promptId: 'prompt-vi',
+      language: 'vi',
+      voiceCondition: 'normal',
+      durationMs: 3_000,
+    });
+    await saveReadinessTake(store, {
+      utteranceId: 'utt-002',
+      promptId: 'prompt-en',
+      language: 'en',
+      voiceCondition: 'whisper',
+      durationMs: 3_000,
+    });
+    await saveReadinessTake(store, {
+      utteranceId: 'utt-003',
+      promptId: 'custom-vocab:term-secret:vi-beginning-open:projected',
+      language: 'mixed',
+      voiceCondition: 'projected',
+      durationMs: 3_500,
+    });
+
+    const summary = await store.getProfileSummary('profile-readiness');
+    if (summary === undefined) throw new Error('Expected profile readiness summary.');
+    const report = buildTrainingReadinessCoverageReportForProfile(summary, {
+      ...defaultTrainingReadinessPolicyV1,
+      minAcceptedUtterances: 3,
+      minTotalDurationSeconds: 9,
+      minUniquePromptIdentities: 3,
+      languageTargets: [
+        { value: 'vi', minUtterances: 1 },
+        { value: 'en', minUtterances: 1 },
+        { value: 'mixed', minUtterances: 1 },
+      ],
+      voiceConditionTargets: [
+        { value: 'normal', minUtterances: 1 },
+        { value: 'whisper', minUtterances: 1 },
+        { value: 'projected', minUtterances: 1 },
+      ],
+      vocabulary: {
+        minCoveredEntries: 1,
+        minUtterancesPerEntry: 1,
+        minDurationSecondsPerEntry: 3,
+      },
+    });
+
+    expect(report.status).toBe('ready');
+    expect(report.totals).toMatchObject({
+      acceptedUtterances: 3,
+      totalDurationSeconds: 9.5,
+      uniquePromptIdentities: 3,
+    });
+    expect(report.vocabularyCoverage.entries).toEqual([
+      expect.objectContaining({ label: 'vocab-001', utterances: 1, status: 'pass' }),
+    ]);
+    expect(report.privacy).toMatchObject({
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      exposesRawPromptIds: false,
+      exposesRawVocabularyEntryIds: false,
+    });
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain('prompt-vi');
+    expect(serialized).not.toContain('term-secret');
   });
 
   it('rejects unsafe profile and prompt path segments before writing', async () => {
@@ -325,6 +395,36 @@ async function saveFixtureTake(
     acceptedBy: 'manual',
     utteranceId,
     ...(model === undefined ? {} : { baseModel: model }),
+  });
+}
+
+async function saveReadinessTake(
+  store: EnrollmentProfileStore,
+  input: {
+    readonly utteranceId: string;
+    readonly promptId: string;
+    readonly language: 'vi' | 'en' | 'mixed';
+    readonly voiceCondition: 'whisper' | 'normal' | 'projected';
+    readonly durationMs: number;
+  },
+): Promise<void> {
+  await store.saveEnrollmentUtterance({
+    profileId: 'profile-readiness',
+    profileDisplayName: 'Profile readiness',
+    sentenceBankVersion: 'synthetic-v1',
+    promptId: input.promptId,
+    promptVersion: 1,
+    referenceText: 'Synthetic local prompt for readiness accounting.',
+    language: input.language,
+    voiceCondition: input.voiceCondition,
+    repetitionIndex: 1,
+    wavBytes: encodePcm16Wav(makeTone(input.durationMs, 0.1), 16_000),
+    sampleRateHz: 16_000,
+    durationMs: input.durationMs,
+    capture,
+    quality,
+    acceptedBy: 'manual',
+    utteranceId: input.utteranceId,
   });
 }
 

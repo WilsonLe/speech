@@ -3,6 +3,7 @@ export * from './coverage';
 export * from './custom-vocabulary-prompts';
 export * from './quality';
 export * from './sentence-bank';
+export * from './training-readiness';
 
 export interface EnrollmentPackageInfo {
   readonly name: '@speech/enrollment';
@@ -14,5 +15,5 @@ export const packageInfo: EnrollmentPackageInfo = {
   name: '@speech/enrollment',
   status: 'active',
   description:
-    'Guided enrollment scheduling, custom-vocabulary prompts, quality reporting, and coverage accounting.',
+    'Guided enrollment scheduling, custom-vocabulary prompts, quality reporting, readiness policy, and coverage accounting.',
 };
