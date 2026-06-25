@@ -261,6 +261,7 @@ function pythonEvaluationReport({
       containsCaseIds: false,
       containsBaseModelWeights: false,
       containsAdapterWeights: false,
+      exposesRawVocabularyEntryIds: false,
     },
   };
 }
@@ -274,6 +275,7 @@ function privatePythonEvaluationReport(): Record<string, unknown> {
       containsCaseIds: false,
       containsBaseModelWeights: false,
       containsAdapterWeights: false,
+      exposesRawVocabularyEntryIds: true,
     },
   };
 }

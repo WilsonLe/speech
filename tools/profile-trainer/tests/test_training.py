@@ -55,10 +55,23 @@ def test_frozen_base_adapter_training_emits_reproducibility_metadata(tmp_path: P
     assert len(prompt_splits) == 4
     assert {entry["split"] for entry in prompt_splits} == {"train", "validation", "test"}
     assert all(len(entry["promptIdSha256"]) == 64 for entry in prompt_splits)
+    assert metadata["dataset"]["selectedVocabulary"]["selectedEntryCount"] == 2
+    assert metadata["dataset"]["selectedVocabulary"]["selectedUtteranceCount"] == 3
+    assert all(
+        len(value) == 64
+        for value in metadata["dataset"]["selectedVocabulary"]["selectedEntryIdSha256"]
+    )
+    assert all(
+        len(value) == 64
+        for entry in prompt_splits
+        for value in entry["selectedVocabularyEntryIdSha256"]
+    )
     metadata_text = json.dumps(metadata, ensure_ascii=False)
     assert "prompt-001" not in metadata_text
     assert "Tôi vừa update dashboard" not in metadata_text
     assert "Please open Wilson Speech" not in metadata_text
+    assert "term-secret" not in metadata_text
+    assert "term-dashboard" not in metadata_text
 
 
 def test_frozen_base_training_rejects_manifest_without_residual_adapter_support() -> None:
@@ -124,7 +137,10 @@ def test_train_cli_writes_adapter_and_metadata_without_private_text(
     assert Path(payload["metadataPath"]).exists()
     assert payload["baseModelModified"] is False
     assert metadata["privacy"]["containsTranscriptText"] is False
-    assert "Tôi vừa update dashboard" not in json.dumps(metadata, ensure_ascii=False)
+    assert metadata["privacy"]["exposesRawVocabularyEntryIds"] is False
+    metadata_text = json.dumps(metadata, ensure_ascii=False)
+    assert "Tôi vừa update dashboard" not in metadata_text
+    assert "term-secret" not in metadata_text
 
 
 def _adapter_manifest() -> tuple[dict[str, Any], bytes]:

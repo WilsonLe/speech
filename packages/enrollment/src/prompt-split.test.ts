@@ -40,6 +40,7 @@ describe('deterministic prompt-identity split', () => {
       utterances: 3,
       languages: ['mixed'],
       voiceConditions: ['whisper', 'normal', 'projected'],
+      selectedVocabularyEntryIds: ['term-dashboard'],
     });
     expect(
       first.splits.validation.languageCounts.vi + first.splits.test.languageCounts.vi,
@@ -49,6 +50,7 @@ describe('deterministic prompt-identity split', () => {
       containsRawAudio: false,
       containsTranscriptText: false,
       exposesRawPromptIds: true,
+      exposesRawVocabularyEntryIds: true,
     });
   });
 
@@ -83,9 +85,13 @@ describe('deterministic prompt-identity split', () => {
     expect(report.privacy).toMatchObject({
       aggregateOnly: true,
       exposesRawPromptIds: false,
+      exposesRawVocabularyEntryIds: false,
       containsTranscriptText: false,
       localOnly: true,
     });
+    expect(
+      report.assignments.find((assignment) => assignment.selectedVocabularyEntryCount > 0),
+    ).toMatchObject({ selectedVocabularyEntryCount: 1 });
     expect(serialized).not.toContain('prompt-repeat-dashboard');
     expect(serialized).not.toContain('prompt-vi-normal');
     expect(serialized).not.toContain('utt-dashboard-normal');
@@ -128,9 +134,15 @@ describe('deterministic prompt-identity split', () => {
 
 function splitFixture(): PromptIdentitySplitUtteranceV1[] {
   return [
-    utterance('utt-dashboard-normal', 'prompt-repeat-dashboard', 'mixed', 'normal', 3_000),
-    utterance('utt-dashboard-whisper', 'prompt-repeat-dashboard', 'mixed', 'whisper', 3_200),
-    utterance('utt-dashboard-projected', 'prompt-repeat-dashboard', 'mixed', 'projected', 3_100),
+    utterance('utt-dashboard-normal', 'prompt-repeat-dashboard', 'mixed', 'normal', 3_000, [
+      'term-dashboard',
+    ]),
+    utterance('utt-dashboard-whisper', 'prompt-repeat-dashboard', 'mixed', 'whisper', 3_200, [
+      'term-dashboard',
+    ]),
+    utterance('utt-dashboard-projected', 'prompt-repeat-dashboard', 'mixed', 'projected', 3_100, [
+      'term-dashboard',
+    ]),
     utterance('utt-vi-normal', 'prompt-vi-normal', 'vi', 'normal', 4_000),
     utterance('utt-vi-whisper', 'prompt-vi-whisper', 'vi', 'whisper', 3_500),
     utterance('utt-en-normal', 'prompt-en-normal', 'en', 'normal', 3_200),
@@ -145,6 +157,7 @@ function utterance(
   language: PromptIdentitySplitUtteranceV1['language'],
   voiceCondition: PromptIdentitySplitUtteranceV1['voiceCondition'],
   durationMs = 1_000,
+  customVocabularyEntryIds: readonly string[] = [],
 ): PromptIdentitySplitUtteranceV1 {
   return {
     schemaVersion: 1,
@@ -153,5 +166,6 @@ function utterance(
     language,
     voiceCondition,
     durationMs,
+    ...(customVocabularyEntryIds.length === 0 ? {} : { customVocabularyEntryIds }),
   };
 }

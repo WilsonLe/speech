@@ -14,6 +14,7 @@ export interface PromptIdentitySplitUtteranceV1 {
   readonly language: EnrollmentSentenceLanguage;
   readonly voiceCondition: EnrollmentVoiceCondition;
   readonly durationMs?: number;
+  readonly customVocabularyEntryIds?: readonly string[];
 }
 
 export interface PromptIdentitySplitConfigV1 {
@@ -44,6 +45,7 @@ export interface PromptIdentitySplitAssignmentV1 {
   readonly durationSeconds: number;
   readonly languages: readonly EnrollmentSentenceLanguage[];
   readonly voiceConditions: readonly EnrollmentVoiceCondition[];
+  readonly selectedVocabularyEntryIds: readonly string[];
 }
 
 export interface RedactedPromptIdentitySplitAssignmentV1 {
@@ -53,6 +55,7 @@ export interface RedactedPromptIdentitySplitAssignmentV1 {
   readonly durationSeconds: number;
   readonly languages: readonly EnrollmentSentenceLanguage[];
   readonly voiceConditions: readonly EnrollmentVoiceCondition[];
+  readonly selectedVocabularyEntryCount: number;
 }
 
 export interface PromptIdentitySplitBucketV1 {
@@ -61,6 +64,7 @@ export interface PromptIdentitySplitBucketV1 {
   readonly durationSeconds: number;
   readonly languageCounts: Readonly<Record<EnrollmentSentenceLanguage, number>>;
   readonly voiceConditionCounts: Readonly<Record<EnrollmentVoiceCondition, number>>;
+  readonly selectedVocabularyPromptIdentities: number;
 }
 
 export interface PromptIdentitySplitPlanV1 {
@@ -84,6 +88,7 @@ export interface PromptIdentitySplitPlanV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: true;
+    readonly exposesRawVocabularyEntryIds: true;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -107,6 +112,7 @@ export interface PromptIdentitySplitReportV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: false;
+    readonly exposesRawVocabularyEntryIds: false;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -127,6 +133,7 @@ interface PromptIdentityGroup {
   readonly voiceConditionCounts: Readonly<Record<EnrollmentVoiceCondition, number>>;
   readonly languages: readonly EnrollmentSentenceLanguage[];
   readonly voiceConditions: readonly EnrollmentVoiceCondition[];
+  readonly selectedVocabularyEntryIds: readonly string[];
 }
 
 const splitNames = [
@@ -168,6 +175,7 @@ export function buildPromptIdentitySplitPlan(
         durationSeconds: group.durationSeconds,
         languages: group.languages,
         voiceConditions: group.voiceConditions,
+        selectedVocabularyEntryIds: group.selectedVocabularyEntryIds,
       }),
     )
     .sort((left, right) => left.promptId.localeCompare(right.promptId));
@@ -195,6 +203,7 @@ export function buildPromptIdentitySplitPlan(
       containsCheckpoints: false,
       containsAdapterWeights: false,
       exposesRawPromptIds: true,
+      exposesRawVocabularyEntryIds: true,
       networkUpload: false,
       telemetry: false,
     },
@@ -224,6 +233,7 @@ export function summarizePromptIdentitySplitPlan(
       durationSeconds: assignment.durationSeconds,
       languages: assignment.languages,
       voiceConditions: assignment.voiceConditions,
+      selectedVocabularyEntryCount: assignment.selectedVocabularyEntryIds.length,
     })),
     privacy: {
       aggregateOnly: true,
@@ -234,6 +244,7 @@ export function summarizePromptIdentitySplitPlan(
       containsCheckpoints: false,
       containsAdapterWeights: false,
       exposesRawPromptIds: false,
+      exposesRawVocabularyEntryIds: false,
       networkUpload: false,
       telemetry: false,
     },
@@ -302,12 +313,17 @@ function createPromptGroup(
   const languageCounts = createLanguageCounts();
   const voiceConditionCounts = createVoiceConditionCounts();
   const utteranceIds: string[] = [];
+  const selectedVocabularyEntryIds = new Set<string>();
   let durationSeconds = 0;
   utterances.forEach((utterance, index) => {
     languageCounts[utterance.language] += 1;
     voiceConditionCounts[utterance.voiceCondition] += 1;
     durationSeconds += (utterance.durationMs ?? 0) / 1_000;
     utteranceIds.push(utterance.utteranceId ?? `${promptId}:utterance-${index + 1}`);
+    for (const entryId of utterance.customVocabularyEntryIds ?? []) {
+      const normalizedEntryId = entryId.trim();
+      if (normalizedEntryId.length > 0) selectedVocabularyEntryIds.add(normalizedEntryId);
+    }
   });
   return {
     promptId,
@@ -319,6 +335,9 @@ function createPromptGroup(
     languages: enrollmentSentenceLanguageValues.filter((language) => languageCounts[language] > 0),
     voiceConditions: enrollmentVoiceConditionValues.filter(
       (condition) => voiceConditionCounts[condition] > 0,
+    ),
+    selectedVocabularyEntryIds: [...selectedVocabularyEntryIds].sort((left, right) =>
+      left.localeCompare(right, 'vi'),
     ),
   };
 }
@@ -486,6 +505,7 @@ interface MutablePromptSplitBucket {
   durationSeconds: number;
   languageCounts: Record<EnrollmentSentenceLanguage, number>;
   voiceConditionCounts: Record<EnrollmentVoiceCondition, number>;
+  selectedVocabularyPromptIdentities: number;
 }
 
 function createMutableSplitBuckets(): Record<PromptIdentitySplitName, MutablePromptSplitBucket> {
@@ -503,6 +523,7 @@ function createMutableSplitBucket(): MutablePromptSplitBucket {
     durationSeconds: 0,
     languageCounts: createLanguageCounts(),
     voiceConditionCounts: createVoiceConditionCounts(),
+    selectedVocabularyPromptIdentities: 0,
   };
 }
 
@@ -516,6 +537,7 @@ function addGroupToBucket(bucket: MutablePromptSplitBucket, group: PromptIdentit
   for (const condition of enrollmentVoiceConditionValues) {
     bucket.voiceConditionCounts[condition] += group.voiceConditionCounts[condition];
   }
+  if (group.selectedVocabularyEntryIds.length > 0) bucket.selectedVocabularyPromptIdentities += 1;
 }
 
 function summarizeTotals(groups: readonly PromptIdentityGroup[]): PromptIdentitySplitBucketV1 {
@@ -531,6 +553,7 @@ function freezeBucket(bucket: MutablePromptSplitBucket): PromptIdentitySplitBuck
     durationSeconds: roundSeconds(bucket.durationSeconds),
     languageCounts: { ...bucket.languageCounts },
     voiceConditionCounts: { ...bucket.voiceConditionCounts },
+    selectedVocabularyPromptIdentities: bucket.selectedVocabularyPromptIdentities,
   };
 }
 
@@ -555,6 +578,9 @@ function validateUtterance(utterance: PromptIdentitySplitUtteranceV1): void {
     (!Number.isFinite(utterance.durationMs) || utterance.durationMs < 0)
   ) {
     throw new Error('utterance.durationMs must be a non-negative finite number.');
+  }
+  for (const entryId of utterance.customVocabularyEntryIds ?? []) {
+    requireNonEmpty(entryId, 'utterance.customVocabularyEntryIds[]');
   }
 }
 

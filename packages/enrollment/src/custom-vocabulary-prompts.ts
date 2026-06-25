@@ -26,6 +26,8 @@ export interface CustomVocabularyPromptTemplateV1 {
 
 export interface CustomVocabularyPromptMetadataV1 {
   readonly vocabularyEntryId: string;
+  readonly selectedVocabularyEntryIds: readonly string[];
+  readonly vocabularyRevisionSha256?: string;
   readonly displayForm: string;
   readonly phrase: string;
   readonly language: VocabularyEntryLanguage;
@@ -36,6 +38,12 @@ export interface CustomVocabularyPromptMetadataV1 {
   readonly intent: CustomVocabularyPromptIntent;
   readonly voiceCondition: EnrollmentVoiceCondition;
   readonly requiresUserReview: true;
+}
+
+export interface CustomVocabularyPromptIdPartsV1 {
+  readonly vocabularyEntryId: string;
+  readonly templateId: string;
+  readonly voiceCondition: EnrollmentVoiceCondition;
 }
 
 export interface CustomVocabularyEnrollmentPromptV1 extends EnrollmentSentenceV1 {
@@ -49,6 +57,7 @@ export interface CustomVocabularyPromptScheduleOptions {
   readonly maxPromptsPerEntry?: number;
   readonly highPriorityThreshold?: number;
   readonly voiceConditions?: readonly EnrollmentVoiceCondition[];
+  readonly vocabularyRevisionSha256?: string;
   readonly licenseId?: string;
 }
 
@@ -215,7 +224,9 @@ export function scheduleCustomVocabularyPrompts(
       const voiceCondition = highPriority
         ? voiceConditions[index % voiceConditions.length]!
         : voiceConditions[0]!;
-      prompts.push(createPrompt(entry, template, voiceCondition, licenseId));
+      prompts.push(
+        createPrompt(entry, template, voiceCondition, licenseId, options.vocabularyRevisionSha256),
+      );
     });
   }
 
@@ -232,6 +243,7 @@ function createPrompt(
   template: CustomVocabularyPromptTemplateV1,
   voiceCondition: EnrollmentVoiceCondition,
   licenseId: string,
+  vocabularyRevisionSha256: string | undefined,
 ): CustomVocabularyEnrollmentPromptV1 {
   const displayForm = normalizeEnrollmentSentenceText(entry.displayForm);
   const phrase = normalizeEnrollmentSentenceText(entry.phrase);
@@ -266,6 +278,8 @@ function createPrompt(
     },
     customVocabulary: {
       vocabularyEntryId: entry.id,
+      selectedVocabularyEntryIds: [entry.id],
+      ...(vocabularyRevisionSha256 === undefined ? {} : { vocabularyRevisionSha256 }),
       displayForm,
       phrase,
       language: entry.language,
@@ -349,6 +363,18 @@ function makeGeneratedPromptId(
   voiceCondition: EnrollmentVoiceCondition,
 ): string {
   return `custom-vocab:${safeIdPart(entry.id)}:${safeIdPart(template.id)}:${voiceCondition}`;
+}
+
+export function parseCustomVocabularyPromptId(
+  promptId: string,
+): CustomVocabularyPromptIdPartsV1 | undefined {
+  const match = /^custom-vocab:(.+):([^:]+):(whisper|normal|projected)$/u.exec(promptId);
+  if (match === null) return undefined;
+  return {
+    vocabularyEntryId: match[1]!,
+    templateId: match[2]!,
+    voiceCondition: match[3] as EnrollmentVoiceCondition,
+  };
 }
 
 function safeIdPart(value: string): string {

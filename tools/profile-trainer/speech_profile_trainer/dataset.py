@@ -29,6 +29,7 @@ DEFAULT_SPLIT_CONFIG = DatasetSplitConfig()
 class ProfilePromptSplit:
     prompt_id: str
     split: ProfileDatasetSplit
+    selected_vocabulary_entry_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class ProfileDatasetRecord:
     quality: dict[str, Any]
     capture: dict[str, Any]
     created_at: str
+    selected_vocabulary_entry_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,6 +141,7 @@ def build_profile_dataset(
                 quality=dict(utterance.get("quality", {})),
                 capture=dict(utterance.get("capture", {})),
                 created_at=str(utterance["createdAt"]),
+                selected_vocabulary_entry_ids=_selected_vocabulary_entry_ids(utterance),
             )
         )
     return ProfileDataset(
@@ -160,6 +163,7 @@ def split_prompt_ids(
             duration_ms=0,
             language_counts={language: 0 for language in _LANGUAGES},
             voice_condition_counts={condition: 0 for condition in _VOICE_CONDITIONS},
+            selected_vocabulary_entry_ids=set(),
         )
         for prompt_id in sorted({str(prompt_id) for prompt_id in prompt_ids})
     ]
@@ -181,6 +185,7 @@ def split_prompt_identities(
                 duration_ms=0,
                 language_counts={language: 0 for language in _LANGUAGES},
                 voice_condition_counts={condition: 0 for condition in _VOICE_CONDITIONS},
+                selected_vocabulary_entry_ids=set(),
             )
             grouped[prompt_id] = group
         language = str(utterance.get("language", ""))
@@ -193,6 +198,7 @@ def split_prompt_identities(
         duration_ms = int(audio.get("durationMs", 0)) if isinstance(audio, dict) else 0
         group.utterances += 1
         group.duration_ms += max(0, duration_ms)
+        group.selected_vocabulary_entry_ids.update(_selected_vocabulary_entry_ids(utterance))
     return _split_prompt_groups(list(grouped.values()), config)
 
 
@@ -208,6 +214,7 @@ class _PromptIdentityGroup:
     duration_ms: int
     language_counts: dict[str, int]
     voice_condition_counts: dict[str, int]
+    selected_vocabulary_entry_ids: set[str]
 
 
 @dataclass
@@ -235,8 +242,15 @@ def _split_prompt_groups(
         split = _choose_split(group, buckets, targets, totals, ratios, config.seed)
         _add_group(buckets[split], group)
         assignments[group.prompt_id] = split
+    group_by_prompt = {group.prompt_id: group for group in groups}
     return tuple(
-        ProfilePromptSplit(prompt_id=prompt_id, split=assignments[prompt_id])
+        ProfilePromptSplit(
+            prompt_id=prompt_id,
+            split=assignments[prompt_id],
+            selected_vocabulary_entry_ids=tuple(
+                sorted(group_by_prompt[prompt_id].selected_vocabulary_entry_ids)
+            ),
+        )
         for prompt_id in sorted(assignments)
     )
 
@@ -391,3 +405,10 @@ def _normalized_square(actual: float, expected: float) -> float:
 def _stable_prompt_score(prompt_id: str, seed: int) -> str:
     body = f"{seed}:{prompt_id}".encode()
     return hashlib.sha256(body).hexdigest()
+
+
+def _selected_vocabulary_entry_ids(utterance: dict[str, Any]) -> tuple[str, ...]:
+    value = utterance.get("customVocabularyEntryIds")
+    if not isinstance(value, list):
+        return ()
+    return tuple(sorted({item.strip() for item in value if isinstance(item, str) and item.strip()}))

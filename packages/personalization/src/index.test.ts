@@ -162,6 +162,7 @@ describe('held-out base-vs-profile evaluation reports', () => {
         containsTranscriptText: false,
         containsRawProfileData: false,
         containsModelWeights: false,
+        exposesRawVocabularyEntryIds: false,
         networkUpload: false,
         localOnly: true,
       },
@@ -169,7 +170,16 @@ describe('held-out base-vs-profile evaluation reports', () => {
         caseCount: 3,
         languageCounts: { vi: 1, en: 1, mixed: 1 },
         voiceConditionCounts: { whisper: 1, normal: 1, projected: 1 },
+        selectedVocabulary: { selectedEntryCount: 2, selectedCaseCount: 2 },
       },
+    });
+    expect(report.overall.selectedVocabulary).toEqual({
+      selectedEntryCount: 2,
+      selectedCaseCount: 2,
+    });
+    expect(report.slices.find((slice) => slice.id === 'language:vi')?.selectedVocabulary).toEqual({
+      selectedEntryCount: 1,
+      selectedCaseCount: 1,
     });
     expect(metric(report.overall, 'wordErrorRate')).toMatchObject({
       base: { numerator: 8, denominator: 25, rate: 0.32 },
@@ -226,7 +236,7 @@ describe('held-out base-vs-profile evaluation reports', () => {
     });
 
     const serialized = JSON.stringify(report);
-    expect(serialized).not.toMatch(/xin chào|spoken phrase|reference text|raw pcm/i);
+    expect(serialized).not.toMatch(/xin chào|spoken phrase|reference text|raw pcm|term-secret/i);
   });
 
   it('fails the activation gate when quality does not improve or false insertions regress', () => {
@@ -366,6 +376,7 @@ const heldOutCases: readonly HeldOutProfileEvaluationCaseInputV1[] = [
     id: 'heldout-vi-normal',
     language: 'vi',
     voiceCondition: 'normal',
+    selectedVocabularyEntryIds: ['term-secret', 'term-secret'],
     base: {
       referenceWordCount: 10,
       wordErrorCount: 4,
@@ -403,6 +414,7 @@ const heldOutCases: readonly HeldOutProfileEvaluationCaseInputV1[] = [
     id: 'heldout-en-whisper',
     language: 'en',
     voiceCondition: 'whisper',
+    selectedVocabularyEntryIds: ['term-dashboard'],
     base: {
       referenceWordCount: 8,
       wordErrorCount: 2,

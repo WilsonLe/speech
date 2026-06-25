@@ -240,7 +240,14 @@ def make_profile_package(
         "privacy": {"containsRawAudio": True, "exportEncrypted": False, "localOnly": True},
     }
     utterances = [
-        _utterance("utt-001", "prompt-001", "Tôi vừa update dashboard.", "mixed", "normal"),
+        _utterance(
+            "utt-001",
+            "prompt-001",
+            "Tôi vừa update dashboard.",
+            "mixed",
+            "normal",
+            selected_vocabulary_entry_ids=["term-dashboard"],
+        ),
         _utterance(
             "utt-002",
             "prompt-001-repeat",
@@ -248,8 +255,16 @@ def make_profile_package(
             "mixed",
             "projected",
             prompt_id="prompt-001",
+            selected_vocabulary_entry_ids=["term-dashboard"],
         ),
-        _utterance("utt-003", "prompt-002", "Please open Wilson Speech.", "en", "normal"),
+        _utterance(
+            "utt-003",
+            "prompt-002",
+            "Please open Wilson Speech.",
+            "en",
+            "normal",
+            selected_vocabulary_entry_ids=["term-secret"],
+        ),
         _utterance("utt-004", "prompt-003", "Hãy kiểm tra kết quả.", "vi", "whisper"),
         _utterance("utt-005", "prompt-004", "Tôi đang thử giọng nói.", "vi", "normal"),
     ]
@@ -315,6 +330,7 @@ def _utterance(
     voice_condition: str,
     *,
     prompt_id: str | None = None,
+    selected_vocabulary_entry_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     actual_prompt_id = prompt_id or prompt_label
     return {
@@ -344,6 +360,11 @@ def _utterance(
         "quality": {"schemaVersion": 1, "status": "pass", "privacy": {"containsAudio": False}},
         "acceptedBy": "manual",
         "createdAt": "2026-06-23T00:00:00.000Z",
+        **(
+            {}
+            if selected_vocabulary_entry_ids is None
+            else {"customVocabularyEntryIds": selected_vocabulary_entry_ids}
+        ),
     }
 
 
