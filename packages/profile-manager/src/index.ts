@@ -1,3 +1,4 @@
+import { validateVocabularyStoreSnapshot } from '@speech/context-bias';
 import {
   buildTrainingReadinessCoverageReport,
   type EnrollmentQualityReportV1,
@@ -8,6 +9,7 @@ import {
   type TrainingReadinessIdentityOptions,
   type TrainingReadinessPolicyV1,
 } from '@speech/enrollment';
+import type { VocabularyRevisionV1, VocabularyStoreSnapshotV1 } from '@speech/protocol';
 
 export type ProfileStorageBackendKind = 'opfs' | 'memory';
 export type ProfileBinaryFile = ArrayBuffer | ArrayBufferView;
@@ -130,6 +132,131 @@ export interface EnableEnrollmentProfileInput {
 export interface ImportEnrollmentProfileInput {
   readonly profilePackage: EnrollmentProfileExportPackageV1;
   readonly overwriteExisting?: boolean;
+}
+
+export interface FreezeTrainingJobRevisionInput {
+  readonly profileId: string;
+  readonly vocabularyStore?: VocabularyStoreSnapshotV1;
+  readonly jobId?: string;
+}
+
+export interface VerifyTrainingJobRevisionInput {
+  readonly jobId: string;
+  readonly vocabularyStore?: VocabularyStoreSnapshotV1;
+}
+
+export interface TrainingJobEnrollmentUtteranceRefV1 {
+  readonly id: string;
+  readonly promptId: string;
+  readonly promptVersion: number;
+  readonly language: EnrollmentSentenceLanguage;
+  readonly voiceCondition: EnrollmentVoiceCondition;
+  readonly repetitionIndex: number;
+  readonly durationMs: number;
+  readonly qualityStatus: EnrollmentQualityReportV1['status'];
+  readonly audio: {
+    readonly path: string;
+    readonly sha256: string;
+    readonly sizeBytes: number;
+  };
+  readonly metadataPath: string;
+  readonly metadataSha256: string;
+}
+
+export interface TrainingJobEnrollmentRevisionV1 {
+  readonly schemaVersion: 1;
+  readonly profileUpdatedAt: string;
+  readonly sentenceBankVersion: string;
+  readonly acceptedUtterances: number;
+  readonly acceptedSeconds: number;
+  readonly utterances: readonly TrainingJobEnrollmentUtteranceRefV1[];
+  readonly revisionSha256: string;
+}
+
+export interface TrainingJobVocabularyRevisionV1 {
+  readonly schemaVersion: 1;
+  readonly storeRevision: number;
+  readonly activeSetIds: readonly string[];
+  readonly activeEntryCount: number;
+  readonly revision: VocabularyRevisionV1;
+  readonly revisionSha256: string;
+}
+
+export interface TrainingJobRevisionV1 {
+  readonly schemaVersion: 1;
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly createdAt: string;
+  readonly enrollment: TrainingJobEnrollmentRevisionV1;
+  readonly vocabulary?: TrainingJobVocabularyRevisionV1;
+  readonly privacy: {
+    readonly localOnly: true;
+    readonly defaultExportIncludesRevision: false;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly containsPrivateVocabularyTerms: boolean;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+  };
+}
+
+export interface TrainingJobRevisionSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly createdAt: string;
+  readonly enrollment: {
+    readonly acceptedUtterances: number;
+    readonly acceptedSeconds: number;
+    readonly revisionSha256: string;
+  };
+  readonly vocabulary?: {
+    readonly storeRevision: number;
+    readonly activeEntryCount: number;
+    readonly revisionSha256: string;
+  };
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+    readonly localOnly: true;
+  };
+}
+
+export type TrainingJobRevisionSourceStatus = 'match' | 'changed' | 'missing';
+
+export interface TrainingJobRevisionVerificationResultV1 {
+  readonly schemaVersion: 1;
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly checkedAt: string;
+  readonly ok: boolean;
+  readonly enrollment: {
+    readonly status: TrainingJobRevisionSourceStatus;
+    readonly expectedRevisionSha256: string;
+    readonly actualRevisionSha256?: string;
+  };
+  readonly vocabulary?: {
+    readonly status: TrainingJobRevisionSourceStatus;
+    readonly expectedRevisionSha256: string;
+    readonly actualRevisionSha256?: string;
+  };
+  readonly errors: readonly string[];
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+    readonly localOnly: true;
+  };
 }
 
 export interface SaveEnrollmentUtteranceInput {
@@ -608,6 +735,172 @@ export class EnrollmentProfileStore {
     return summary;
   }
 
+  async freezeTrainingJobRevision(
+    input: FreezeTrainingJobRevisionInput,
+  ): Promise<TrainingJobRevisionV1> {
+    const profileId = normalizeSegment(input.profileId, 'profileId');
+    const jobId = normalizeSegment(input.jobId ?? this.createTrainingJobId(), 'trainingJobId');
+    const path = trainingJobRevisionPath(jobId);
+    if ((await this.backend.getFile(path)) !== undefined) {
+      throw new Error(`Training job revision ${jobId} already exists.`);
+    }
+    const summary = await this.getProfileSummary(profileId);
+    if (summary === undefined) {
+      throw new Error(`Cannot freeze training job for missing enrollment profile ${profileId}.`);
+    }
+    const enrollment = await buildTrainingJobEnrollmentRevision(
+      summary,
+      (bytes) => this.digest(bytes),
+      (path) => this.backend.getFile(path),
+    );
+    const vocabulary =
+      input.vocabularyStore === undefined
+        ? undefined
+        : await buildTrainingJobVocabularyRevision(input.vocabularyStore, (bytes) =>
+            this.digest(bytes),
+          );
+    const revision: TrainingJobRevisionV1 = {
+      schemaVersion: 1,
+      jobId,
+      profileId,
+      createdAt: this.options.now?.() ?? new Date().toISOString(),
+      enrollment,
+      ...(vocabulary === undefined ? {} : { vocabulary }),
+      privacy: {
+        localOnly: true,
+        defaultExportIncludesRevision: false,
+        containsRawAudio: false,
+        containsTranscriptText: false,
+        containsFeatureTensors: false,
+        containsCheckpoints: false,
+        containsAdapterWeights: false,
+        containsPrivateVocabularyTerms: (vocabulary?.revision.entries.length ?? 0) > 0,
+        networkUpload: false,
+        telemetry: false,
+      },
+    };
+    await writeJsonAtomically(this.backend, path, revision);
+    return revision;
+  }
+
+  async getTrainingJobRevision(jobId: string): Promise<TrainingJobRevisionV1 | undefined> {
+    const bytes = await this.backend.getFile(trainingJobRevisionPath(jobId));
+    return bytes === undefined ? undefined : parseJson<TrainingJobRevisionV1>(bytes);
+  }
+
+  async listTrainingJobRevisions(profileId?: string): Promise<TrainingJobRevisionV1[]> {
+    const files = await this.backend.listFiles(trainingJobRevisionPath());
+    const revisions: TrainingJobRevisionV1[] = [];
+    for (const file of files) {
+      if (file.path[file.path.length - 1] !== 'revision.json') continue;
+      const bytes = await this.backend.getFile(file.path);
+      if (bytes === undefined) continue;
+      const revision = parseJson<TrainingJobRevisionV1>(bytes);
+      if (
+        profileId === undefined ||
+        revision.profileId === normalizeSegment(profileId, 'profileId')
+      ) {
+        revisions.push(revision);
+      }
+    }
+    return revisions.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  async verifyTrainingJobRevisionSources(
+    input: VerifyTrainingJobRevisionInput,
+  ): Promise<TrainingJobRevisionVerificationResultV1> {
+    const jobId = normalizeSegment(input.jobId, 'trainingJobId');
+    const revision = await this.getTrainingJobRevision(jobId);
+    if (revision === undefined) {
+      throw new Error(`Training job revision ${jobId} was not found.`);
+    }
+    const checkedAt = this.options.now?.() ?? new Date().toISOString();
+    const errors: string[] = [];
+    const summary = await this.getProfileSummary(revision.profileId);
+    let enrollment: TrainingJobRevisionVerificationResultV1['enrollment'];
+    if (summary === undefined) {
+      enrollment = {
+        status: 'missing',
+        expectedRevisionSha256: revision.enrollment.revisionSha256,
+      };
+      errors.push(`Enrollment profile ${revision.profileId} is missing.`);
+    } else {
+      try {
+        const actualEnrollment = await buildTrainingJobEnrollmentRevision(
+          summary,
+          (bytes) => this.digest(bytes),
+          (path) => this.backend.getFile(path),
+        );
+        const status =
+          actualEnrollment.revisionSha256 === revision.enrollment.revisionSha256
+            ? 'match'
+            : 'changed';
+        enrollment = {
+          status,
+          expectedRevisionSha256: revision.enrollment.revisionSha256,
+          actualRevisionSha256: actualEnrollment.revisionSha256,
+        };
+        if (status !== 'match') {
+          errors.push('Enrollment profile accepted-utterance revision changed after job freeze.');
+        }
+      } catch (error) {
+        enrollment = {
+          status: 'missing',
+          expectedRevisionSha256: revision.enrollment.revisionSha256,
+        };
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    let vocabulary: TrainingJobRevisionVerificationResultV1['vocabulary'];
+    if (revision.vocabulary !== undefined) {
+      if (input.vocabularyStore === undefined) {
+        vocabulary = {
+          status: 'missing',
+          expectedRevisionSha256: revision.vocabulary.revisionSha256,
+        };
+        errors.push('Vocabulary store snapshot is required to verify this training job revision.');
+      } else {
+        const actualVocabulary = await buildTrainingJobVocabularyRevision(
+          input.vocabularyStore,
+          (bytes) => this.digest(bytes),
+        );
+        const status =
+          actualVocabulary.revisionSha256 === revision.vocabulary.revisionSha256
+            ? 'match'
+            : 'changed';
+        vocabulary = {
+          status,
+          expectedRevisionSha256: revision.vocabulary.revisionSha256,
+          actualRevisionSha256: actualVocabulary.revisionSha256,
+        };
+        if (status !== 'match') {
+          errors.push('Vocabulary revision changed after job freeze.');
+        }
+      }
+    }
+
+    return {
+      schemaVersion: 1,
+      jobId,
+      profileId: revision.profileId,
+      checkedAt,
+      ok: errors.length === 0,
+      enrollment,
+      ...(vocabulary === undefined ? {} : { vocabulary }),
+      errors,
+      privacy: {
+        aggregateOnly: true,
+        containsRawAudio: false,
+        containsTranscriptText: false,
+        containsPrivateVocabularyTerms: false,
+        networkUpload: false,
+        telemetry: false,
+        localOnly: true,
+      },
+    };
+  }
+
   async deleteProfile(profileId: string): Promise<void> {
     const normalizedProfileId = normalizeSegment(profileId, 'profileId');
     await this.backend.deleteDirectory(['profiles', normalizedProfileId]);
@@ -720,6 +1013,13 @@ export class EnrollmentProfileStore {
       `utt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
     );
   }
+
+  private createTrainingJobId(): string {
+    return (
+      this.options.randomId?.() ??
+      `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    );
+  }
 }
 
 export function encodePcm16Wav(
@@ -762,6 +1062,115 @@ export async function sha256ArrayBuffer(bytes: ArrayBuffer): Promise<string> {
   throw new Error('SHA-256 digest is unavailable in this runtime. Provide a digest dependency.');
 }
 
+export function summarizeTrainingJobRevision(
+  revision: TrainingJobRevisionV1,
+): TrainingJobRevisionSummaryV1 {
+  return {
+    schemaVersion: 1,
+    jobId: revision.jobId,
+    profileId: revision.profileId,
+    createdAt: revision.createdAt,
+    enrollment: {
+      acceptedUtterances: revision.enrollment.acceptedUtterances,
+      acceptedSeconds: revision.enrollment.acceptedSeconds,
+      revisionSha256: revision.enrollment.revisionSha256,
+    },
+    ...(revision.vocabulary === undefined
+      ? {}
+      : {
+          vocabulary: {
+            storeRevision: revision.vocabulary.storeRevision,
+            activeEntryCount: revision.vocabulary.activeEntryCount,
+            revisionSha256: revision.vocabulary.revisionSha256,
+          },
+        }),
+    privacy: {
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsPrivateVocabularyTerms: false,
+      networkUpload: false,
+      telemetry: false,
+      localOnly: true,
+    },
+  };
+}
+
+async function buildTrainingJobEnrollmentRevision(
+  summary: EnrollmentProfileSummaryV1,
+  digest: (bytes: ArrayBuffer) => Promise<string>,
+  readFile?: (path: readonly string[]) => Promise<ArrayBuffer | undefined>,
+): Promise<TrainingJobEnrollmentRevisionV1> {
+  const utterances = await Promise.all(
+    summary.utterances.map(async (utterance): Promise<TrainingJobEnrollmentUtteranceRefV1> => {
+      const audioBytes = await readFile?.(portablePathToSegments(utterance.audio.path));
+      if (readFile !== undefined && audioBytes === undefined) {
+        throw new Error(`Enrollment audio file ${utterance.audio.path} is missing.`);
+      }
+      const audioSha256 =
+        audioBytes === undefined ? utterance.audio.sha256 : await digest(audioBytes);
+      const audioSizeBytes =
+        audioBytes === undefined ? utterance.audio.sizeBytes : audioBytes.byteLength;
+      return {
+        id: utterance.id,
+        promptId: utterance.promptId,
+        promptVersion: utterance.promptVersion,
+        language: utterance.language,
+        voiceCondition: utterance.voiceCondition,
+        repetitionIndex: utterance.repetitionIndex,
+        durationMs: utterance.audio.durationMs,
+        qualityStatus: utterance.quality.status,
+        audio: {
+          path: utterance.audio.path,
+          sha256: audioSha256,
+          sizeBytes: audioSizeBytes,
+        },
+        metadataPath: pathToPortableString(
+          profilePath(summary.profile.id, 'utterances', `${utterance.id}.json`),
+        ),
+        metadataSha256: await digest(stableJsonBytes(utterance)),
+      };
+    }),
+  );
+  const unsigned = {
+    schemaVersion: 1,
+    profileUpdatedAt: summary.profile.updatedAt,
+    sentenceBankVersion: summary.profile.enrollment.sentenceBankVersion,
+    acceptedUtterances: summary.profile.enrollment.acceptedUtterances,
+    acceptedSeconds: summary.profile.enrollment.acceptedSeconds,
+    utterances,
+  } satisfies Omit<TrainingJobEnrollmentRevisionV1, 'revisionSha256'>;
+  return {
+    ...unsigned,
+    revisionSha256: await digest(stableJsonBytes(unsigned)),
+  };
+}
+
+async function buildTrainingJobVocabularyRevision(
+  vocabularyStore: VocabularyStoreSnapshotV1,
+  digest: (bytes: ArrayBuffer) => Promise<string>,
+): Promise<TrainingJobVocabularyRevisionV1> {
+  const validation = validateVocabularyStoreSnapshot(vocabularyStore);
+  if (validation.normalizedSnapshot === undefined || validation.revision === undefined) {
+    throw new Error(
+      `Cannot freeze invalid vocabulary store snapshot: ${validation.errors
+        .map((error) => error.message)
+        .join('; ')}`,
+    );
+  }
+  const unsigned = {
+    schemaVersion: 1,
+    storeRevision: validation.normalizedSnapshot.revision,
+    activeSetIds: validation.normalizedSnapshot.activeSetIds,
+    activeEntryCount: validation.activeEntryCount,
+    revision: validation.revision,
+  } satisfies Omit<TrainingJobVocabularyRevisionV1, 'revisionSha256'>;
+  return {
+    ...unsigned,
+    revisionSha256: await digest(stableJsonBytes(unsigned)),
+  };
+}
+
 export function buildTrainingReadinessCoverageReportForProfile(
   summary: EnrollmentProfileSummaryV1,
   policy?: TrainingReadinessPolicyV1,
@@ -798,7 +1207,7 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, import/export, readiness reporting, rollback, and deletion.',
+    'Private profile storage, frozen training-job revisions, readiness reporting, import/export, rollback, and deletion.',
 };
 
 async function writeJsonAtomically(
@@ -899,6 +1308,31 @@ function profileLifecyclePath(...segments: readonly string[]): string[] {
     'profile-lifecycle',
     ...segments.map((segment) => normalizeSegment(segment, 'profilePath')),
   ];
+}
+
+function trainingJobRevisionPath(jobId?: string): string[] {
+  return jobId === undefined
+    ? ['training-jobs']
+    : ['training-jobs', normalizeSegment(jobId, 'trainingJobId'), 'revision.json'];
+}
+
+function stableJsonBytes(value: unknown): ArrayBuffer {
+  return textEncoder.encode(`${stableJsonStringify(value)}\n`).buffer;
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonStringify(item)).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .filter((key) => record[key] !== undefined)
+    .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`)
+    .join(',')}}`;
 }
 
 function assertBaseModelCompatible(

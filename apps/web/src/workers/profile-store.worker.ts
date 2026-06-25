@@ -3,6 +3,7 @@ import {
   createDefaultProfileStorageBackend,
   encodePcm16Wav,
   requestPersistentProfileStorage,
+  summarizeTrainingJobRevision,
   type ActiveEnrollmentProfileStateV1,
   type EnrollmentCaptureMetadataV1,
   type EnrollmentProfileExportPackageV1,
@@ -10,7 +11,10 @@ import {
   type EnrollmentUtteranceV1,
   type ProfileStorageBackend,
   type ProfileStorageBackendKind,
+  type TrainingJobRevisionSummaryV1,
+  type TrainingJobRevisionVerificationResultV1,
 } from '@speech/profile-manager';
+import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
 import type {
   EnrollmentQualityReportV1,
   EnrollmentSentenceLanguage,
@@ -45,6 +49,19 @@ export type ProfileStoreWorkerRequest =
       readonly capture: EnrollmentCaptureMetadataV1;
       readonly quality: EnrollmentQualityReportV1;
       readonly acceptedBy: 'manual' | 'automatic';
+    }
+  | {
+      readonly type: 'FREEZE_TRAINING_JOB_REVISION';
+      readonly requestId: string;
+      readonly profileId: string;
+      readonly vocabularyStore?: VocabularyStoreSnapshotV1;
+      readonly jobId?: string;
+    }
+  | {
+      readonly type: 'VERIFY_TRAINING_JOB_REVISION';
+      readonly requestId: string;
+      readonly jobId: string;
+      readonly vocabularyStore?: VocabularyStoreSnapshotV1;
     }
   | { readonly type: 'DELETE_PROFILE'; readonly requestId: string; readonly profileId: string };
 
@@ -96,6 +113,22 @@ export type ProfileStoreWorkerResponse =
       readonly persistentStorageGranted: boolean;
       readonly activeState: ActiveEnrollmentProfileStateV1;
       readonly summary: EnrollmentProfileSummaryV1;
+    }
+  | {
+      readonly type: 'PROFILE_STORE_TRAINING_JOB_FROZEN';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly revision: TrainingJobRevisionSummaryV1;
+    }
+  | {
+      readonly type: 'PROFILE_STORE_TRAINING_JOB_VERIFIED';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly verification: TrainingJobRevisionVerificationResultV1;
     }
   | {
       readonly type: 'PROFILE_STORE_ERROR';
@@ -212,6 +245,43 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
           activeState: await store.getActiveProfileState(),
           utterance,
           summary,
+        });
+        return;
+      }
+      case 'FREEZE_TRAINING_JOB_REVISION': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const revision = await store.freezeTrainingJobRevision({
+          profileId: message.profileId,
+          ...(message.vocabularyStore === undefined
+            ? {}
+            : { vocabularyStore: message.vocabularyStore }),
+          ...(message.jobId === undefined ? {} : { jobId: message.jobId }),
+        });
+        post({
+          type: 'PROFILE_STORE_TRAINING_JOB_FROZEN',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          revision: summarizeTrainingJobRevision(revision),
+        });
+        return;
+      }
+      case 'VERIFY_TRAINING_JOB_REVISION': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const verification = await store.verifyTrainingJobRevisionSources({
+          jobId: message.jobId,
+          ...(message.vocabularyStore === undefined
+            ? {}
+            : { vocabularyStore: message.vocabularyStore }),
+        });
+        post({
+          type: 'PROFILE_STORE_TRAINING_JOB_VERIFIED',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          verification,
         });
         return;
       }

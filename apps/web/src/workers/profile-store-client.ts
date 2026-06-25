@@ -5,12 +5,15 @@ import type {
   EnrollmentProfileSummaryV1,
   EnrollmentUtteranceV1,
   ProfileStorageBackendKind,
+  TrainingJobRevisionSummaryV1,
+  TrainingJobRevisionVerificationResultV1,
 } from '@speech/profile-manager';
 import type {
   EnrollmentQualityReportV1,
   EnrollmentSentenceLanguage,
   EnrollmentVoiceCondition,
 } from '@speech/enrollment';
+import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
 import profileStoreWorkerUrl from './profile-store.worker.ts?worker&url';
 import type { ProfileStoreWorkerRequest, ProfileStoreWorkerResponse } from './profile-store.worker';
 
@@ -43,6 +46,14 @@ export interface ProfileStoreImportResult extends ProfileStoreActiveResult {
   readonly summary: EnrollmentProfileSummaryV1;
 }
 
+export interface ProfileStoreTrainingJobFreezeResult extends ProfileStoreActiveResult {
+  readonly revision: TrainingJobRevisionSummaryV1;
+}
+
+export interface ProfileStoreTrainingJobVerificationResult extends ProfileStoreActiveResult {
+  readonly verification: TrainingJobRevisionVerificationResultV1;
+}
+
 export interface SaveAcceptedEnrollmentTakeOptions {
   readonly profileId: string;
   readonly profileDisplayName: string;
@@ -68,6 +79,19 @@ export interface DeleteProfileOptions {
 
 export type LoadProfileOptions = DeleteProfileOptions;
 export type EnableProfileOptions = DeleteProfileOptions;
+export interface FreezeTrainingJobRevisionOptions {
+  readonly profileId: string;
+  readonly vocabularyStore?: VocabularyStoreSnapshotV1;
+  readonly jobId?: string;
+  readonly timeoutMs?: number;
+}
+
+export interface VerifyTrainingJobRevisionOptions {
+  readonly jobId: string;
+  readonly vocabularyStore?: VocabularyStoreSnapshotV1;
+  readonly timeoutMs?: number;
+}
+
 export interface ImportProfileOptions {
   readonly profilePackage: EnrollmentProfileExportPackageV1;
   readonly overwriteExisting?: boolean;
@@ -221,6 +245,59 @@ export function saveAcceptedEnrollmentTake(
       activeState: response.activeState,
       utterance: response.utterance,
       summary: response.summary,
+    };
+  });
+}
+
+export function freezeTrainingJobRevision(
+  options: FreezeTrainingJobRevisionOptions,
+): Promise<ProfileStoreTrainingJobFreezeResult> {
+  return requestProfileStore(
+    {
+      type: 'FREEZE_TRAINING_JOB_REVISION',
+      requestId: createRequestId('freeze-training-job'),
+      profileId: options.profileId,
+      ...(options.vocabularyStore === undefined
+        ? {}
+        : { vocabularyStore: options.vocabularyStore }),
+      ...(options.jobId === undefined ? {} : { jobId: options.jobId }),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_TRAINING_JOB_FROZEN') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      revision: response.revision,
+    };
+  });
+}
+
+export function verifyTrainingJobRevision(
+  options: VerifyTrainingJobRevisionOptions,
+): Promise<ProfileStoreTrainingJobVerificationResult> {
+  return requestProfileStore(
+    {
+      type: 'VERIFY_TRAINING_JOB_REVISION',
+      requestId: createRequestId('verify-training-job'),
+      jobId: options.jobId,
+      ...(options.vocabularyStore === undefined
+        ? {}
+        : { vocabularyStore: options.vocabularyStore }),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_TRAINING_JOB_VERIFIED') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      verification: response.verification,
     };
   });
 }
