@@ -11,6 +11,7 @@ import {
   encodePcm16Wav,
   requestPersistentProfileStorage,
   summarizeTrainingJobFeaturePreparationManifest,
+  summarizeTrainingJobFrameLabelsManifest,
   summarizeTrainingJobPromptIdentitySplitPlan,
   summarizeTrainingJobRevision,
   type EnrollmentCaptureMetadataV1,
@@ -402,6 +403,237 @@ describe('enrollment profile store', () => {
     const serialized = JSON.stringify(summary);
     expect(serialized).not.toContain('prompt-feature-a');
     expect(serialized).not.toContain('utt-feature-train-a');
+  });
+
+  it('prepares private CTC frame labels and excludes low-confidence frames without deleting recordings', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveSplitTake(store, 'utt-align-a', 'prompt-align-a', 'vi', 'normal');
+    await saveSplitTake(store, 'utt-align-b', 'prompt-align-b', 'en', 'whisper');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-split',
+      jobId: 'job-frame-labels',
+    });
+    const featureManifest = await store.prepareTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-labels',
+      splitConfig: { seed: 'labels-seed', trainRatio: 1, validationRatio: 0, testRatio: 0 },
+    });
+    const featureUtterances = featureManifest.shards.flatMap((shard) => shard.utterances);
+
+    const manifest = await store.prepareTrainingJobFrameLabels({
+      jobId: revision.jobId,
+      featureSetId: 'features-labels',
+      alignmentSetId: 'alignments-001',
+      options: { minimumFrameConfidence: 0.7, minimumMeanTokenConfidence: 0.7 },
+      alignments: featureUtterances.map((utterance, index) => ({
+        utteranceId: utterance.utteranceId,
+        targetTokenIds: [1, 2, 3],
+        frameCount: utterance.frameCount,
+        vocabularySize: 5,
+        blankId: 0,
+        frameLogits:
+          index === 0
+            ? makeCtcLogitsForFrames(utterance.frameCount, [1, 2, 3], 5, 0)
+            : new Float32Array(utterance.frameCount * 5),
+      })),
+    });
+
+    expect(manifest).toMatchObject({
+      schemaVersion: 1,
+      manifestType: 'training-job-frame-labels',
+      jobId: revision.jobId,
+      profileId: 'profile-split',
+      featureSetId: 'features-labels',
+      alignmentSetId: 'alignments-001',
+      enrollmentRevisionSha256: revision.enrollment.revisionSha256,
+      featureManifestSha256: featureManifest.manifestSha256,
+      alignment: {
+        algorithmId: 'ctc-viterbi-forced-alignment-v1',
+        blankId: 0,
+        vocabularySize: 5,
+      },
+      privacy: {
+        localOnly: true,
+        defaultExportIncludesFrameLabels: false,
+        containsRawAudio: false,
+        containsTranscriptText: false,
+        containsFeatureTensors: false,
+        containsFrameLabels: true,
+        containsTokenIds: true,
+        exposesRawPromptIds: true,
+      },
+    });
+    expect(manifest.labelFile.path).toBe(
+      'training-jobs/job-frame-labels/features/features-labels/frame-labels/alignments-001/labels.json',
+    );
+    expect(manifest.labelFile.sha256).toBe(
+      await digest(await requiredBytes(backend, manifest.labelFile.path.split('/'))),
+    );
+    expect(manifest.totals).toMatchObject({
+      utterances: 2,
+      alignedUtterances: 1,
+      lowConfidenceExcludedUtterances: 1,
+      frames: featureManifest.totals.frames,
+    });
+    expect(manifest.totals.usableFrames).toBeGreaterThan(0);
+    expect(manifest.totals.excludedFrames).toBeGreaterThan(0);
+    expect(manifest.utterances).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ utteranceId: 'utt-align-a', status: 'aligned' }),
+        expect.objectContaining({ utteranceId: 'utt-align-b', status: 'low-confidence-excluded' }),
+      ]),
+    );
+    await expect(
+      store.verifyTrainingJobFrameLabels({
+        jobId: revision.jobId,
+        featureSetId: 'features-labels',
+        alignmentSetId: 'alignments-001',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      manifestStatus: 'match',
+      labelFile: { status: 'match' },
+      privacy: {
+        aggregateOnly: true,
+        containsFrameLabels: false,
+        containsTokenIds: false,
+        exposesRawPromptIds: false,
+      },
+    });
+
+    const summary = summarizeTrainingJobFrameLabelsManifest(manifest);
+    expect(summary).toMatchObject({
+      featureSetId: 'features-labels',
+      alignmentSetId: 'alignments-001',
+      totals: {
+        utterances: 2,
+        alignedUtterances: 1,
+        lowConfidenceExcludedUtterances: 1,
+      },
+      privacy: { aggregateOnly: true, containsFrameLabels: false, containsTokenIds: false },
+    });
+    const serialized = JSON.stringify(summary);
+    expect(serialized).not.toContain('prompt-align-a');
+    expect(serialized).not.toContain('utt-align-a');
+
+    const exported = await store.exportProfile('profile-split');
+    expect(Object.keys(exported.files).some((path) => path.includes('alignments-001'))).toBe(false);
+    expect(
+      await backend.getFile(['profiles', 'profile-split', 'recordings', 'utt-align-b.wav']),
+    ).toBeDefined();
+  });
+
+  it('detects missing or changed frame labels and deletes them deterministically', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveSplitTake(store, 'utt-label-verify', 'prompt-label-verify', 'mixed', 'normal');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-split',
+      jobId: 'job-frame-label-verify',
+    });
+    const featureManifest = await store.prepareTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-label-verify',
+      splitConfig: { seed: 'label-verify-seed', trainRatio: 1, validationRatio: 0, testRatio: 0 },
+    });
+    const featureShard = featureManifest.shards[0];
+    const utterance = featureShard?.utterances[0];
+    if (featureShard === undefined || utterance === undefined) {
+      throw new Error('Expected a prepared utterance.');
+    }
+    const originalFeatureBytes = await requiredBytes(backend, featureShard.path.split('/'));
+    await backend.putFile(featureShard.path.split('/'), new Uint8Array([9, 9, 9]));
+    await expect(
+      store.prepareTrainingJobFrameLabels({
+        jobId: revision.jobId,
+        featureSetId: 'features-label-verify',
+        alignmentSetId: 'alignments-reject-corrupt-features',
+        alignments: [
+          {
+            utteranceId: utterance.utteranceId,
+            targetTokenIds: [1, 2],
+            frameCount: utterance.frameCount,
+            vocabularySize: 4,
+            blankId: 0,
+            frameLogits: makeCtcLogitsForFrames(utterance.frameCount, [1, 2], 4, 0),
+          },
+        ],
+      }),
+    ).rejects.toThrow(/Feature shards must verify/);
+    await backend.putFile(featureShard.path.split('/'), originalFeatureBytes);
+
+    const manifest = await store.prepareTrainingJobFrameLabels({
+      jobId: revision.jobId,
+      featureSetId: 'features-label-verify',
+      alignmentSetId: 'alignments-verify',
+      alignments: [
+        {
+          utteranceId: utterance.utteranceId,
+          targetTokenIds: [1, 2],
+          frameCount: utterance.frameCount,
+          vocabularySize: 4,
+          blankId: 0,
+          frameLogits: makeCtcLogitsForFrames(utterance.frameCount, [1, 2], 4, 0),
+        },
+      ],
+    });
+    const manifestPath = [
+      'training-jobs',
+      revision.jobId,
+      'features',
+      'features-label-verify',
+      'frame-labels',
+      'alignments-verify',
+      'manifest.json',
+    ];
+    await backend.putFile(
+      manifestPath,
+      jsonBytes({
+        ...manifest,
+        totals: { ...manifest.totals, frames: manifest.totals.frames + 1 },
+      }),
+    );
+    await expect(
+      store.verifyTrainingJobFrameLabels({
+        jobId: revision.jobId,
+        featureSetId: 'features-label-verify',
+        alignmentSetId: 'alignments-verify',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      manifestStatus: 'changed',
+      errors: ['Frame-label manifest checksum changed.'],
+    });
+    await backend.putFile(manifestPath, jsonBytes(manifest));
+    await backend.putFile(manifest.labelFile.path.split('/'), new Uint8Array([1, 2, 3]));
+    await expect(
+      store.verifyTrainingJobFrameLabels({
+        jobId: revision.jobId,
+        featureSetId: 'features-label-verify',
+        alignmentSetId: 'alignments-verify',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      labelFile: { status: 'changed' },
+      errors: ['Frame-label file checksum or size changed.'],
+    });
+
+    await store.deleteTrainingJobFrameLabels({
+      jobId: revision.jobId,
+      featureSetId: 'features-label-verify',
+      alignmentSetId: 'alignments-verify',
+    });
+    expect(
+      await backend.listFiles([
+        'training-jobs',
+        revision.jobId,
+        'features',
+        'features-label-verify',
+        'frame-labels',
+        'alignments-verify',
+      ]),
+    ).toEqual([]);
   });
 
   it('detects missing or changed FP16 feature shards and deletes them deterministically', async () => {
@@ -934,6 +1166,30 @@ function makeTone(durationMs: number, amplitude: number): Float32Array {
     pcm[index] = Math.sin((2 * Math.PI * 220 * index) / sampleRateHz) * amplitude;
   }
   return pcm;
+}
+
+function makeCtcLogitsForFrames(
+  frameCount: number,
+  targetTokenIds: readonly number[],
+  vocabularySize: number,
+  blankId: number,
+): Float32Array {
+  const logits = new Float32Array(frameCount * vocabularySize);
+  logits.fill(-6);
+  const symbols: number[] = [];
+  for (const tokenId of targetTokenIds) {
+    symbols.push(blankId, tokenId);
+  }
+  symbols.push(blankId);
+  for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+    const symbolIndex = Math.min(
+      symbols.length - 1,
+      Math.floor((frameIndex * symbols.length) / frameCount),
+    );
+    const tokenId = symbols[symbolIndex] ?? blankId;
+    logits[frameIndex * vocabularySize + tokenId] = 6;
+  }
+  return logits;
 }
 
 async function digest(bytes: ArrayBuffer): Promise<string> {
