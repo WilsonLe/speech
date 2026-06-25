@@ -85,6 +85,8 @@ describe('browser/Python tiny-adapter numerical parity', () => {
       l2Regularization: fixture.options.l2Regularization,
       maxParameterCount: fixture.options.maxParameterCount,
       checkpointEveryEpochs: fixture.options.checkpointEveryEpochs,
+      optimizer: 'sgd',
+      learningRateSchedule: 'constant',
       targetLoss: 0,
       onCheckpoint: (checkpoint) => {
         collectedCheckpoints.push(checkpoint);

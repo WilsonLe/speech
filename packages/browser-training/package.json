@@ -2,7 +2,7 @@
   "name": "@speech/browser-training",
   "version": "0.1.0",
   "private": true,
-  "description": "BrowserTrainingBackend contracts and fixed local adapter-math implementation for in-browser personal models.",
+  "description": "BrowserTrainingBackend contracts, fixed local adapter-math training loop, and sampler/optimizer diagnostics for in-browser personal models.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
