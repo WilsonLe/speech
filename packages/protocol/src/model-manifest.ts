@@ -1734,13 +1734,35 @@ function validateBrowserTrainingArtifacts(
     fileKeys,
     errors,
   );
-  validateBrowserTrainingArtifactArray(
+  validateBrowserTrainingAnchorPackArtifacts(
     value['anchorPack'],
     'browserTraining.artifacts.anchorPack',
-    'anchor-pack',
     fileKeys,
     errors,
   );
+}
+
+function validateBrowserTrainingAnchorPackArtifacts(
+  value: unknown,
+  path: string,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!Array.isArray(value) || value.length === 0) {
+    errors.push(`${path} must be a non-empty array`);
+    return;
+  }
+  value.forEach((entry, index) => {
+    validateBrowserTrainingArtifactRef(entry, `${path}[${index}]`, 'anchor-pack', fileKeys, errors);
+    if (isRecord(entry) && isRecord(entry['license'])) {
+      const redistributionAllowed = entry['license']['redistributionAllowed'];
+      if (redistributionAllowed !== true) {
+        errors.push(
+          `${path}[${index}].license.redistributionAllowed must be true for anchor packs`,
+        );
+      }
+    }
+  });
 }
 
 function validateBrowserTrainingArtifactArray(

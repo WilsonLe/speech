@@ -161,27 +161,11 @@ def artifact_payloads() -> dict[str, dict[str, Any]]:
             **common,
             "artifactRole": "anchor-pack",
             "description": (
-                "Synthetic aggregate anchor-regression pack scaffold. It includes only case "
-                "counts, hash identifiers, and metric expectations; no prompt text or audio."
+                "Generic synthetic anchor feature pack for browser-training regression gates. "
+                "It includes public synthetic feature frames, hash identifiers, license/provenance "
+                "gates, and metric expectations; no prompt text or audio."
             ),
-            "anchorPack": {
-                "anchorPackId": "local-dev-browser-training-anchor-pack-v1",
-                "caseCount": 3,
-                "caseIdSha256": [
-                    _sha256_text("anchor:local-dev:vi:normal"),
-                    _sha256_text("anchor:local-dev:en:normal"),
-                    _sha256_text("anchor:local-dev:mixed:projected"),
-                ],
-                "metrics": [
-                    "wordErrorRate",
-                    "characterErrorRate",
-                    "realTimeFactor",
-                ],
-                "regressionBudget": {
-                    "maxRelativeWordErrorRegression": 0.0,
-                    "maxRelativeRealTimeFactorRegression": 0.1,
-                },
-            },
+            "anchorPack": _anchor_pack_contract(),
             "privacy": privacy,
         },
     }
@@ -422,6 +406,114 @@ def _zero_tensor_initializers() -> dict[str, dict[str, Any]]:
         }
         for name, (length, shape) in lengths.items()
     }
+
+
+def _anchor_pack_contract() -> dict[str, Any]:
+    cases = _anchor_cases()
+    return {
+        "kind": "generic-anchor-feature-pack-v1",
+        "contractVersion": 1,
+        "anchorPackId": "local-dev-browser-training-anchor-pack-v1",
+        "featureTap": _feature_tap(),
+        "featureEncoding": {
+            "valueEncoding": "json-float32",
+            "sourceDtype": "float16",
+            "frameDimension": 4,
+            "frameShiftMs": 10,
+        },
+        "licenseGate": {
+            "redistributionAllowed": True,
+            "sourceProvenanceRequired": True,
+            "syntheticOnly": True,
+            "participantConsentRequired": False,
+        },
+        "privacyGate": {
+            "containsRawAudio": False,
+            "containsTranscriptText": False,
+            "containsPrivateFrozenFeatureValues": False,
+            "containsPublicSyntheticFrozenFeatureValues": True,
+            "containsVoiceDerivedWeights": False,
+            "localOnly": True,
+        },
+        "caseCount": len(cases),
+        "caseIdSha256": [case["caseIdSha256"] for case in cases],
+        "cases": cases,
+        "metrics": [
+            "wordErrorRate",
+            "characterErrorRate",
+            "customTermRecall",
+            "falseInsertionsPer100NonTargetUtterances",
+            "realTimeFactor",
+        ],
+        "regressionBudget": {
+            "maxRelativeWordErrorRegression": 0.0,
+            "maxRelativeCharacterErrorRegression": 0.0,
+            "minCustomTermRecall": 1.0,
+            "maxFalseInsertionsPer100NonTargetUtterances": 0.0,
+            "maxRelativeRealTimeFactorRegression": 0.1,
+        },
+    }
+
+
+def _anchor_cases() -> list[dict[str, Any]]:
+    specs: tuple[tuple[str, str, list[list[float]], dict[str, float]], ...] = (
+        (
+            "vi",
+            "normal",
+            [[0.12, -0.04, 0.2, 0.08], [0.1, -0.02, 0.18, 0.05]],
+            {
+                "wordErrorRate": 0.0,
+                "characterErrorRate": 0.0,
+                "customTermRecall": 1.0,
+                "falseInsertionsPer100NonTargetUtterances": 0.0,
+                "realTimeFactor": 0.05,
+            },
+        ),
+        (
+            "en",
+            "normal",
+            [[-0.08, 0.16, 0.04, -0.12], [-0.05, 0.14, 0.06, -0.1]],
+            {
+                "wordErrorRate": 0.0,
+                "characterErrorRate": 0.0,
+                "customTermRecall": 1.0,
+                "falseInsertionsPer100NonTargetUtterances": 0.0,
+                "realTimeFactor": 0.05,
+            },
+        ),
+        (
+            "mixed",
+            "projected",
+            [[0.03, 0.11, -0.07, 0.19], [0.05, 0.09, -0.05, 0.17]],
+            {
+                "wordErrorRate": 0.0,
+                "characterErrorRate": 0.0,
+                "customTermRecall": 1.0,
+                "falseInsertionsPer100NonTargetUtterances": 0.0,
+                "realTimeFactor": 0.06,
+            },
+        ),
+    )
+    cases = []
+    for index, (language, voice_condition, frames, expected_metrics) in enumerate(specs):
+        flattened = [value for frame in frames for value in frame]
+        cases.append(
+            {
+                "caseIdSha256": _sha256_text(
+                    f"anchor-feature:{BASE_MODEL_ID}:{language}:{voice_condition}:{index}"
+                ),
+                "language": language,
+                "voiceCondition": voice_condition,
+                "featureFrameCount": len(frames),
+                "featureDimension": 4,
+                "syntheticFeatureFrames": frames,
+                "littleEndianFloat32FeatureSha256": _sha256_float32_values(flattened),
+                "expectedMetrics": expected_metrics,
+                "license": ARTIFACT_LICENSE,
+                "provenance": ARTIFACT_PROVENANCE,
+            }
+        )
+    return cases
 
 
 def _ctc_projection_weight() -> list[float]:

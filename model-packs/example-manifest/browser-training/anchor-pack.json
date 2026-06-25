@@ -17,18 +17,148 @@
     "createdAt": "2026-06-25T00:00:00.000Z"
   },
   "artifactRole": "anchor-pack",
-  "description": "Synthetic aggregate anchor-regression pack scaffold. It includes only case counts, hash identifiers, and metric expectations; no prompt text or audio.",
+  "description": "Generic synthetic anchor feature pack for browser-training regression gates. It includes public synthetic feature frames, hash identifiers, license/provenance gates, and metric expectations; no prompt text or audio.",
   "anchorPack": {
+    "kind": "generic-anchor-feature-pack-v1",
+    "contractVersion": 1,
     "anchorPackId": "local-dev-browser-training-anchor-pack-v1",
+    "featureTap": {
+      "graphId": "encoder",
+      "outputName": "encoded",
+      "dimension": 4,
+      "frameShiftMs": 10,
+      "persistedDtype": "float16"
+    },
+    "featureEncoding": {
+      "valueEncoding": "json-float32",
+      "sourceDtype": "float16",
+      "frameDimension": 4,
+      "frameShiftMs": 10
+    },
+    "licenseGate": {
+      "redistributionAllowed": true,
+      "sourceProvenanceRequired": true,
+      "syntheticOnly": true,
+      "participantConsentRequired": false
+    },
+    "privacyGate": {
+      "containsRawAudio": false,
+      "containsTranscriptText": false,
+      "containsPrivateFrozenFeatureValues": false,
+      "containsPublicSyntheticFrozenFeatureValues": true,
+      "containsVoiceDerivedWeights": false,
+      "localOnly": true
+    },
     "caseCount": 3,
     "caseIdSha256": [
-      "f2a413bec1bb8ca4ce589b6a261b31fdb6a5993accfb1820a1bc7bcf709dfff1",
-      "ceb484a65f18056442b2d41320d4e6cc45ffa56d0b79589fa4209d308cb4c018",
-      "3044ce8147686b61b306ea4355e644f1f4d7aafc384c45e7d5161943a3e0e2a6"
+      "0c96a6c649dbe8b819047198001e287ce77ab6029494072237b81b61362e99e1",
+      "73fc495632435fe969b8a0d91345c90bbf8e9466c40ad999458cdf9cbca670a8",
+      "80092bb7d155028147a1b04b1a78f2daf58ed2d0202cdc03d7cda904ba17b0ab"
     ],
-    "metrics": ["wordErrorRate", "characterErrorRate", "realTimeFactor"],
+    "cases": [
+      {
+        "caseIdSha256": "0c96a6c649dbe8b819047198001e287ce77ab6029494072237b81b61362e99e1",
+        "language": "vi",
+        "voiceCondition": "normal",
+        "featureFrameCount": 2,
+        "featureDimension": 4,
+        "syntheticFeatureFrames": [
+          [0.12, -0.04, 0.2, 0.08],
+          [0.1, -0.02, 0.18, 0.05]
+        ],
+        "littleEndianFloat32FeatureSha256": "bfb57096825f52239dbfec37563aab35b948a8cb70abfc2c984af34588d26067",
+        "expectedMetrics": {
+          "wordErrorRate": 0.0,
+          "characterErrorRate": 0.0,
+          "customTermRecall": 1.0,
+          "falseInsertionsPer100NonTargetUtterances": 0.0,
+          "realTimeFactor": 0.05
+        },
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      },
+      {
+        "caseIdSha256": "73fc495632435fe969b8a0d91345c90bbf8e9466c40ad999458cdf9cbca670a8",
+        "language": "en",
+        "voiceCondition": "normal",
+        "featureFrameCount": 2,
+        "featureDimension": 4,
+        "syntheticFeatureFrames": [
+          [-0.08, 0.16, 0.04, -0.12],
+          [-0.05, 0.14, 0.06, -0.1]
+        ],
+        "littleEndianFloat32FeatureSha256": "07ab556e37cddedfa7c5e91d2e2e1b04b9cd5639c6a22c702761b40a1f8ca7c2",
+        "expectedMetrics": {
+          "wordErrorRate": 0.0,
+          "characterErrorRate": 0.0,
+          "customTermRecall": 1.0,
+          "falseInsertionsPer100NonTargetUtterances": 0.0,
+          "realTimeFactor": 0.05
+        },
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      },
+      {
+        "caseIdSha256": "80092bb7d155028147a1b04b1a78f2daf58ed2d0202cdc03d7cda904ba17b0ab",
+        "language": "mixed",
+        "voiceCondition": "projected",
+        "featureFrameCount": 2,
+        "featureDimension": 4,
+        "syntheticFeatureFrames": [
+          [0.03, 0.11, -0.07, 0.19],
+          [0.05, 0.09, -0.05, 0.17]
+        ],
+        "littleEndianFloat32FeatureSha256": "b060fd32f58eb0850e0689143f1cd1bd6887b74b52013d0dc36be8b10bbcceb6",
+        "expectedMetrics": {
+          "wordErrorRate": 0.0,
+          "characterErrorRate": 0.0,
+          "customTermRecall": 1.0,
+          "falseInsertionsPer100NonTargetUtterances": 0.0,
+          "realTimeFactor": 0.06
+        },
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      }
+    ],
+    "metrics": [
+      "wordErrorRate",
+      "characterErrorRate",
+      "customTermRecall",
+      "falseInsertionsPer100NonTargetUtterances",
+      "realTimeFactor"
+    ],
     "regressionBudget": {
       "maxRelativeWordErrorRegression": 0.0,
+      "maxRelativeCharacterErrorRegression": 0.0,
+      "minCustomTermRecall": 1.0,
+      "maxFalseInsertionsPer100NonTargetUtterances": 0.0,
       "maxRelativeRealTimeFactorRegression": 0.1
     }
   },
