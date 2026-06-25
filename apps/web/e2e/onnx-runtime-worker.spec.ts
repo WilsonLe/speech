@@ -21,6 +21,9 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
     trainingSpikeStatus.getByText('blocked-no-public-js-api-or-package-artifact', { exact: true }),
   ).toBeVisible();
 
+  const secondTab = await page.context().newPage();
+  await secondTab.goto('/');
+
   await page.getByRole('button', { name: 'Run browser training prototype' }).click();
   let browserTrainingStatus = page.getByLabel('Browser training prototype status');
   let browserTrainingRecovery = page.getByLabel('Browser training recovery status');
@@ -30,6 +33,21 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible({
     timeout: 10_000,
   });
+  await expect(
+    browserTrainingRecovery.getByText('training lock held in this browser', { exact: true }),
+  ).toBeVisible({ timeout: 10_000 });
+
+  await secondTab.getByRole('button', { name: 'Run browser training prototype' }).click();
+  await expect(
+    secondTab.getByText(/Another tab is already training this profile\. Pause or cancel it/),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    secondTab
+      .getByLabel('Browser training recovery status')
+      .getByText('another tab is training this profile', { exact: true }),
+  ).toBeVisible({ timeout: 10_000 });
+  await secondTab.close();
+
   await page.getByRole('button', { name: 'Cancel browser training' }).click();
   await expect(browserTrainingStatus.getByText('cancelled', { exact: true })).toBeVisible({
     timeout: 10_000,
