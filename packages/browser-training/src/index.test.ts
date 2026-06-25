@@ -5,12 +5,42 @@ import {
   createRepositoryFixedAdapterMathBackend,
   createSyntheticFrozenFeatureTinyAdapterDataset,
   repositoryFixedAdapterMathBackendDescriptorV1,
+  selectBrowserTrainingBackend,
   trainFrozenFeatureTinyAdapter,
   validateFrozenFeatureTinyAdapterCheckpoint,
   validateFrozenFeatureTinyAdapterDataset,
   type FrozenFeatureTinyAdapterCheckpointV1,
   type FrozenFeatureTinyAdapterDatasetV1,
+  type OnnxRuntimeTrainingBackendProofV1,
 } from './index';
+
+function createBlockedOrtTrainingProof(): OnnxRuntimeTrainingBackendProofV1 {
+  return {
+    schemaVersion: 1,
+    packageName: 'onnxruntime-web',
+    packageVersion: '1.27.0',
+    trainingApiAvailable: false,
+    packageIncludesTrainingWasm: false,
+    workerProof: {
+      status: 'blocked-no-public-js-api-or-package-artifact',
+      forward: false,
+      backward: false,
+      optimizerStep: false,
+      checkpointSaveLoad: false,
+      weightExport: false,
+      reason:
+        'The pinned npm package lacks both ort-training-wasm-simd-threaded.wasm and public TrainingSession/CheckpointState symbols.',
+    },
+    privacy: {
+      inspectedPackageMetadataOnly: true,
+      containsAudio: false,
+      containsTranscript: false,
+      containsProfileData: false,
+      networkRequiredForProbe: false,
+      localOnly: true,
+    },
+  };
+}
 
 describe('browser frozen-feature tiny-adapter backend', () => {
   it('exposes an implementation-agnostic BrowserTrainingBackend descriptor', () => {
@@ -40,6 +70,75 @@ describe('browser frozen-feature tiny-adapter backend', () => {
         exposesConcreteRuntimeToUi: false,
       },
     });
+  });
+
+  it('routes an ORT Training request without proof to the fixed adapter-math backend', () => {
+    const selection = selectBrowserTrainingBackend({
+      preferredKind: 'onnxruntime-web-training',
+    });
+
+    expect(selection.backend.descriptor.kind).toBe('repository-fixed-adapter-math');
+    expect(selection.fallback?.reasons).toEqual(['ort-training-proof-unavailable']);
+    expect(selection.privacy).toEqual({
+      inspectedPackageMetadataOnly: false,
+      containsAudio: false,
+      containsTranscript: false,
+      containsProfileData: false,
+      networkRequiredForProbe: false,
+      localOnly: true,
+    });
+  });
+
+  it('routes the pinned unavailable ORT Training proof to the fixed adapter-math backend', () => {
+    const selection = selectBrowserTrainingBackend({
+      preferredKind: 'onnxruntime-web-training',
+      onnxRuntimeTrainingProof: createBlockedOrtTrainingProof(),
+    });
+
+    expect(selection.requestedKind).toBe('onnxruntime-web-training');
+    expect(selection.backend.descriptor.kind).toBe('repository-fixed-adapter-math');
+    expect(selection.fallback).toEqual({
+      requestedKind: 'onnxruntime-web-training',
+      selectedKind: 'repository-fixed-adapter-math',
+      reasons: [
+        'ort-training-api-unavailable',
+        'ort-training-wasm-unavailable',
+        'ort-training-worker-proof-not-passed',
+      ],
+      message:
+        'ONNX Runtime Training is unavailable (ort-training-api-unavailable, ort-training-wasm-unavailable, ort-training-worker-proof-not-passed); routing to repository fixed adapter-math backend.',
+    });
+    expect(selection.privacy).toEqual({
+      inspectedPackageMetadataOnly: true,
+      containsAudio: false,
+      containsTranscript: false,
+      containsProfileData: false,
+      networkRequiredForProbe: false,
+      localOnly: true,
+    });
+  });
+
+  it('does not claim an ORT Training backend even if a future proof shape passes', () => {
+    const selection = selectBrowserTrainingBackend({
+      preferredKind: 'onnxruntime-web-training',
+      onnxRuntimeTrainingProof: {
+        ...createBlockedOrtTrainingProof(),
+        trainingApiAvailable: true,
+        packageIncludesTrainingWasm: true,
+        workerProof: {
+          status: 'passed',
+          forward: true,
+          backward: true,
+          optimizerStep: true,
+          checkpointSaveLoad: true,
+          weightExport: true,
+        },
+      },
+    });
+
+    expect(selection.backend.descriptor.kind).toBe('repository-fixed-adapter-math');
+    expect(selection.fallback?.reasons).toEqual(['ort-training-backend-not-implemented']);
+    expect(selection.backend.descriptor.capabilities.onnxRuntimeTraining).toBe(false);
   });
 
   it('trains a deterministic tiny affine adapter over frozen synthetic features', () => {

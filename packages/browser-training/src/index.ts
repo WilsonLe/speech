@@ -9,6 +9,17 @@ export type BrowserTrainingBackendId =
   | 'repository-fixed-adapter-math-v1'
   | 'onnxruntime-web-training-v1';
 export type BrowserTrainingBackendAvailability = 'available' | 'unavailable';
+export type BrowserTrainingBackendPreference = BrowserTrainingBackendKind;
+export type BrowserTrainingBackendFallbackReason =
+  | 'ort-training-proof-unavailable'
+  | 'ort-training-api-unavailable'
+  | 'ort-training-wasm-unavailable'
+  | 'ort-training-worker-proof-not-passed'
+  | 'ort-training-backend-not-implemented';
+export type OnnxRuntimeTrainingWorkerProofStatus =
+  | 'blocked-no-public-js-api-or-package-artifact'
+  | 'not-run'
+  | 'passed';
 
 export interface BrowserTrainingBackendDescriptorV1 {
   readonly schemaVersion: 1;
@@ -67,6 +78,61 @@ export interface BrowserTrainingBackend {
   ): FrozenFeatureTinyAdapterTrainingResultV1;
 }
 
+export interface OnnxRuntimeTrainingWorkerProofV1 {
+  readonly status: OnnxRuntimeTrainingWorkerProofStatus;
+  readonly forward: boolean;
+  readonly backward: boolean;
+  readonly optimizerStep: boolean;
+  readonly checkpointSaveLoad: boolean;
+  readonly weightExport: boolean;
+  readonly reason?: string;
+}
+
+export interface OnnxRuntimeTrainingBackendProofV1 {
+  readonly schemaVersion: 1;
+  readonly packageName: string;
+  readonly packageVersion: string;
+  readonly trainingApiAvailable: boolean;
+  readonly packageIncludesTrainingWasm: boolean;
+  readonly workerProof: OnnxRuntimeTrainingWorkerProofV1;
+  readonly privacy: {
+    readonly inspectedPackageMetadataOnly: true;
+    readonly containsAudio: false;
+    readonly containsTranscript: false;
+    readonly containsProfileData: false;
+    readonly networkRequiredForProbe: false;
+    readonly localOnly: true;
+  };
+}
+
+export interface BrowserTrainingBackendSelectionOptionsV1 {
+  readonly preferredKind?: BrowserTrainingBackendPreference;
+  readonly onnxRuntimeTrainingProof?: OnnxRuntimeTrainingBackendProofV1;
+}
+
+export interface BrowserTrainingBackendFallbackV1 {
+  readonly requestedKind: 'onnxruntime-web-training';
+  readonly selectedKind: 'repository-fixed-adapter-math';
+  readonly reasons: readonly BrowserTrainingBackendFallbackReason[];
+  readonly message: string;
+}
+
+export interface BrowserTrainingBackendSelectionV1 {
+  readonly schemaVersion: 1;
+  readonly requestedKind: BrowserTrainingBackendPreference;
+  readonly backend: BrowserTrainingBackend;
+  readonly descriptor: BrowserTrainingBackendDescriptorV1;
+  readonly fallback?: BrowserTrainingBackendFallbackV1;
+  readonly privacy: {
+    readonly inspectedPackageMetadataOnly: boolean;
+    readonly containsAudio: false;
+    readonly containsTranscript: false;
+    readonly containsProfileData: false;
+    readonly networkRequiredForProbe: false;
+    readonly localOnly: true;
+  };
+}
+
 export const repositoryFixedAdapterMathBackendDescriptorV1: BrowserTrainingBackendDescriptorV1 = {
   schemaVersion: 1,
   interface: 'BrowserTrainingBackend',
@@ -98,7 +164,78 @@ export function createRepositoryFixedAdapterMathBackend(): BrowserTrainingBacken
 }
 
 export function createDefaultBrowserTrainingBackend(): BrowserTrainingBackend {
-  return createRepositoryFixedAdapterMathBackend();
+  return selectBrowserTrainingBackend().backend;
+}
+
+export function selectBrowserTrainingBackend(
+  options: BrowserTrainingBackendSelectionOptionsV1 = {},
+): BrowserTrainingBackendSelectionV1 {
+  const requestedKind = options.preferredKind ?? 'repository-fixed-adapter-math';
+  const fallback =
+    requestedKind === 'onnxruntime-web-training'
+      ? createOnnxRuntimeTrainingFallback(options.onnxRuntimeTrainingProof)
+      : undefined;
+  const backend = createRepositoryFixedAdapterMathBackend();
+  return {
+    schemaVersion: 1,
+    requestedKind,
+    backend,
+    descriptor: backend.descriptor,
+    ...(fallback === undefined ? {} : { fallback }),
+    privacy: {
+      inspectedPackageMetadataOnly: options.onnxRuntimeTrainingProof !== undefined,
+      containsAudio: false,
+      containsTranscript: false,
+      containsProfileData: false,
+      networkRequiredForProbe: false,
+      localOnly: true,
+    },
+  };
+}
+
+function createOnnxRuntimeTrainingFallback(
+  proof: OnnxRuntimeTrainingBackendProofV1 | undefined,
+): BrowserTrainingBackendFallbackV1 {
+  const reasons = getOnnxRuntimeTrainingFallbackReasons(proof);
+  return {
+    requestedKind: 'onnxruntime-web-training',
+    selectedKind: 'repository-fixed-adapter-math',
+    reasons,
+    message: `ONNX Runtime Training is unavailable (${reasons.join(', ')}); routing to repository fixed adapter-math backend.`,
+  };
+}
+
+function getOnnxRuntimeTrainingFallbackReasons(
+  proof: OnnxRuntimeTrainingBackendProofV1 | undefined,
+): readonly BrowserTrainingBackendFallbackReason[] {
+  if (proof === undefined) {
+    return ['ort-training-proof-unavailable'];
+  }
+  const reasons: BrowserTrainingBackendFallbackReason[] = [];
+  if (!proof.trainingApiAvailable) {
+    reasons.push('ort-training-api-unavailable');
+  }
+  if (!proof.packageIncludesTrainingWasm) {
+    reasons.push('ort-training-wasm-unavailable');
+  }
+  if (!hasPassedOnnxRuntimeTrainingWorkerProof(proof.workerProof)) {
+    reasons.push('ort-training-worker-proof-not-passed');
+  }
+  if (reasons.length === 0) {
+    reasons.push('ort-training-backend-not-implemented');
+  }
+  return reasons;
+}
+
+function hasPassedOnnxRuntimeTrainingWorkerProof(proof: OnnxRuntimeTrainingWorkerProofV1): boolean {
+  return (
+    proof.status === 'passed' &&
+    proof.forward &&
+    proof.backward &&
+    proof.optimizerStep &&
+    proof.checkpointSaveLoad &&
+    proof.weightExport
+  );
 }
 
 export interface FrozenFeatureTinyAdapterExampleV1 {
