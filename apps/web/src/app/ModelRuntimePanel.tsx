@@ -3,7 +3,7 @@ import type {
   FrozenFeatureTinyAdapterProgressV1,
   FrozenFeatureTinyAdapterTrainingResultV1,
 } from '@speech/browser-training';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   checkAsrWorkerRuntime,
   type AsrWorkerRuntimeCheckResult,
@@ -12,6 +12,8 @@ import {
   clearBrowserTrainingRecovery,
   readBrowserTrainingRecovery,
   startBrowserTrainingPrototype,
+  subscribeBrowserTrainingCoordination,
+  type BrowserTrainingCoordinationEventV1,
   type BrowserTrainingPrototypeRunController,
   type BrowserTrainingRecoveryRecordV1,
   type BrowserTrainingRuntimeWarningV1,
@@ -43,7 +45,11 @@ export function ModelRuntimePanel() {
   const [trainingRecovery, setTrainingRecovery] = useState<BrowserTrainingRecoveryRecordV1 | null>(
     () => readBrowserTrainingRecovery(),
   );
+  const [trainingCoordination, setTrainingCoordination] =
+    useState<BrowserTrainingCoordinationEventV1 | null>(null);
   const trainingRun = useRef<BrowserTrainingPrototypeRunController | null>(null);
+
+  useEffect(() => subscribeBrowserTrainingCoordination(setTrainingCoordination), []);
 
   async function handleCheckRuntime() {
     setStatus({ state: 'loading' });
@@ -74,11 +80,12 @@ export function ModelRuntimePanel() {
           progressEveryEpochs: 20,
           checkpointEveryEpochs: 20,
           targetLoss: 0,
-          epochDelayMs: 5,
+          epochDelayMs: 25,
         },
         onProgress: (latestProgress) => setTrainingStatus({ state: 'training', latestProgress }),
         onCheckpoint: () => setTrainingRecovery(readBrowserTrainingRecovery()),
         onWarning: setTrainingWarnings,
+        onCoordination: setTrainingCoordination,
         onRecoveryChange: setTrainingRecovery,
       });
       trainingRun.current = run;
@@ -175,6 +182,7 @@ export function ModelRuntimePanel() {
         <BrowserTrainingStatusMessage
           status={trainingStatus}
           recovery={trainingRecovery}
+          coordination={trainingCoordination}
           warnings={trainingWarnings}
         />
         <RuntimeStatusMessage status={status} />
@@ -217,13 +225,16 @@ function TrainingSpikeStatus() {
 function BrowserTrainingStatusMessage({
   status,
   recovery,
+  coordination,
   warnings,
 }: {
   readonly status: BrowserTrainingStatus;
   readonly recovery: BrowserTrainingRecoveryRecordV1 | null;
+  readonly coordination: BrowserTrainingCoordinationEventV1 | null;
   readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
 }) {
   const recoverySummary = formatBrowserTrainingRecovery(recovery);
+  const latestCoordination = coordination ?? recovery?.coordination ?? null;
   if (status.state === 'idle') {
     return (
       <>
@@ -231,7 +242,11 @@ function BrowserTrainingStatusMessage({
           Browser-training worker prototype has not run yet. It uses synthetic frozen features and
           does not touch the active ASR worker or profile.
         </p>
-        <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+        <BrowserTrainingRecoveryDetails
+          recovery={recovery}
+          coordination={latestCoordination}
+          warnings={warnings}
+        />
       </>
     );
   }
@@ -255,7 +270,11 @@ function BrowserTrainingStatusMessage({
             <dd>{recoverySummary}</dd>
           </div>
         </dl>
-        <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+        <BrowserTrainingRecoveryDetails
+          recovery={recovery}
+          coordination={latestCoordination}
+          warnings={warnings}
+        />
       </>
     );
   }
@@ -263,7 +282,11 @@ function BrowserTrainingStatusMessage({
     return (
       <>
         <p className="status-message error-message">{status.message}</p>
-        <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+        <BrowserTrainingRecoveryDetails
+          recovery={recovery}
+          coordination={latestCoordination}
+          warnings={warnings}
+        />
       </>
     );
   }
@@ -310,16 +333,22 @@ function BrowserTrainingStatusMessage({
           </dd>
         </div>
       </dl>
-      <BrowserTrainingRecoveryDetails recovery={recovery} warnings={warnings} />
+      <BrowserTrainingRecoveryDetails
+        recovery={recovery}
+        coordination={latestCoordination}
+        warnings={warnings}
+      />
     </>
   );
 }
 
 function BrowserTrainingRecoveryDetails({
   recovery,
+  coordination,
   warnings,
 }: {
   readonly recovery: BrowserTrainingRecoveryRecordV1 | null;
+  readonly coordination: BrowserTrainingCoordinationEventV1 | null;
   readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
 }) {
   const visibleWarnings = uniqueBrowserTrainingWarnings([
@@ -341,6 +370,14 @@ function BrowserTrainingRecoveryDetails({
           <dt>Recovery epoch</dt>
           <dd>{recovery === null ? 'none' : recovery.checkpoint.epoch.toString()}</dd>
         </div>
+        <div>
+          <dt>Cross-tab lock</dt>
+          <dd>{formatBrowserTrainingCoordination(coordination)}</dd>
+        </div>
+        <div>
+          <dt>Lock scope</dt>
+          <dd>{coordination?.scope.scopeFingerprint ?? 'none'}</dd>
+        </div>
       </dl>
       {visibleWarnings.length > 0 ? (
         <ul className="runtime-warnings" aria-label="Browser training runtime warnings">
@@ -356,6 +393,24 @@ function BrowserTrainingRecoveryDetails({
 function formatBrowserTrainingRecovery(recovery: BrowserTrainingRecoveryRecordV1 | null): string {
   if (recovery === null) return 'none';
   return `available at epoch ${recovery.checkpoint.epoch.toString()}`;
+}
+
+function formatBrowserTrainingCoordination(
+  coordination: BrowserTrainingCoordinationEventV1 | null,
+): string {
+  if (coordination === null) return 'idle';
+  switch (coordination.eventType) {
+    case 'lock-requested':
+      return 'requesting local training lock';
+    case 'lock-acquired':
+      return 'training lock held in this browser';
+    case 'lock-busy':
+      return 'another tab is training this profile';
+    case 'lock-released':
+      return 'training lock released';
+    case 'lock-unavailable':
+      return 'Web Locks unavailable';
+  }
 }
 
 function uniqueBrowserTrainingWarnings(

@@ -13,6 +13,12 @@ import {
   type FrozenFeatureTinyAdapterTrainingResultV1,
   type OnnxRuntimeTrainingBackendProofV1,
 } from '@speech/browser-training';
+import {
+  createBrowserTrainingCoordinationScope,
+  runWithBrowserTrainingCoordination,
+  type BrowserTrainingCoordinationEventV1,
+  type BrowserTrainingCoordinationScopeV1,
+} from './browser-training-coordination';
 
 export interface StartBrowserTrainingPrototypeMessage {
   readonly type: 'START_BROWSER_TRAINING_PROTOTYPE';
@@ -26,6 +32,11 @@ export interface ControlBrowserTrainingPrototypeMessage {
   readonly requestId: string;
 }
 
+export interface BrowserTrainingWorkerCoordinationOptions {
+  readonly enabled?: boolean;
+  readonly scopeId?: string;
+}
+
 export type BrowserTrainingWorkerOptions = Partial<
   Omit<
     FrozenFeatureTinyAdapterTrainingOptions,
@@ -33,6 +44,7 @@ export type BrowserTrainingWorkerOptions = Partial<
   >
 > & {
   readonly epochDelayMs?: number;
+  readonly coordination?: BrowserTrainingWorkerCoordinationOptions;
 };
 
 export interface BrowserTrainingRuntimeWarningV1 {
@@ -40,7 +52,8 @@ export interface BrowserTrainingRuntimeWarningV1 {
     | 'THERMAL_STATUS_UNAVAILABLE'
     | 'BATTERY_STATUS_UNAVAILABLE'
     | 'CHECKPOINT_STORAGE_VOLATILE'
-    | 'ORT_TRAINING_BACKEND_FALLBACK';
+    | 'ORT_TRAINING_BACKEND_FALLBACK'
+    | 'WEB_LOCKS_UNAVAILABLE';
   readonly message: string;
 }
 
@@ -62,6 +75,12 @@ export interface BrowserTrainingWarningMessage {
   readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
 }
 
+export interface BrowserTrainingCoordinationMessage {
+  readonly type: 'BROWSER_TRAINING_COORDINATION';
+  readonly requestId: string;
+  readonly event: BrowserTrainingCoordinationEventV1;
+}
+
 export interface BrowserTrainingCompleteMessage {
   readonly type: 'BROWSER_TRAINING_COMPLETE';
   readonly requestId: string;
@@ -81,6 +100,7 @@ export type BrowserTrainingWorkerResponse =
   | BrowserTrainingProgressMessage
   | BrowserTrainingCheckpointMessage
   | BrowserTrainingWarningMessage
+  | BrowserTrainingCoordinationMessage
   | BrowserTrainingCompleteMessage
   | BrowserTrainingErrorMessage;
 
@@ -88,12 +108,14 @@ interface ActiveBrowserTrainingRun {
   readonly requestId: string;
   readonly session: BrowserTrainingBackendSession;
   readonly epochDelayMs: number;
+  readonly coordinationScope: BrowserTrainingCoordinationScopeV1;
   cancelled: boolean;
   paused: boolean;
 }
 
 const ctx = self as DedicatedWorkerGlobalScope;
 let activeRun: ActiveBrowserTrainingRun | undefined;
+let pendingStartRequestId: string | undefined;
 
 ctx.addEventListener('message', (event: MessageEvent<BrowserTrainingWorkerMessage>) => {
   const message = event.data;
@@ -113,11 +135,18 @@ ctx.addEventListener('message', (event: MessageEvent<BrowserTrainingWorkerMessag
     return;
   }
 
-  if (activeRun !== undefined) {
+  if (activeRun !== undefined || pendingStartRequestId !== undefined) {
     postError(message.requestId, 'Browser training worker already has an active run.');
     return;
   }
 
+  pendingStartRequestId = message.requestId;
+  void startCoordinatedTrainingRun(message);
+});
+
+async function startCoordinatedTrainingRun(
+  message: StartBrowserTrainingPrototypeMessage,
+): Promise<void> {
   try {
     const dataset = message.dataset ?? createSyntheticFrozenFeatureTinyAdapterDataset();
     if (dataset.privacy.containsPrivateFrozenFeatureValues || dataset.privacy.containsProfileData) {
@@ -125,30 +154,49 @@ ctx.addEventListener('message', (event: MessageEvent<BrowserTrainingWorkerMessag
         'The public browser-training prototype worker only returns synthetic or non-private aggregate results. Private frozen-feature datasets must stay in profile-owned training storage until explicitly packaged.',
       );
     }
-    const { epochDelayMs, ...trainingOptions } = message.options ?? {};
-    const backendSelection = selectBrowserTrainingBackend({
-      preferredKind: 'onnxruntime-web-training',
-      onnxRuntimeTrainingProof: createPinnedOnnxRuntimeTrainingBackendProof(),
-    });
-    const session = backendSelection.backend.createSession(dataset, trainingOptions);
-    const run: ActiveBrowserTrainingRun = {
-      requestId: message.requestId,
-      session,
-      epochDelayMs: normalizeEpochDelay(epochDelayMs),
-      cancelled: false,
-      paused: false,
-    };
-    activeRun = run;
-    ctx.postMessage({
-      type: 'BROWSER_TRAINING_WARNING',
-      requestId: message.requestId,
-      warnings: createRuntimeWarnings(backendSelection),
-    } satisfies BrowserTrainingWarningMessage);
-    void runTrainingLoop(run);
+    const { epochDelayMs, coordination, ...trainingOptions } = message.options ?? {};
+    const coordinationScope = createBrowserTrainingCoordinationScope(
+      dataset,
+      coordination?.scopeId,
+    );
+    await runWithBrowserTrainingCoordination(
+      {
+        requestId: message.requestId,
+        scope: coordinationScope,
+        ...(coordination?.enabled === undefined ? {} : { enabled: coordination.enabled }),
+        onEvent: postCoordinationEvent,
+      },
+      async () => {
+        const backendSelection = selectBrowserTrainingBackend({
+          preferredKind: 'onnxruntime-web-training',
+          onnxRuntimeTrainingProof: createPinnedOnnxRuntimeTrainingBackendProof(),
+        });
+        const session = backendSelection.backend.createSession(dataset, trainingOptions);
+        const run: ActiveBrowserTrainingRun = {
+          requestId: message.requestId,
+          session,
+          epochDelayMs: normalizeEpochDelay(epochDelayMs),
+          coordinationScope,
+          cancelled: false,
+          paused: false,
+        };
+        activeRun = run;
+        ctx.postMessage({
+          type: 'BROWSER_TRAINING_WARNING',
+          requestId: message.requestId,
+          warnings: createRuntimeWarnings(backendSelection),
+        } satisfies BrowserTrainingWarningMessage);
+        await runTrainingLoop(run);
+      },
+    );
   } catch (error) {
     postError(message.requestId, error instanceof Error ? error.message : String(error));
+  } finally {
+    if (pendingStartRequestId === message.requestId) {
+      pendingStartRequestId = undefined;
+    }
   }
-});
+}
 
 async function runTrainingLoop(run: ActiveBrowserTrainingRun): Promise<void> {
   try {
@@ -194,6 +242,26 @@ function postCheckpoint(requestId: string, checkpoint: FrozenFeatureTinyAdapterC
     requestId,
     checkpoint,
   } satisfies BrowserTrainingCheckpointMessage);
+}
+
+function postCoordinationEvent(event: BrowserTrainingCoordinationEventV1): void {
+  ctx.postMessage({
+    type: 'BROWSER_TRAINING_COORDINATION',
+    requestId: event.requestId,
+    event,
+  } satisfies BrowserTrainingCoordinationMessage);
+  if (event.eventType === 'lock-unavailable') {
+    ctx.postMessage({
+      type: 'BROWSER_TRAINING_WARNING',
+      requestId: event.requestId,
+      warnings: [
+        {
+          code: 'WEB_LOCKS_UNAVAILABLE',
+          message: event.message,
+        },
+      ],
+    } satisfies BrowserTrainingWarningMessage);
+  }
 }
 
 function postError(requestId: string, message: string): void {
