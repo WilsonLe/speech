@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { analyzeEnrollmentTakeQuality, defaultTrainingReadinessPolicyV1 } from '@speech/enrollment';
+import { decodeFloat16Array } from '@speech/features';
 import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
 import {
   EnrollmentProfileStore,
@@ -9,6 +10,7 @@ import {
   buildTrainingReadinessCoverageReportForProfile,
   encodePcm16Wav,
   requestPersistentProfileStorage,
+  summarizeTrainingJobFeaturePreparationManifest,
   summarizeTrainingJobPromptIdentitySplitPlan,
   summarizeTrainingJobRevision,
   type EnrollmentCaptureMetadataV1,
@@ -320,6 +322,181 @@ describe('enrollment profile store', () => {
     expect(summary.split.assignments[0]?.label).toBe('prompt-001');
     expect(serialized).not.toContain('prompt-repeat-dashboard');
     expect(serialized).not.toContain('utt-dashboard-normal');
+  });
+
+  it('prepares checksummed FP16 feature shards from frozen training jobs', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveSplitTake(store, 'utt-feature-train-a', 'prompt-feature-a', 'vi', 'normal');
+    await saveSplitTake(store, 'utt-feature-train-b', 'prompt-feature-b', 'en', 'whisper');
+    await saveSplitTake(store, 'utt-feature-test', 'prompt-feature-c', 'mixed', 'projected');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-split',
+      jobId: 'job-features',
+    });
+
+    const manifest = await store.prepareTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-001',
+      maxFramesPerShard: 50,
+      splitConfig: { seed: 'feature-seed', trainRatio: 0.67, validationRatio: 0.33, testRatio: 0 },
+    });
+
+    expect(manifest).toMatchObject({
+      schemaVersion: 1,
+      manifestType: 'training-job-feature-shards',
+      jobId: 'job-features',
+      profileId: 'profile-split',
+      featureSetId: 'features-001',
+      enrollmentRevisionSha256: revision.enrollment.revisionSha256,
+      dtype: 'float16-le',
+      feature: { sampleRateHz: 16_000, melBinCount: 80 },
+      privacy: {
+        localOnly: true,
+        defaultExportIncludesFeatures: false,
+        containsRawAudio: false,
+        containsTranscriptText: false,
+        containsFeatureTensors: false,
+        referencesFeatureTensorFiles: true,
+        exposesRawPromptIds: true,
+      },
+    });
+    expect(manifest.shards.length).toBeGreaterThan(1);
+    expect(manifest.totals.utterances).toBe(3);
+    expect(manifest.totals.frames).toBeGreaterThan(0);
+    expect(manifest.totals.sizeBytes).toBe(manifest.totals.frames * 80 * 2);
+    expect(manifest.totals.shards).toBe(manifest.shards.length);
+    expect(manifest.manifestSha256).toMatch(/^[a-f0-9]{64}$/);
+    for (const shard of manifest.shards) {
+      expect(shard.path).toMatch(
+        /^training-jobs\/job-features\/features\/features-001\/shards\/(train|validation)-\d{4}\.f16$/,
+      );
+      expect(shard.sha256).toBe(await digest(await requiredBytes(backend, shard.path.split('/'))));
+      expect(shard.sizeBytes).toBe(shard.frameCount * shard.melBinCount * 2);
+      expect(decodeFloat16Array(await requiredBytes(backend, shard.path.split('/')))).toHaveLength(
+        shard.frameCount * shard.melBinCount,
+      );
+    }
+    expect(
+      await store.getTrainingJobFeaturePreparationManifest({
+        jobId: 'job-features',
+        featureSetId: 'features-001',
+      }),
+    ).toEqual(manifest);
+    await expect(
+      store.verifyTrainingJobFeatureShards({ jobId: 'job-features', featureSetId: 'features-001' }),
+    ).resolves.toMatchObject({
+      ok: true,
+      manifestStatus: 'match',
+      expectedManifestSha256: manifest.manifestSha256,
+      actualManifestSha256: manifest.manifestSha256,
+      privacy: { aggregateOnly: true, containsFeatureTensors: false, exposesRawPromptIds: false },
+    });
+
+    const summary = summarizeTrainingJobFeaturePreparationManifest(manifest);
+    expect(summary).toMatchObject({
+      featureSetId: 'features-001',
+      totals: { utterances: 3, frames: manifest.totals.frames },
+      privacy: { aggregateOnly: true, containsFeatureTensors: false, exposesRawPromptIds: false },
+    });
+    const serialized = JSON.stringify(summary);
+    expect(serialized).not.toContain('prompt-feature-a');
+    expect(serialized).not.toContain('utt-feature-train-a');
+  });
+
+  it('detects missing or changed FP16 feature shards and deletes them deterministically', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveSplitTake(store, 'utt-feature-delete-a', 'prompt-feature-a', 'vi', 'normal');
+    await saveSplitTake(store, 'utt-feature-delete-b', 'prompt-feature-b', 'en', 'whisper');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-split',
+      jobId: 'job-feature-verify',
+    });
+    const manifest = await store.prepareTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-verify',
+      maxFramesPerShard: 128,
+      splitConfig: { seed: 'verify-seed', trainRatio: 1, validationRatio: 0, testRatio: 0 },
+    });
+    const shardPath = manifest.shards[0]?.path;
+    if (shardPath === undefined) throw new Error('Expected at least one feature shard.');
+    const manifestPath = [
+      'training-jobs',
+      revision.jobId,
+      'features',
+      'features-verify',
+      'manifest.json',
+    ];
+    await backend.putFile(
+      manifestPath,
+      jsonBytes({
+        ...manifest,
+        totals: { ...manifest.totals, frames: manifest.totals.frames + 1 },
+      }),
+    );
+    await expect(
+      store.verifyTrainingJobFeatureShards({
+        jobId: revision.jobId,
+        featureSetId: 'features-verify',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      manifestStatus: 'changed',
+      errors: ['Feature preparation manifest checksum changed.'],
+    });
+    await backend.putFile(manifestPath, jsonBytes(manifest));
+
+    await backend.putFile(shardPath.split('/'), new Uint8Array([1, 2, 3, 4]));
+    await expect(
+      store.verifyTrainingJobFeatureShards({
+        jobId: revision.jobId,
+        featureSetId: 'features-verify',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      shards: expect.arrayContaining([expect.objectContaining({ status: 'changed' })]),
+      errors: [expect.stringMatching(/checksum or size changed/)],
+    });
+
+    await store.deleteTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-verify',
+    });
+    expect(
+      await backend.listFiles(['training-jobs', revision.jobId, 'features', 'features-verify']),
+    ).toEqual([]);
+    await expect(
+      store.verifyTrainingJobFeatureShards({
+        jobId: revision.jobId,
+        featureSetId: 'features-verify',
+      }),
+    ).rejects.toThrow(/was not found/);
+  });
+
+  it('keeps feature shards outside default profile exports', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-feature-export', 'utt-feature-export');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-feature-export',
+      jobId: 'job-feature-export',
+    });
+    await store.prepareTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-not-exported',
+      splitConfig: { seed: 'export-seed', trainRatio: 1, validationRatio: 0, testRatio: 0 },
+    });
+
+    const exported = await store.exportProfile('profile-feature-export');
+
+    expect(Object.keys(exported.files).some((path) => path.includes('features-not-exported'))).toBe(
+      false,
+    );
+    expect(JSON.stringify(exported)).not.toContain('training-job-feature-shards');
+
+    await store.deleteProfile('profile-feature-export');
+    expect(await backend.listFiles(['training-jobs', 'job-feature-export'])).toEqual([]);
   });
 
   it('detects enrollment and vocabulary edits after a training job revision is frozen', async () => {
@@ -774,6 +951,17 @@ async function readBytes(
 ): Promise<number[]> {
   const bytes = await backend.getFile(path);
   return Array.from(new Uint8Array(bytes ?? new ArrayBuffer(0)));
+}
+
+async function requiredBytes(
+  backend: ProfileStorageBackend,
+  path: readonly string[],
+): Promise<ArrayBuffer> {
+  const bytes = await backend.getFile(path);
+  if (bytes === undefined) {
+    throw new Error(`Missing test fixture bytes at ${path.join('/')}`);
+  }
+  return bytes;
 }
 
 function text(bytes: Uint8Array, start: number, end: number): string {

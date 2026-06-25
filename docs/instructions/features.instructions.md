@@ -11,3 +11,4 @@ applyTo: 'packages/features/**,tools/feature-reference/**,test-data/expected/**'
 - Precompute windows/filterbanks and reuse per-frame scratch buffers; avoid per-frame heap allocation in the streaming extractor.
 - Preserve frame-overlap state across chunks, and flush or pad final incomplete frames only according to the configured training convention.
 - Keep Python reference fixtures redistribution-safe and synthetic; do not commit private recordings or unknown-license audio as parity data.
+- Browser-training feature preparation may reuse the deterministic log-Mel extractor and FP16 helpers from `@speech/features`, but prepared private feature shards must be written only by profile/feature-preparation workers into profile-owned storage.

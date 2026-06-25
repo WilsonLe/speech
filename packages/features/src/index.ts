@@ -1,3 +1,4 @@
+export * from './fp16';
 export * from './log-mel';
 
 export interface FeaturesPackageInfo {
@@ -9,5 +10,5 @@ export interface FeaturesPackageInfo {
 export const packageInfo: FeaturesPackageInfo = {
   name: '@speech/features',
   status: 'active',
-  description: 'Streaming acoustic feature extraction contracts and implementations.',
+  description: 'Streaming acoustic feature extraction and FP16 feature-shard utilities.',
 };

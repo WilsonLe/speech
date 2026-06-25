@@ -18,6 +18,7 @@
     "@speech/benchmark": "workspace:*",
     "@speech/context-bias": "workspace:*",
     "@speech/enrollment": "workspace:*",
+    "@speech/features": "workspace:*",
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
     "@speech/personalization": "workspace:*",
