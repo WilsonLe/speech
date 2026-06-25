@@ -162,9 +162,15 @@ importers:
 
   packages/profile-manager:
     dependencies:
+      '@speech/context-bias':
+        specifier: workspace:*
+        version: link:../context-bias
       '@speech/enrollment':
         specifier: workspace:*
         version: link:../enrollment
+      '@speech/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/protocol: {}
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { analyzeEnrollmentTakeQuality, defaultTrainingReadinessPolicyV1 } from '@speech/enrollment';
+import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
 import {
   EnrollmentProfileStore,
   InMemoryProfileStorageBackend,
@@ -8,6 +9,7 @@ import {
   buildTrainingReadinessCoverageReportForProfile,
   encodePcm16Wav,
   requestPersistentProfileStorage,
+  summarizeTrainingJobRevision,
   type EnrollmentCaptureMetadataV1,
   type OpfsDirectoryHandleLike,
   type OpfsFileHandleLike,
@@ -173,6 +175,168 @@ describe('enrollment profile store', () => {
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain('prompt-vi');
     expect(serialized).not.toContain('term-secret');
+  });
+
+  it('freezes enrollment and vocabulary state for immutable local training jobs', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-freeze', 'utt-freeze-001');
+    const vocabularyStore = createVocabularyStoreFixture();
+
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-freeze',
+      jobId: 'job-freeze-001',
+      vocabularyStore,
+    });
+
+    expect(revision).toMatchObject({
+      schemaVersion: 1,
+      jobId: 'job-freeze-001',
+      profileId: 'profile-freeze',
+      enrollment: {
+        schemaVersion: 1,
+        acceptedUtterances: 1,
+        sentenceBankVersion: 'synthetic-v1',
+      },
+      vocabulary: {
+        schemaVersion: 1,
+        storeRevision: 4,
+        activeEntryCount: 1,
+      },
+      privacy: {
+        localOnly: true,
+        defaultExportIncludesRevision: false,
+        containsRawAudio: false,
+        containsTranscriptText: false,
+        containsFeatureTensors: false,
+        containsCheckpoints: false,
+        containsAdapterWeights: false,
+        containsPrivateVocabularyTerms: true,
+        networkUpload: false,
+        telemetry: false,
+      },
+    });
+    expect(revision.enrollment.utterances).toEqual([
+      expect.objectContaining({
+        id: 'utt-freeze-001',
+        promptId: 'prompt-001',
+        metadataPath: 'profiles/profile-freeze/utterances/utt-freeze-001.json',
+      }),
+    ]);
+    expect(revision.vocabulary?.revision.entries).toEqual([
+      expect.objectContaining({ id: 'term-secret', phrase: 'Project Condor' }),
+    ]);
+    expect(revision.enrollment.revisionSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(revision.vocabulary?.revisionSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(revision)).not.toContain('Tôi vừa update dashboard.');
+    const publicSummary = summarizeTrainingJobRevision(revision);
+    expect(publicSummary).toMatchObject({
+      jobId: 'job-freeze-001',
+      enrollment: { acceptedUtterances: 1 },
+      vocabulary: { activeEntryCount: 1 },
+      privacy: { aggregateOnly: true, containsPrivateVocabularyTerms: false },
+    });
+    expect(JSON.stringify(publicSummary)).not.toContain('Project Condor');
+
+    await expect(store.getTrainingJobRevision('job-freeze-001')).resolves.toEqual(revision);
+    await expect(store.listTrainingJobRevisions('profile-freeze')).resolves.toEqual([revision]);
+    await expect(
+      store.freezeTrainingJobRevision({
+        profileId: 'profile-freeze',
+        jobId: 'job-freeze-001',
+        vocabularyStore,
+      }),
+    ).rejects.toThrow(/already exists/);
+  });
+
+  it('detects enrollment and vocabulary edits after a training job revision is frozen', async () => {
+    const store = createStore(new InMemoryProfileStorageBackend());
+    await saveFixtureTake(store, 'profile-freeze', 'utt-freeze-001');
+    const vocabularyStore = createVocabularyStoreFixture();
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-freeze',
+      jobId: 'job-freeze-drift',
+      vocabularyStore,
+    });
+
+    await expect(
+      store.verifyTrainingJobRevisionSources({ jobId: revision.jobId, vocabularyStore }),
+    ).resolves.toMatchObject({
+      ok: true,
+      enrollment: { status: 'match' },
+      vocabulary: { status: 'match' },
+      privacy: { aggregateOnly: true, containsPrivateVocabularyTerms: false, localOnly: true },
+    });
+
+    await saveFixtureTake(store, 'profile-freeze', 'utt-freeze-002');
+    const editedVocabularyStore: VocabularyStoreSnapshotV1 = {
+      ...vocabularyStore,
+      revision: 5,
+      sets: vocabularyStore.sets.map((set) => ({
+        ...set,
+        revision: set.revision + 1,
+        entries: set.entries.map((entry) =>
+          entry.id === 'term-secret'
+            ? { ...entry, phrase: 'Project Heron', displayForm: 'Project Heron' }
+            : entry,
+        ),
+      })),
+    };
+
+    const verification = await store.verifyTrainingJobRevisionSources({
+      jobId: revision.jobId,
+      vocabularyStore: editedVocabularyStore,
+    });
+
+    expect(verification.ok).toBe(false);
+    expect(verification.enrollment.status).toBe('changed');
+    expect(verification.vocabulary?.status).toBe('changed');
+    expect(verification.errors).toEqual([
+      'Enrollment profile accepted-utterance revision changed after job freeze.',
+      'Vocabulary revision changed after job freeze.',
+    ]);
+    expect(await store.getTrainingJobRevision(revision.jobId)).toEqual(revision);
+  });
+
+  it('detects missing local audio referenced by a frozen training job', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-freeze', 'utt-freeze-001');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-freeze',
+      jobId: 'job-missing-audio',
+      vocabularyStore: createVocabularyStoreFixture(),
+    });
+
+    await backend.deleteFile(['profiles', 'profile-freeze', 'recordings', 'utt-freeze-001.wav']);
+    const verification = await store.verifyTrainingJobRevisionSources({
+      jobId: revision.jobId,
+      vocabularyStore: createVocabularyStoreFixture(),
+    });
+
+    expect(verification.ok).toBe(false);
+    expect(verification.enrollment.status).toBe('missing');
+    expect(verification.errors).toEqual([
+      'Enrollment audio file profiles/profile-freeze/recordings/utt-freeze-001.wav is missing.',
+    ]);
+  });
+
+  it('keeps training job revisions outside default profile exports', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-freeze', 'utt-freeze-001');
+    await store.freezeTrainingJobRevision({
+      profileId: 'profile-freeze',
+      jobId: 'job-not-exported',
+      vocabularyStore: createVocabularyStoreFixture(),
+    });
+
+    const exported = await store.exportProfile('profile-freeze');
+
+    expect(Object.keys(exported.files)).not.toContain(
+      'training-jobs/job-not-exported/revision.json',
+    );
+    expect(JSON.stringify(exported)).not.toContain('Project Condor');
   });
 
   it('rejects unsafe profile and prompt path segments before writing', async () => {
@@ -426,6 +590,63 @@ async function saveReadinessTake(
     acceptedBy: 'manual',
     utteranceId: input.utteranceId,
   });
+}
+
+function createVocabularyStoreFixture(): VocabularyStoreSnapshotV1 {
+  return {
+    schemaVersion: 1,
+    revision: 4,
+    activeSetIds: ['set-local'],
+    updatedAt: '2026-06-23T00:00:00.000Z',
+    sets: [
+      {
+        schemaVersion: 1,
+        id: 'set-local',
+        displayName: 'Local terms',
+        enabled: true,
+        revision: 3,
+        createdAt: '2026-06-23T00:00:00.000Z',
+        updatedAt: '2026-06-23T00:00:00.000Z',
+        source: 'manual',
+        entries: [
+          {
+            id: 'term-secret',
+            phrase: 'Project Condor',
+            displayForm: 'Project Condor',
+            language: 'en',
+            spokenAliases: ['Condor'],
+            weight: 7,
+            category: 'Sensitive project',
+            enabled: true,
+            exactCase: true,
+            promptPriority: 3,
+          },
+        ],
+      },
+      {
+        schemaVersion: 1,
+        id: 'set-inactive',
+        displayName: 'Inactive terms',
+        enabled: false,
+        revision: 1,
+        createdAt: '2026-06-23T00:00:00.000Z',
+        updatedAt: '2026-06-23T00:00:00.000Z',
+        source: 'manual',
+        entries: [
+          {
+            id: 'term-ignored',
+            phrase: 'Ignored term',
+            displayForm: 'Ignored term',
+            language: 'en',
+            spokenAliases: [],
+            weight: 5,
+            enabled: true,
+            exactCase: true,
+          },
+        ],
+      },
+    ],
+  };
 }
 
 function makeTone(durationMs: number, amplitude: number): Float32Array {

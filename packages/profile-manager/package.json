@@ -2,7 +2,7 @@
   "name": "@speech/profile-manager",
   "version": "0.1.0",
   "private": true,
-  "description": "Private profile storage, import/export, rollback, and deletion.",
+  "description": "Private profile storage, frozen training-job revisions, import/export, rollback, and deletion.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -14,7 +14,9 @@
     "test": "vitest run --passWithNoTests --exclude=dist/**"
   },
   "dependencies": {
-    "@speech/enrollment": "workspace:*"
+    "@speech/context-bias": "workspace:*",
+    "@speech/enrollment": "workspace:*",
+    "@speech/protocol": "workspace:*"
   },
   "devDependencies": {}
 }
