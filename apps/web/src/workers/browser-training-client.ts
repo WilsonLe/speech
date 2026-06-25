@@ -173,7 +173,12 @@ export function readBrowserTrainingRecovery(): BrowserTrainingRecoveryRecordV1 |
     const raw = storage.getItem(browserTrainingRecoveryStorageKey);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as BrowserTrainingRecoveryRecordV1;
-    if (parsed.schemaVersion !== 1 || parsed.checkpoint?.schemaVersion !== 1) {
+    if (
+      parsed.schemaVersion !== 1 ||
+      parsed.checkpoint?.schemaVersion !== 1 ||
+      parsed.checkpoint.resumeState?.schemaVersion !== 1 ||
+      typeof parsed.checkpoint.resumeStateChecksum !== 'string'
+    ) {
       return null;
     }
     return parsed;
