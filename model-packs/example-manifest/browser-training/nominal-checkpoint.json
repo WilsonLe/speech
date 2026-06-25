@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "artifactFamily": "browser-training-fixed-adapter-math",
+  "baseModel": {
+    "id": "local-dev-rnnt-mock",
+    "version": "0.0.1"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Synthetic browser-training artifact fixture",
+    "noticeUrl": "../../MODEL_LICENSES.md",
+    "redistributionAllowed": true
+  },
+  "provenance": {
+    "source": "repo-generated-synthetic-fixture",
+    "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+    "createdAt": "2026-06-25T00:00:00.000Z"
+  },
+  "artifactRole": "nominal-checkpoint",
+  "description": "Public identity-zero nominal checkpoint descriptor. It records tensor shapes, fill values, and deterministic zero-buffer hashes, not private user weights.",
+  "checkpoint": {
+    "checkpointType": "identity-zero-nominal-v1",
+    "step": 0,
+    "epoch": 0,
+    "adapter": {
+      "architecture": "residual-bottleneck-lhuc-v1",
+      "inputDimension": 4,
+      "rank": 2,
+      "residualScale": 0.25,
+      "parameterTensors": [
+        {
+          "name": "w_down",
+          "dataType": "float32",
+          "shape": [4, 2],
+          "description": "Residual bottleneck down projection, row-major [inputDimension, rank]."
+        },
+        {
+          "name": "b_down",
+          "dataType": "float32",
+          "shape": [2],
+          "description": "Residual bottleneck down-projection bias."
+        },
+        {
+          "name": "w_up",
+          "dataType": "float32",
+          "shape": [2, 4],
+          "description": "Residual bottleneck up projection, row-major [rank, inputDimension]."
+        },
+        {
+          "name": "b_up",
+          "dataType": "float32",
+          "shape": [4],
+          "description": "Residual bottleneck output bias before residual scaling."
+        },
+        {
+          "name": "lhuc",
+          "dataType": "float32",
+          "shape": [4],
+          "description": "LHUC logit parameters; zero maps to unit scale."
+        }
+      ]
+    },
+    "tensorInitializers": {
+      "w_down": {
+        "dataType": "float32",
+        "shape": [4, 2],
+        "fill": 0,
+        "littleEndianFloat32Sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+      },
+      "b_down": {
+        "dataType": "float32",
+        "shape": [2],
+        "fill": 0,
+        "littleEndianFloat32Sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+      },
+      "w_up": {
+        "dataType": "float32",
+        "shape": [2, 4],
+        "fill": 0,
+        "littleEndianFloat32Sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+      },
+      "b_up": {
+        "dataType": "float32",
+        "shape": [4],
+        "fill": 0,
+        "littleEndianFloat32Sha256": "374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb"
+      },
+      "lhuc": {
+        "dataType": "float32",
+        "shape": [4],
+        "fill": 0,
+        "littleEndianFloat32Sha256": "374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb"
+      }
+    }
+  },
+  "privacy": {
+    "containsRawAudio": false,
+    "containsTranscriptText": false,
+    "containsPrivateFrozenFeatureValues": false,
+    "containsProfileData": false,
+    "containsVoiceDerivedWeights": false,
+    "containsOptimizerState": false,
+    "networkUpload": false,
+    "telemetry": false,
+    "localOnly": true
+  }
+}

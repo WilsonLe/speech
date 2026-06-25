@@ -1,0 +1,413 @@
+{
+  "schemaVersion": 3,
+  "id": "local-dev-rnnt-mock",
+  "version": "0.0.1",
+  "displayName": "Local development RNN-T mock model",
+  "languages": ["vi", "en"],
+  "supportedLanguageModes": ["vi", "en", "auto", "mixed"],
+  "architecture": "rnnt",
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Apache-2.0 generated mock ONNX test graphs",
+    "noticeUrl": "../../MODEL_LICENSES.md",
+    "redistributionAllowed": true
+  },
+  "sampleRateHz": 16000,
+  "feature": {
+    "type": "log-mel",
+    "bins": 4,
+    "frameLengthMs": 25,
+    "frameShiftMs": 10,
+    "fftSize": 512,
+    "lowFreqHz": 20,
+    "highFreqHz": 7600,
+    "dither": 0,
+    "snipEdges": false
+  },
+  "tokenizer": {
+    "type": "tokens",
+    "vocabularySize": 4,
+    "byteFallback": true,
+    "blankId": 0,
+    "languageTokenIds": {
+      "vi": 1,
+      "en": 2,
+      "mixed": 3
+    }
+  },
+  "streaming": {
+    "chunkFrames": 16,
+    "chunkShiftFrames": 8,
+    "rightContextFrames": 4,
+    "maxSymbolsPerFrame": 3
+  },
+  "contextBiasing": {
+    "supported": false,
+    "algorithm": "token-trie",
+    "supportedEntryLanguages": [],
+    "maxActiveEntries": 0,
+    "maxPhraseTokens": 0,
+    "maxAliasesPerEntry": 0,
+    "maxAliasTokens": 0,
+    "defaultWeight": 0,
+    "maxCumulativeBonus": 0,
+    "weightRange": {
+      "min": 0,
+      "max": 0
+    },
+    "presets": {
+      "light": 0,
+      "normal": 0,
+      "strong": 0
+    },
+    "scoring": {
+      "prefixBonus": 0,
+      "completionBonus": 0,
+      "mismatchPenalty": 0
+    },
+    "wordBoundary": {
+      "mode": "none",
+      "requireForSingleToken": false
+    },
+    "revisionSwap": "utterance-boundary",
+    "diagnostics": {
+      "emitMatchedVocabularyIds": false,
+      "emitScoreBreakdown": false
+    }
+  },
+  "files": {
+    "encoder": {
+      "url": "files/encoder.onnx",
+      "sha256": "99391d7616f2af0635d8330a440d922c66b2e3435029cf5b71adb9ed3fb59ace",
+      "sizeBytes": 308,
+      "mediaType": "application/onnx"
+    },
+    "predictor": {
+      "url": "files/predictor.onnx",
+      "sha256": "ad2dead2da2bbe72b19af2adfe1f58e3743a3804cf56d273327b85ca3ab64779",
+      "sizeBytes": 160,
+      "mediaType": "application/onnx"
+    },
+    "joiner": {
+      "url": "files/joiner.onnx",
+      "sha256": "510d5d2b3d235fcc6553e56337be0cc172f0bcb65c3b60a388986c13db183485",
+      "sizeBytes": 181,
+      "mediaType": "application/onnx"
+    },
+    "training-model": {
+      "url": "browser-training/training-model.json",
+      "sha256": "9109a15f62e67cb7d36742242291b7f29e52e9665ba3177635da427591b13848",
+      "sizeBytes": 2849,
+      "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
+    },
+    "eval-model": {
+      "url": "browser-training/eval-model.json",
+      "sha256": "faf13e87c42d298d2315bc7861851f8bb9a0e91b22446dae991265cf800951d0",
+      "sizeBytes": 2686,
+      "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
+    },
+    "optimizer-model": {
+      "url": "browser-training/optimizer-model.json",
+      "sha256": "330f404bf55755f99fc336313339bbc7718bb79cd38162fc5eaa09d4c1efd448",
+      "sizeBytes": 1453,
+      "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
+    },
+    "nominal-checkpoint": {
+      "url": "browser-training/nominal-checkpoint.json",
+      "sha256": "ac18b16c566276b35a7adaf39cf9dfaface11a49eafdebb5a65574c3aa591632",
+      "sizeBytes": 3377,
+      "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
+    },
+    "adapter-runtime": {
+      "url": "browser-training/adapter-runtime.json",
+      "sha256": "e15aa338629c44010b1fe89553672c5fd8b91712062cc364774c7955fe2ca16c",
+      "sizeBytes": 2626,
+      "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
+    },
+    "contract-test-vectors": {
+      "url": "browser-training/contract-test-vectors.json",
+      "sha256": "3100d5e741c6fc4d98b97a91f6682f6c772db3e8f28f01415c603e4ab7550fa3",
+      "sizeBytes": 1834,
+      "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
+    },
+    "anchor-pack": {
+      "url": "browser-training/anchor-pack.json",
+      "sha256": "8e4d41f1ad60f9ccbf819d1b80c5aa2aa2a0f0aceb46650207aa1bc1ad955a98",
+      "sizeBytes": 1635,
+      "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
+    }
+  },
+  "graphs": {
+    "encoder": {
+      "fileKey": "encoder",
+      "inputs": [
+        {
+          "name": "features",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock log-Mel feature vector"
+        },
+        {
+          "name": "encoder_cache_in",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock streaming encoder cache input"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "encoded",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock encoder output"
+        },
+        {
+          "name": "encoder_cache_out",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock streaming encoder cache output"
+        }
+      ],
+      "stateRelationships": [
+        {
+          "input": "encoder_cache_in",
+          "output": "encoder_cache_out",
+          "resetAtUtteranceBoundary": true
+        }
+      ]
+    },
+    "predictor": {
+      "fileKey": "predictor",
+      "inputs": [
+        {
+          "name": "tokens",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock predictor input vector"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "predicted",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock predictor output"
+        }
+      ]
+    },
+    "joiner": {
+      "fileKey": "joiner",
+      "inputs": [
+        {
+          "name": "encoded",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock encoder vector"
+        },
+        {
+          "name": "predicted",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock predictor vector"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dataType": "float32",
+          "shape": [1, 4],
+          "description": "mock token logits"
+        }
+      ]
+    }
+  },
+  "recommended": {
+    "webgpu": false,
+    "wasmThreads": 1,
+    "expectedMemoryMb": 16
+  },
+  "browserTraining": {
+    "supported": true,
+    "contractVersion": 1,
+    "backend": {
+      "interface": "BrowserTrainingBackend",
+      "kind": "repository-fixed-adapter-math",
+      "proofStatus": "fixed-adapter-math-required"
+    },
+    "algorithmId": "browser-top-adapter-frame-ce-v1",
+    "minimumAppVersion": "0.5.0",
+    "exactBaseModel": {
+      "id": "local-dev-rnnt-mock",
+      "version": "0.0.1",
+      "manifestSha256": "a28c672b3a3fe79047c8829fe41b1a07771c4694939fb8309414fe8616a79995",
+      "graphContractSha256": "28c83250fc9eca1ccc9566680a1c0c021f38ff23edc3286979731fea2b80095c",
+      "tokenizerSha256": "a16e56a5519e897f56d28d7acd706ef049b5eed7ba63e51c6944b95b0b2585c2"
+    },
+    "featureTap": {
+      "graphId": "encoder",
+      "outputName": "encoded",
+      "dimension": 4,
+      "frameShiftMs": 10,
+      "persistedDtype": "float16"
+    },
+    "adapter": {
+      "architecture": "residual-bottleneck-lhuc-v1",
+      "inputDimension": 4,
+      "rank": 2,
+      "residualScale": 0.25,
+      "parameterTensors": [
+        {
+          "name": "w_down",
+          "dataType": "float32",
+          "shape": [4, 2],
+          "description": "Residual bottleneck down projection, row-major [inputDimension, rank]."
+        },
+        {
+          "name": "b_down",
+          "dataType": "float32",
+          "shape": [2],
+          "description": "Residual bottleneck down-projection bias."
+        },
+        {
+          "name": "w_up",
+          "dataType": "float32",
+          "shape": [2, 4],
+          "description": "Residual bottleneck up projection, row-major [rank, inputDimension]."
+        },
+        {
+          "name": "b_up",
+          "dataType": "float32",
+          "shape": [4],
+          "description": "Residual bottleneck output bias before residual scaling."
+        },
+        {
+          "name": "lhuc",
+          "dataType": "float32",
+          "shape": [4],
+          "description": "LHUC logit parameters; zero maps to unit scale."
+        }
+      ],
+      "runtimeGraph": {
+        "fileKey": "adapter-runtime",
+        "role": "runtime-adapter",
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      },
+      "preferredMaxBytes": 4096,
+      "hardMaxBytes": 1048576
+    },
+    "artifacts": {
+      "trainingModel": {
+        "fileKey": "training-model",
+        "role": "training-model",
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      },
+      "evalModel": {
+        "fileKey": "eval-model",
+        "role": "eval-model",
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      },
+      "optimizerModel": {
+        "fileKey": "optimizer-model",
+        "role": "optimizer-model",
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      },
+      "nominalCheckpoint": [
+        {
+          "fileKey": "nominal-checkpoint",
+          "role": "nominal-checkpoint",
+          "license": {
+            "spdx": "Apache-2.0",
+            "name": "Synthetic browser-training artifact fixture",
+            "noticeUrl": "../../MODEL_LICENSES.md",
+            "redistributionAllowed": true
+          },
+          "provenance": {
+            "source": "repo-generated-synthetic-fixture",
+            "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+            "createdAt": "2026-06-25T00:00:00.000Z"
+          }
+        }
+      ],
+      "contractTestVectors": {
+        "fileKey": "contract-test-vectors",
+        "role": "contract-test-vectors",
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      },
+      "anchorPack": [
+        {
+          "fileKey": "anchor-pack",
+          "role": "anchor-pack",
+          "license": {
+            "spdx": "Apache-2.0",
+            "name": "Synthetic browser-training artifact fixture",
+            "noticeUrl": "../../MODEL_LICENSES.md",
+            "redistributionAllowed": true
+          },
+          "provenance": {
+            "source": "repo-generated-synthetic-fixture",
+            "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+            "createdAt": "2026-06-25T00:00:00.000Z"
+          }
+        }
+      ]
+    },
+    "limits": {
+      "maxUtterances": 12,
+      "maxAcceptedSeconds": 120,
+      "maxFramesPerBatch": 128,
+      "maxEpochs": 50,
+      "maxOptimizerSteps": 500,
+      "checkpointIntervalSteps": 25
+    }
+  }
+}

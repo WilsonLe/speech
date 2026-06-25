@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "artifactFamily": "browser-training-fixed-adapter-math",
+  "baseModel": {
+    "id": "local-dev-rnnt-mock",
+    "version": "0.0.1"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Synthetic browser-training artifact fixture",
+    "noticeUrl": "../../MODEL_LICENSES.md",
+    "redistributionAllowed": true
+  },
+  "provenance": {
+    "source": "repo-generated-synthetic-fixture",
+    "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+    "createdAt": "2026-06-25T00:00:00.000Z"
+  },
+  "artifactRole": "eval-model",
+  "description": "Aggregate-only evaluation descriptor for browser-trained adapters; it never stores raw audio, transcripts, frozen feature matrices, or adapter weights.",
+  "backend": {
+    "interface": "BrowserTrainingBackend",
+    "kind": "repository-fixed-adapter-math",
+    "proofStatus": "fixed-adapter-math-required"
+  },
+  "adapter": {
+    "architecture": "residual-bottleneck-lhuc-v1",
+    "inputDimension": 4,
+    "rank": 2,
+    "residualScale": 0.25,
+    "parameterTensors": [
+      {
+        "name": "w_down",
+        "dataType": "float32",
+        "shape": [4, 2],
+        "description": "Residual bottleneck down projection, row-major [inputDimension, rank]."
+      },
+      {
+        "name": "b_down",
+        "dataType": "float32",
+        "shape": [2],
+        "description": "Residual bottleneck down-projection bias."
+      },
+      {
+        "name": "w_up",
+        "dataType": "float32",
+        "shape": [2, 4],
+        "description": "Residual bottleneck up projection, row-major [rank, inputDimension]."
+      },
+      {
+        "name": "b_up",
+        "dataType": "float32",
+        "shape": [4],
+        "description": "Residual bottleneck output bias before residual scaling."
+      },
+      {
+        "name": "lhuc",
+        "dataType": "float32",
+        "shape": [4],
+        "description": "LHUC logit parameters; zero maps to unit scale."
+      }
+    ]
+  },
+  "evaluationContract": {
+    "input": "base-vs-browser-adapter-aggregate-metrics-v1",
+    "requiredMetrics": [
+      "wordErrorRate",
+      "characterErrorRate",
+      "customTermRecall",
+      "falseInsertionsPer100NonTargetUtterances",
+      "realTimeFactor"
+    ],
+    "activationGateRequired": true,
+    "anchorRegressionRequired": true,
+    "caseIdentifiers": "hashed-or-omitted"
+  },
+  "privacy": {
+    "containsRawAudio": false,
+    "containsTranscriptText": false,
+    "containsPrivateFrozenFeatureValues": false,
+    "containsProfileData": false,
+    "containsVoiceDerivedWeights": false,
+    "containsOptimizerState": false,
+    "networkUpload": false,
+    "telemetry": false,
+    "localOnly": true
+  }
+}

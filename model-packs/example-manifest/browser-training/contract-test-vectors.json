@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "artifactFamily": "browser-training-fixed-adapter-math",
+  "baseModel": {
+    "id": "local-dev-rnnt-mock",
+    "version": "0.0.1"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Synthetic browser-training artifact fixture",
+    "noticeUrl": "../../MODEL_LICENSES.md",
+    "redistributionAllowed": true
+  },
+  "provenance": {
+    "source": "repo-generated-synthetic-fixture",
+    "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+    "createdAt": "2026-06-25T00:00:00.000Z"
+  },
+  "artifactRole": "contract-test-vectors",
+  "description": "Synthetic public test vectors for browser-training contract wiring. These are not enrollment features, audio, transcripts, or user adapter weights.",
+  "vectors": [
+    {
+      "id": "identity-zero-frame",
+      "inputFrame": [1.0, -0.5, 0.25, 0.0],
+      "tensors": "nominal-checkpoint:identity-zero",
+      "expectedOutput": [1.0, -0.5, 0.25, 0.0],
+      "tolerance": 1e-9
+    },
+    {
+      "id": "synthetic-residual-lhuc-frame",
+      "inputFrame": [0.4, -0.2, 0.6, 0.1],
+      "tensors": {
+        "w_down": [0.5, -0.1, 0.25, 0.2, -0.75, 0.3, 0.1, -0.4],
+        "b_down": [0.1, -0.2],
+        "w_up": [0.2, -0.4, 0.1, 0.05, -0.3, 0.25, 0.15, -0.2],
+        "b_up": [0.05, -0.02, 0.0, 0.03],
+        "lhuc": [0.0, 1.0986122886681098, -1.0986122886681098, 0.0]
+      },
+      "expectedOutput": [0.413544623297, -0.292377986108, 0.295045189029, 0.112107794821],
+      "tolerance": 1e-9
+    }
+  ],
+  "privacy": {
+    "containsRawAudio": false,
+    "containsTranscriptText": false,
+    "containsPrivateFrozenFeatureValues": false,
+    "containsProfileData": false,
+    "containsVoiceDerivedWeights": false,
+    "containsOptimizerState": false,
+    "networkUpload": false,
+    "telemetry": false,
+    "localOnly": true
+  }
+}

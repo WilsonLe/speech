@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "artifactFamily": "browser-training-fixed-adapter-math",
+  "baseModel": {
+    "id": "local-dev-rnnt-mock",
+    "version": "0.0.1"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Synthetic browser-training artifact fixture",
+    "noticeUrl": "../../MODEL_LICENSES.md",
+    "redistributionAllowed": true
+  },
+  "provenance": {
+    "source": "repo-generated-synthetic-fixture",
+    "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+    "createdAt": "2026-06-25T00:00:00.000Z"
+  },
+  "artifactRole": "anchor-pack",
+  "description": "Synthetic aggregate anchor-regression pack scaffold. It includes only case counts, hash identifiers, and metric expectations; no prompt text or audio.",
+  "anchorPack": {
+    "anchorPackId": "local-dev-browser-training-anchor-pack-v1",
+    "caseCount": 3,
+    "caseIdSha256": [
+      "f2a413bec1bb8ca4ce589b6a261b31fdb6a5993accfb1820a1bc7bcf709dfff1",
+      "ceb484a65f18056442b2d41320d4e6cc45ffa56d0b79589fa4209d308cb4c018",
+      "3044ce8147686b61b306ea4355e644f1f4d7aafc384c45e7d5161943a3e0e2a6"
+    ],
+    "metrics": ["wordErrorRate", "characterErrorRate", "realTimeFactor"],
+    "regressionBudget": {
+      "maxRelativeWordErrorRegression": 0.0,
+      "maxRelativeRealTimeFactorRegression": 0.1
+    }
+  },
+  "privacy": {
+    "containsRawAudio": false,
+    "containsTranscriptText": false,
+    "containsPrivateFrozenFeatureValues": false,
+    "containsProfileData": false,
+    "containsVoiceDerivedWeights": false,
+    "containsOptimizerState": false,
+    "networkUpload": false,
+    "telemetry": false,
+    "localOnly": true
+  }
+}
