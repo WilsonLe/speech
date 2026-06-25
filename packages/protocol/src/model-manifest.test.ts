@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -19,6 +20,16 @@ const exampleManifest = JSON.parse(
     'utf8',
   ),
 ) as SpeechModelManifestV2;
+
+const exampleBrowserTrainingManifest = JSON.parse(
+  readFileSync(
+    new URL(
+      '../../../model-packs/example-manifest/local-dev-rnnt-mock-browser-training.json',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+) as SpeechModelManifestV3;
 
 const graph = {
   fileKey: 'encoder',
@@ -320,6 +331,43 @@ describe('model manifest validation', () => {
     expect(validateSpeechModelManifest(manifest)).toEqual({ ok: true, errors: [] });
     expect(parseSpeechModelManifestV3(manifest)).toBe(manifest);
     expect(parseSpeechModelManifest(manifest)).toBe(manifest);
+  });
+
+  it('accepts the checked-in browser-training artifact scaffold manifest', () => {
+    expect(validateSpeechModelManifestV3(exampleBrowserTrainingManifest)).toEqual({
+      ok: true,
+      errors: [],
+    });
+    expect(validateSpeechModelManifest(exampleBrowserTrainingManifest)).toEqual({
+      ok: true,
+      errors: [],
+    });
+    expect(exampleBrowserTrainingManifest.browserTraining.backend).toEqual({
+      interface: 'BrowserTrainingBackend',
+      kind: 'repository-fixed-adapter-math',
+      proofStatus: 'fixed-adapter-math-required',
+    });
+
+    for (const fileKey of [
+      'training-model',
+      'eval-model',
+      'optimizer-model',
+      'nominal-checkpoint',
+      'adapter-runtime',
+      'contract-test-vectors',
+      'anchor-pack',
+    ]) {
+      const fileRef = exampleBrowserTrainingManifest.files[fileKey];
+      expect(fileRef).toBeDefined();
+      const body = readFileSync(
+        new URL(`../../../model-packs/example-manifest/${fileRef?.url ?? ''}`, import.meta.url),
+      );
+      expect(fileRef?.sizeBytes).toBe(body.byteLength);
+      expect(fileRef?.sha256).toBe(createHash('sha256').update(body).digest('hex'));
+      expect(fileRef?.mediaType).toBe(
+        'application/vnd.wilsonle.speech.browser-training-artifact+json',
+      );
+    }
   });
 
   it('rejects invalid manifest v3 browser-training backend and identity bindings', () => {

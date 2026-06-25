@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "artifactFamily": "browser-training-fixed-adapter-math",
+  "baseModel": {
+    "id": "local-dev-rnnt-mock",
+    "version": "0.0.1"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Synthetic browser-training artifact fixture",
+    "noticeUrl": "../../MODEL_LICENSES.md",
+    "redistributionAllowed": true
+  },
+  "provenance": {
+    "source": "repo-generated-synthetic-fixture",
+    "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+    "createdAt": "2026-06-25T00:00:00.000Z"
+  },
+  "artifactRole": "optimizer-model",
+  "description": "Deterministic optimizer descriptor for the fixed browser adapter math backend; optimizer state is private checkpoint data and is not included here.",
+  "backend": {
+    "interface": "BrowserTrainingBackend",
+    "kind": "repository-fixed-adapter-math",
+    "proofStatus": "fixed-adapter-math-required"
+  },
+  "optimizer": {
+    "algorithm": "deterministic-sgd-v1",
+    "learningRate": 0.04,
+    "l2Regularization": 0.001,
+    "gradientClipNorm": 1.0,
+    "batchOrder": "stable-input-order",
+    "checkpointResume": true
+  },
+  "privacy": {
+    "containsRawAudio": false,
+    "containsTranscriptText": false,
+    "containsPrivateFrozenFeatureValues": false,
+    "containsProfileData": false,
+    "containsVoiceDerivedWeights": false,
+    "containsOptimizerState": false,
+    "networkUpload": false,
+    "telemetry": false,
+    "localOnly": true
+  }
+}

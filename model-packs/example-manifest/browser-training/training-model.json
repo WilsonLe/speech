@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "artifactFamily": "browser-training-fixed-adapter-math",
+  "baseModel": {
+    "id": "local-dev-rnnt-mock",
+    "version": "0.0.1"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "name": "Synthetic browser-training artifact fixture",
+    "noticeUrl": "../../MODEL_LICENSES.md",
+    "redistributionAllowed": true
+  },
+  "provenance": {
+    "source": "repo-generated-synthetic-fixture",
+    "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+    "createdAt": "2026-06-25T00:00:00.000Z"
+  },
+  "artifactRole": "training-model",
+  "description": "Repository-owned fixed adapter-math training descriptor; this is not an ORT Training graph and contains no private examples or trainable user weights.",
+  "backend": {
+    "interface": "BrowserTrainingBackend",
+    "kind": "repository-fixed-adapter-math",
+    "proofStatus": "fixed-adapter-math-required"
+  },
+  "adapter": {
+    "architecture": "residual-bottleneck-lhuc-v1",
+    "inputDimension": 4,
+    "rank": 2,
+    "residualScale": 0.25,
+    "parameterTensors": [
+      {
+        "name": "w_down",
+        "dataType": "float32",
+        "shape": [4, 2],
+        "description": "Residual bottleneck down projection, row-major [inputDimension, rank]."
+      },
+      {
+        "name": "b_down",
+        "dataType": "float32",
+        "shape": [2],
+        "description": "Residual bottleneck down-projection bias."
+      },
+      {
+        "name": "w_up",
+        "dataType": "float32",
+        "shape": [2, 4],
+        "description": "Residual bottleneck up projection, row-major [rank, inputDimension]."
+      },
+      {
+        "name": "b_up",
+        "dataType": "float32",
+        "shape": [4],
+        "description": "Residual bottleneck output bias before residual scaling."
+      },
+      {
+        "name": "lhuc",
+        "dataType": "float32",
+        "shape": [4],
+        "description": "LHUC logit parameters; zero maps to unit scale."
+      }
+    ]
+  },
+  "trainingContract": {
+    "objective": "frame-ce-over-frozen-feature-residual-targets-v1",
+    "trainableTensors": ["w_down", "b_down", "w_up", "b_up", "lhuc"],
+    "frozenBaseGraphs": ["encoder", "predictor", "joiner"],
+    "featureTap": {
+      "graphId": "encoder",
+      "outputName": "encoded",
+      "dimension": 4,
+      "frameShiftMs": 10,
+      "persistedDtype": "float16"
+    },
+    "gradientPrecision": "float32",
+    "parameterInitialization": "identity-zero",
+    "activationGateRequired": true,
+    "privateDatasetRequired": true
+  },
+  "privacy": {
+    "containsRawAudio": false,
+    "containsTranscriptText": false,
+    "containsPrivateFrozenFeatureValues": false,
+    "containsProfileData": false,
+    "containsVoiceDerivedWeights": false,
+    "containsOptimizerState": false,
+    "networkUpload": false,
+    "telemetry": false,
+    "localOnly": true
+  }
+}
