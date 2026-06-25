@@ -62,7 +62,7 @@
     ]
   },
   "trainingContract": {
-    "objective": "frame-ce-over-frozen-feature-residual-targets-v1",
+    "objective": "frame-ce-over-frozen-ctc-projection-v1",
     "trainableTensors": ["w_down", "b_down", "w_up", "b_up", "lhuc"],
     "frozenBaseGraphs": ["encoder", "predictor", "joiner"],
     "featureTap": {
@@ -71,6 +71,38 @@
       "dimension": 4,
       "frameShiftMs": 10,
       "persistedDtype": "float16"
+    },
+    "frozenCtcProjection": {
+      "kind": "frozen-linear-ctc-projection-v1",
+      "inputGraphId": "encoder",
+      "inputName": "encoded",
+      "inputDimension": 4,
+      "logitsName": "ctc_logits",
+      "logitsDtype": "float32",
+      "vocabularySize": 4,
+      "blankId": 0,
+      "trainable": false,
+      "parameterTensors": [
+        {
+          "name": "ctc_projection_weight",
+          "dataType": "float32",
+          "shape": [4, 4],
+          "layout": "row-major [inputDimension, vocabularySize]",
+          "values": [
+            0.2, -0.1, 0.05, 0.0, -0.3, 0.25, 0.1, -0.05, 0.15, 0.05, -0.2, 0.3, 0.0, -0.15, 0.25,
+            0.1
+          ],
+          "littleEndianFloat32Sha256": "995979e9cdac0bf6ea1fede542b4274d1fe03e3c5bfd2e785565f6742f401992"
+        },
+        {
+          "name": "ctc_projection_bias",
+          "dataType": "float32",
+          "shape": [4],
+          "layout": "[vocabularySize]",
+          "values": [0.0, 0.1, -0.05, 0.02],
+          "littleEndianFloat32Sha256": "9fcd12018d9d74af721b4e8dbd9770774dafb9549b227e6c787d7fe4aa7ef7ab"
+        }
+      ]
     },
     "gradientPrecision": "float32",
     "parameterInitialization": "identity-zero",

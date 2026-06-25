@@ -780,8 +780,16 @@ def _browser_training(
     if value.get("minimumAppVersion") != "0.5.0":
         errors.append("browserTraining.minimumAppVersion must be 0.5.0")
     _exact_base_model(value.get("exactBaseModel"), manifest, errors)
-    feature_dimension = _browser_training_feature_tap(value.get("featureTap"), manifest, errors)
-    _browser_training_adapter(value.get("adapter"), feature_dimension, file_keys, errors)
+    feature_tap = _browser_training_feature_tap(value.get("featureTap"), manifest, errors)
+    _browser_training_ctc_projection(
+        value.get("ctcProjection"),
+        feature_tap,
+        value.get("artifacts"),
+        manifest,
+        file_keys,
+        errors,
+    )
+    _browser_training_adapter(value.get("adapter"), feature_tap.get("dimension"), file_keys, errors)
     _browser_training_artifacts(value.get("artifacts"), file_keys, errors)
     _browser_training_limits(value.get("limits"), errors)
 
@@ -860,10 +868,10 @@ def _browser_training_feature_tap(
     value: Any,
     manifest: Mapping[str, Any],
     errors: list[str],
-) -> int | None:
+) -> dict[str, str | int | None]:
     if not isinstance(value, Mapping):
         errors.append("browserTraining.featureTap must be an object")
-        return None
+        return {}
     graph_id = _non_empty_string(value.get("graphId"), "browserTraining.featureTap.graphId", errors)
     output_name = _non_empty_string(
         value.get("outputName"), "browserTraining.featureTap.outputName", errors
@@ -896,7 +904,108 @@ def _browser_training_feature_tap(
         and frame_shift_ms != float(manifest_frame_shift)
     ):
         errors.append("browserTraining.featureTap.frameShiftMs must match feature.frameShiftMs")
-    return dimension
+    return {"graphId": graph_id, "outputName": output_name, "dimension": dimension}
+
+
+def _browser_training_ctc_projection(
+    value: Any,
+    feature_tap: Mapping[str, str | int | None],
+    artifacts: Any,
+    manifest: Mapping[str, Any],
+    file_keys: set[str],
+    errors: list[str],
+) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("browserTraining.ctcProjection must be an object")
+        return
+    if value.get("kind") != "frozen-linear-ctc-projection-v1":
+        errors.append("browserTraining.ctcProjection.kind must be frozen-linear-ctc-projection-v1")
+    input_graph_id = _non_empty_string(
+        value.get("inputGraphId"), "browserTraining.ctcProjection.inputGraphId", errors
+    )
+    input_name = _non_empty_string(
+        value.get("inputName"), "browserTraining.ctcProjection.inputName", errors
+    )
+    input_dimension = _positive_int(
+        value.get("inputDimension"), "browserTraining.ctcProjection.inputDimension", errors
+    )
+    _non_empty_string(value.get("logitsName"), "browserTraining.ctcProjection.logitsName", errors)
+    if value.get("logitsDtype") != "float32":
+        errors.append("browserTraining.ctcProjection.logitsDtype must be float32")
+    vocabulary_size = _positive_int(
+        value.get("vocabularySize"), "browserTraining.ctcProjection.vocabularySize", errors
+    )
+    blank_id = _non_negative_int(
+        value.get("blankId"), "browserTraining.ctcProjection.blankId", errors
+    )
+    if value.get("trainable") is not False:
+        errors.append("browserTraining.ctcProjection.trainable must be false")
+    _browser_training_artifact_ref(
+        value.get("artifact"),
+        "browserTraining.ctcProjection.artifact",
+        "eval-model",
+        file_keys,
+        errors,
+    )
+
+    graphs = manifest.get("graphs")
+    graph = (
+        graphs.get(input_graph_id)
+        if isinstance(graphs, Mapping) and input_graph_id is not None
+        else None
+    )
+    if input_graph_id is not None and not isinstance(graph, Mapping):
+        errors.append("browserTraining.ctcProjection.inputGraphId must reference a declared graph")
+    if (
+        input_name is not None
+        and isinstance(graph, Mapping)
+        and input_name not in _tensor_names(graph.get("outputs"))
+    ):
+        errors.append(
+            "browserTraining.ctcProjection.inputName must reference the input graph outputs"
+        )
+    if input_graph_id is not None and feature_tap.get("graphId") not in {None, input_graph_id}:
+        errors.append("browserTraining.ctcProjection.inputGraphId must match featureTap.graphId")
+    if input_name is not None and feature_tap.get("outputName") not in {None, input_name}:
+        errors.append("browserTraining.ctcProjection.inputName must match featureTap.outputName")
+    if input_dimension is not None and feature_tap.get("dimension") not in {None, input_dimension}:
+        errors.append(
+            "browserTraining.ctcProjection.inputDimension must match featureTap.dimension"
+        )
+
+    tokenizer = manifest.get("tokenizer")
+    manifest_vocabulary_size = (
+        tokenizer.get("vocabularySize") if isinstance(tokenizer, Mapping) else None
+    )
+    manifest_blank_id = tokenizer.get("blankId") if isinstance(tokenizer, Mapping) else None
+    if (
+        vocabulary_size is not None
+        and isinstance(manifest_vocabulary_size, int)
+        and vocabulary_size != manifest_vocabulary_size
+    ):
+        errors.append(
+            "browserTraining.ctcProjection.vocabularySize must match tokenizer.vocabularySize"
+        )
+    if (
+        blank_id is not None
+        and isinstance(manifest_blank_id, int)
+        and blank_id != manifest_blank_id
+    ):
+        errors.append("browserTraining.ctcProjection.blankId must match tokenizer.blankId")
+
+    artifact = value.get("artifact")
+    eval_model = artifacts.get("evalModel") if isinstance(artifacts, Mapping) else None
+    if (
+        isinstance(artifact, Mapping)
+        and isinstance(eval_model, Mapping)
+        and isinstance(artifact.get("fileKey"), str)
+        and isinstance(eval_model.get("fileKey"), str)
+        and artifact.get("fileKey") != eval_model.get("fileKey")
+    ):
+        errors.append(
+            "browserTraining.ctcProjection.artifact.fileKey must match "
+            "browserTraining.artifacts.evalModel.fileKey"
+        )
 
 
 def _browser_training_adapter(

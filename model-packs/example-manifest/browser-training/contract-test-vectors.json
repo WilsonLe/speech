@@ -40,6 +40,16 @@
       "tolerance": 1e-9
     }
   ],
+  "ctcProjectionVectors": [
+    {
+      "id": "synthetic-frozen-ctc-projection-frame",
+      "inputFrame": [0.25, -0.5, 0.75, 0.1],
+      "expectedLogits": [0.3125, -0.0275, -0.2125, 0.28],
+      "blankId": 0,
+      "vocabularySize": 4,
+      "tolerance": 1e-9
+    }
+  ],
   "privacy": {
     "containsRawAudio": false,
     "containsTranscriptText": false,

@@ -61,6 +61,25 @@ def test_committed_browser_training_manifest_validates_and_hashes_artifacts() ->
         "kind": "repository-fixed-adapter-math",
         "proofStatus": "fixed-adapter-math-required",
     }
+    assert manifest["browserTraining"]["featureTap"] == {
+        "graphId": "encoder",
+        "outputName": "encoded",
+        "dimension": 4,
+        "frameShiftMs": 10,
+        "persistedDtype": "float16",
+    }
+    assert manifest["browserTraining"]["ctcProjection"] == {
+        "kind": "frozen-linear-ctc-projection-v1",
+        "inputGraphId": "encoder",
+        "inputName": "encoded",
+        "inputDimension": 4,
+        "logitsName": "ctc_logits",
+        "logitsDtype": "float32",
+        "vocabularySize": 4,
+        "blankId": 0,
+        "trainable": False,
+        "artifact": manifest["browserTraining"]["artifacts"]["evalModel"],
+    }
 
     for file_key, _role, filename in ARTIFACT_FILES:
         file_ref = manifest["files"][file_key]
@@ -71,3 +90,26 @@ def test_committed_browser_training_manifest_validates_and_hashes_artifacts() ->
         assert file_ref["mediaType"] == ARTIFACT_MEDIA_TYPE
         assert file_ref["sizeBytes"] == len(artifact_body)
         assert file_ref["sha256"] == hashlib.sha256(artifact_body).hexdigest()
+
+
+def test_committed_ctc_projection_vectors_match_exported_projection_parameters() -> None:
+    eval_model = json.loads((COMMITTED_ARTIFACT_DIR / "eval-model.json").read_text())
+    vector_pack = json.loads((COMMITTED_ARTIFACT_DIR / "contract-test-vectors.json").read_text())
+
+    projection = eval_model["evaluationContract"]["frozenCtcProjection"]
+    weight_tensor, bias_tensor = projection["parameterTensors"]
+    weights = weight_tensor["values"]
+    bias = bias_tensor["values"]
+    vocabulary_size = projection["vocabularySize"]
+
+    for vector in vector_pack["ctcProjectionVectors"]:
+        logits = []
+        for token_index in range(vocabulary_size):
+            logit = bias[token_index]
+            for input_index, value in enumerate(vector["inputFrame"]):
+                logit += value * weights[input_index * vocabulary_size + token_index]
+            logits.append(round(logit, 12))
+
+        assert vector["blankId"] == projection["blankId"]
+        assert vector["vocabularySize"] == projection["vocabularySize"]
+        assert logits == vector["expectedLogits"]

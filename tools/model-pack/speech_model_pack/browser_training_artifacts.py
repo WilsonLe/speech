@@ -53,10 +53,11 @@ def artifact_payloads() -> dict[str, dict[str, Any]]:
             "backend": _backend(),
             "adapter": adapter,
             "trainingContract": {
-                "objective": "frame-ce-over-frozen-feature-residual-targets-v1",
+                "objective": "frame-ce-over-frozen-ctc-projection-v1",
                 "trainableTensors": ["w_down", "b_down", "w_up", "b_up", "lhuc"],
                 "frozenBaseGraphs": ["encoder", "predictor", "joiner"],
                 "featureTap": _feature_tap(),
+                "frozenCtcProjection": _ctc_projection_artifact_descriptor(),
                 "gradientPrecision": "float32",
                 "parameterInitialization": "identity-zero",
                 "activationGateRequired": True,
@@ -75,6 +76,7 @@ def artifact_payloads() -> dict[str, dict[str, Any]]:
             "adapter": adapter,
             "evaluationContract": {
                 "input": "base-vs-browser-adapter-aggregate-metrics-v1",
+                "frozenCtcProjection": _ctc_projection_artifact_descriptor(),
                 "requiredMetrics": [
                     "wordErrorRate",
                     "characterErrorRate",
@@ -152,6 +154,7 @@ def artifact_payloads() -> dict[str, dict[str, Any]]:
                 "not enrollment features, audio, transcripts, or user adapter weights."
             ),
             "vectors": _contract_test_vectors(),
+            "ctcProjectionVectors": _ctc_projection_test_vectors(),
             "privacy": privacy,
         },
         "anchor-pack": {
@@ -249,6 +252,7 @@ def _browser_training_contract(
             "tokenizerSha256": _canonical_sha256(base_manifest["tokenizer"]),
         },
         "featureTap": _feature_tap(),
+        "ctcProjection": _ctc_projection_manifest_ref(roles),
         "adapter": {
             **_adapter_contract(),
             "runtimeGraph": _artifact_ref("adapter-runtime", roles["adapter-runtime"]),
@@ -304,6 +308,55 @@ def _feature_tap() -> dict[str, Any]:
         "dimension": 4,
         "frameShiftMs": 10,
         "persistedDtype": "float16",
+    }
+
+
+def _ctc_projection_manifest_ref(roles: dict[str, str]) -> dict[str, Any]:
+    return {
+        "kind": "frozen-linear-ctc-projection-v1",
+        "inputGraphId": "encoder",
+        "inputName": "encoded",
+        "inputDimension": 4,
+        "logitsName": "ctc_logits",
+        "logitsDtype": "float32",
+        "vocabularySize": 4,
+        "blankId": 0,
+        "trainable": False,
+        "artifact": _artifact_ref("eval-model", roles["eval-model"]),
+    }
+
+
+def _ctc_projection_artifact_descriptor() -> dict[str, Any]:
+    weights = _ctc_projection_weight()
+    bias = _ctc_projection_bias()
+    return {
+        "kind": "frozen-linear-ctc-projection-v1",
+        "inputGraphId": "encoder",
+        "inputName": "encoded",
+        "inputDimension": 4,
+        "logitsName": "ctc_logits",
+        "logitsDtype": "float32",
+        "vocabularySize": 4,
+        "blankId": 0,
+        "trainable": False,
+        "parameterTensors": [
+            {
+                "name": "ctc_projection_weight",
+                "dataType": "float32",
+                "shape": [4, 4],
+                "layout": "row-major [inputDimension, vocabularySize]",
+                "values": weights,
+                "littleEndianFloat32Sha256": _sha256_float32_values(weights),
+            },
+            {
+                "name": "ctc_projection_bias",
+                "dataType": "float32",
+                "shape": [4],
+                "layout": "[vocabularySize]",
+                "values": bias,
+                "littleEndianFloat32Sha256": _sha256_float32_values(bias),
+            },
+        ],
     }
 
 
@@ -371,6 +424,31 @@ def _zero_tensor_initializers() -> dict[str, dict[str, Any]]:
     }
 
 
+def _ctc_projection_weight() -> list[float]:
+    return [
+        0.2,
+        -0.1,
+        0.05,
+        0.0,
+        -0.3,
+        0.25,
+        0.1,
+        -0.05,
+        0.15,
+        0.05,
+        -0.2,
+        0.3,
+        0.0,
+        -0.15,
+        0.25,
+        0.1,
+    ]
+
+
+def _ctc_projection_bias() -> list[float]:
+    return [0.0, 0.1, -0.05, 0.02]
+
+
 def _contract_test_vectors() -> list[dict[str, Any]]:
     identity_input = [1.0, -0.5, 0.25, 0.0]
     nonzero_tensors = {
@@ -397,6 +475,33 @@ def _contract_test_vectors() -> list[dict[str, Any]]:
             "tolerance": 1e-9,
         },
     ]
+
+
+def _ctc_projection_test_vectors() -> list[dict[str, Any]]:
+    input_frame = [0.25, -0.5, 0.75, 0.1]
+    return [
+        {
+            "id": "synthetic-frozen-ctc-projection-frame",
+            "inputFrame": input_frame,
+            "expectedLogits": _ctc_projection_logits(input_frame),
+            "blankId": 0,
+            "vocabularySize": 4,
+            "tolerance": 1e-9,
+        }
+    ]
+
+
+def _ctc_projection_logits(input_frame: list[float]) -> list[float]:
+    weights = _ctc_projection_weight()
+    bias = _ctc_projection_bias()
+    vocabulary_size = 4
+    logits = []
+    for token_index in range(vocabulary_size):
+        logit = bias[token_index]
+        for input_index, value in enumerate(input_frame):
+            logit += value * weights[input_index * vocabulary_size + token_index]
+        logits.append(round(logit, 12))
+    return logits
 
 
 def _forward(input_frame: list[float], tensors: dict[str, list[float]]) -> list[float]:
@@ -453,6 +558,10 @@ def _canonical_sha256(value: Any) -> str:
 
 def _sha256_float32_fill(value: float, length: int) -> str:
     return hashlib.sha256(struct.pack("<f", value) * length).hexdigest()
+
+
+def _sha256_float32_values(values: list[float]) -> str:
+    return hashlib.sha256(b"".join(struct.pack("<f", value) for value in values)).hexdigest()
 
 
 def _write_json(path: Path, payload: Any) -> None:

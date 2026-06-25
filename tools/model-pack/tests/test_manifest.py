@@ -139,6 +139,18 @@ def browser_training_contract() -> dict[str, object]:
             "frameShiftMs": 10,
             "persistedDtype": "float16",
         },
+        "ctcProjection": {
+            "kind": "frozen-linear-ctc-projection-v1",
+            "inputGraphId": "encoder",
+            "inputName": "encoded",
+            "inputDimension": 4,
+            "logitsName": "ctc_logits",
+            "logitsDtype": "float32",
+            "vocabularySize": 4,
+            "blankId": 0,
+            "trainable": False,
+            "artifact": training_artifact("eval-model", "eval-model"),
+        },
         "adapter": {
             "architecture": "residual-bottleneck-lhuc-v1",
             "inputDimension": 4,
@@ -262,6 +274,17 @@ def test_validate_manifest_v3_rejects_training_artifact_and_limit_mismatches() -
     feature_tap["graphId"] = "missing-graph"
     feature_tap["frameShiftMs"] = 20
     feature_tap["persistedDtype"] = "float32"
+    ctc_projection = browser_training["ctcProjection"]
+    assert isinstance(ctc_projection, dict)
+    ctc_projection["kind"] = "wrong-kind"
+    ctc_projection["inputGraphId"] = "predictor"
+    ctc_projection["inputName"] = "other-output"
+    ctc_projection["inputDimension"] = 8
+    ctc_projection["logitsDtype"] = "float16"
+    ctc_projection["vocabularySize"] = 5
+    ctc_projection["blankId"] = 1
+    ctc_projection["trainable"] = True
+    ctc_projection["artifact"] = training_artifact("missing-eval-model", "training-model")
     adapter = browser_training["adapter"]
     assert isinstance(adapter, dict)
     adapter["inputDimension"] = 8
@@ -292,6 +315,27 @@ def test_validate_manifest_v3_rejects_training_artifact_and_limit_mismatches() -
     assert "browserTraining.featureTap.graphId must reference a declared graph" in errors
     assert "browserTraining.featureTap.persistedDtype must be float16" in errors
     assert "browserTraining.featureTap.frameShiftMs must match feature.frameShiftMs" in errors
+    assert "browserTraining.ctcProjection.kind must be frozen-linear-ctc-projection-v1" in errors
+    assert "browserTraining.ctcProjection.logitsDtype must be float32" in errors
+    assert "browserTraining.ctcProjection.trainable must be false" in errors
+    assert (
+        "browserTraining.ctcProjection.artifact.fileKey must reference an entry in files" in errors
+    )
+    assert "browserTraining.ctcProjection.artifact.role must be eval-model" in errors
+    assert (
+        "browserTraining.ctcProjection.inputName must reference the input graph outputs" in errors
+    )
+    assert "browserTraining.ctcProjection.inputGraphId must match featureTap.graphId" in errors
+    assert "browserTraining.ctcProjection.inputName must match featureTap.outputName" in errors
+    assert "browserTraining.ctcProjection.inputDimension must match featureTap.dimension" in errors
+    assert (
+        "browserTraining.ctcProjection.vocabularySize must match tokenizer.vocabularySize" in errors
+    )
+    assert "browserTraining.ctcProjection.blankId must match tokenizer.blankId" in errors
+    assert (
+        "browserTraining.ctcProjection.artifact.fileKey must match "
+        "browserTraining.artifacts.evalModel.fileKey" in errors
+    )
     assert "browserTraining.adapter.inputDimension must match featureTap.dimension" in errors
     assert "browserTraining.adapter.residualScale must be less than or equal to 1" in errors
     assert "browserTraining.adapter.parameterTensors must include b_down" in errors
@@ -324,6 +368,19 @@ def test_manifest_v3_json_schema_declares_browser_training_contract() -> None:
     assert schema["properties"]["schemaVersion"] == {"const": 3}
     assert "browserTraining" in schema["required"]
     assert schema["properties"]["browserTraining"] == {"$ref": "#/$defs/browserTraining"}
+    assert "ctcProjection" in schema["$defs"]["browserTraining"]["required"]
+    assert schema["$defs"]["browserTraining"]["properties"]["ctcProjection"] == {
+        "$ref": "#/$defs/browserTrainingCtcProjection"
+    }
+    ctc_projection_schema = schema["$defs"]["browserTrainingCtcProjection"]
+    assert ctc_projection_schema["properties"]["kind"] == {
+        "const": "frozen-linear-ctc-projection-v1"
+    }
+    assert ctc_projection_schema["properties"]["logitsDtype"] == {"const": "float32"}
+    assert ctc_projection_schema["properties"]["trainable"] == {"const": False}
+    assert ctc_projection_schema["properties"]["artifact"]["allOf"][1]["properties"]["role"] == {
+        "const": "eval-model"
+    }
     adapter_schema = schema["$defs"]["browserTrainingAdapter"]
     assert adapter_schema["properties"]["runtimeGraph"]["allOf"][1]["properties"]["role"] == {
         "const": "runtime-adapter"

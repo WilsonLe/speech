@@ -165,6 +165,8 @@ export type BrowserTrainingBackendProofStatus =
 export type BrowserTrainingAlgorithmId = 'browser-top-adapter-frame-ce-v1';
 export type BrowserTrainingAdapterArchitecture = 'residual-bottleneck-lhuc-v1';
 export type BrowserTrainingFeatureDtype = 'float16';
+export type BrowserTrainingCtcProjectionKind = 'frozen-linear-ctc-projection-v1';
+export type BrowserTrainingCtcProjectionLogitsDtype = 'float32';
 export type BrowserTrainingArtifactRole =
   | 'training-model'
   | 'eval-model'
@@ -216,6 +218,18 @@ export interface BrowserTrainingContractV1 {
     readonly dimension: number;
     readonly frameShiftMs: number;
     readonly persistedDtype: BrowserTrainingFeatureDtype;
+  };
+  readonly ctcProjection: {
+    readonly kind: BrowserTrainingCtcProjectionKind;
+    readonly inputGraphId: string;
+    readonly inputName: string;
+    readonly inputDimension: number;
+    readonly logitsName: string;
+    readonly logitsDtype: BrowserTrainingCtcProjectionLogitsDtype;
+    readonly vocabularySize: number;
+    readonly blankId: number;
+    readonly trainable: false;
+    readonly artifact: BrowserTrainingArtifactRefV1;
   };
   readonly adapter: {
     readonly architecture: BrowserTrainingAdapterArchitecture;
@@ -1304,6 +1318,14 @@ function validateBrowserTrainingContract(
 
   validateExactBaseModelIdentity(value['exactBaseModel'], manifest, errors);
   const featureTap = validateBrowserTrainingFeatureTap(value['featureTap'], manifest, errors);
+  validateBrowserTrainingCtcProjection(
+    value['ctcProjection'],
+    featureTap,
+    value['artifacts'],
+    manifest,
+    fileKeys,
+    errors,
+  );
   validateBrowserTrainingAdapter(value['adapter'], featureTap?.dimension, fileKeys, errors);
   validateBrowserTrainingArtifacts(value['artifacts'], fileKeys, errors);
   validateBrowserTrainingLimits(value['limits'], errors);
@@ -1403,7 +1425,13 @@ function validateBrowserTrainingFeatureTap(
   value: unknown,
   manifest: Record<string, unknown>,
   errors: string[],
-): { readonly dimension: number } | undefined {
+):
+  | {
+      readonly graphId: string | undefined;
+      readonly outputName: string | undefined;
+      readonly dimension: number | undefined;
+    }
+  | undefined {
   if (!isRecord(value)) {
     errors.push('browserTraining.featureTap must be an object');
     return undefined;
@@ -1455,7 +1483,127 @@ function validateBrowserTrainingFeatureTap(
   ) {
     errors.push('browserTraining.featureTap.frameShiftMs must match feature.frameShiftMs');
   }
-  return dimension === undefined ? undefined : { dimension };
+  return { graphId, outputName, dimension };
+}
+
+function validateBrowserTrainingCtcProjection(
+  value: unknown,
+  featureTap:
+    | {
+        readonly graphId: string | undefined;
+        readonly outputName: string | undefined;
+        readonly dimension: number | undefined;
+      }
+    | undefined,
+  artifacts: unknown,
+  manifest: Record<string, unknown>,
+  fileKeys: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (!isRecord(value)) {
+    errors.push('browserTraining.ctcProjection must be an object');
+    return;
+  }
+  if (value['kind'] !== 'frozen-linear-ctc-projection-v1') {
+    errors.push('browserTraining.ctcProjection.kind must be frozen-linear-ctc-projection-v1');
+  }
+  const inputGraphId = validateNonEmptyString(
+    value['inputGraphId'],
+    'browserTraining.ctcProjection.inputGraphId',
+    errors,
+  );
+  const inputName = validateNonEmptyString(
+    value['inputName'],
+    'browserTraining.ctcProjection.inputName',
+    errors,
+  );
+  const inputDimension = validatePositiveInteger(
+    value['inputDimension'],
+    'browserTraining.ctcProjection.inputDimension',
+    errors,
+  );
+  validateNonEmptyString(value['logitsName'], 'browserTraining.ctcProjection.logitsName', errors);
+  if (value['logitsDtype'] !== 'float32') {
+    errors.push('browserTraining.ctcProjection.logitsDtype must be float32');
+  }
+  const vocabularySize = validatePositiveInteger(
+    value['vocabularySize'],
+    'browserTraining.ctcProjection.vocabularySize',
+    errors,
+  );
+  const blankId = validateNonNegativeInteger(
+    value['blankId'],
+    'browserTraining.ctcProjection.blankId',
+    errors,
+  );
+  if (value['trainable'] !== false) {
+    errors.push('browserTraining.ctcProjection.trainable must be false');
+  }
+  validateBrowserTrainingArtifactRef(
+    value['artifact'],
+    'browserTraining.ctcProjection.artifact',
+    'eval-model',
+    fileKeys,
+    errors,
+  );
+
+  const graphs = manifest['graphs'];
+  const graph = inputGraphId !== undefined && isRecord(graphs) ? graphs[inputGraphId] : undefined;
+  if (inputGraphId !== undefined && !isRecord(graph)) {
+    errors.push('browserTraining.ctcProjection.inputGraphId must reference a declared graph');
+  }
+  if (inputName !== undefined && isRecord(graph) && !tensorNames(graph['outputs']).has(inputName)) {
+    errors.push('browserTraining.ctcProjection.inputName must reference the input graph outputs');
+  }
+  if (
+    inputGraphId !== undefined &&
+    featureTap?.graphId !== undefined &&
+    inputGraphId !== featureTap.graphId
+  ) {
+    errors.push('browserTraining.ctcProjection.inputGraphId must match featureTap.graphId');
+  }
+  if (
+    inputName !== undefined &&
+    featureTap?.outputName !== undefined &&
+    inputName !== featureTap.outputName
+  ) {
+    errors.push('browserTraining.ctcProjection.inputName must match featureTap.outputName');
+  }
+  if (
+    inputDimension !== undefined &&
+    featureTap?.dimension !== undefined &&
+    inputDimension !== featureTap.dimension
+  ) {
+    errors.push('browserTraining.ctcProjection.inputDimension must match featureTap.dimension');
+  }
+
+  const tokenizer = manifest['tokenizer'];
+  const manifestVocabularySize = isRecord(tokenizer) ? tokenizer['vocabularySize'] : undefined;
+  const manifestBlankId = isRecord(tokenizer) ? tokenizer['blankId'] : undefined;
+  if (
+    vocabularySize !== undefined &&
+    typeof manifestVocabularySize === 'number' &&
+    vocabularySize !== manifestVocabularySize
+  ) {
+    errors.push('browserTraining.ctcProjection.vocabularySize must match tokenizer.vocabularySize');
+  }
+  if (blankId !== undefined && typeof manifestBlankId === 'number' && blankId !== manifestBlankId) {
+    errors.push('browserTraining.ctcProjection.blankId must match tokenizer.blankId');
+  }
+
+  const artifact = value['artifact'];
+  const evalModel = isRecord(artifacts) ? artifacts['evalModel'] : undefined;
+  if (
+    isRecord(artifact) &&
+    isRecord(evalModel) &&
+    typeof artifact['fileKey'] === 'string' &&
+    typeof evalModel['fileKey'] === 'string' &&
+    artifact['fileKey'] !== evalModel['fileKey']
+  ) {
+    errors.push(
+      'browserTraining.ctcProjection.artifact.fileKey must match browserTraining.artifacts.evalModel.fileKey',
+    );
+  }
 }
 
 function validateBrowserTrainingAdapter(
