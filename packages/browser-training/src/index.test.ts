@@ -396,34 +396,59 @@ describe('browser frozen-feature tiny-adapter backend', () => {
     });
   });
 
-  it('pauses with a resumable checkpoint and resumes from checkpoint state', () => {
+  it('pauses with a resumable checkpoint and resumes to the same output as uninterrupted training', () => {
     const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
-    const paused = trainFrozenFeatureTinyAdapter(dataset, {
+    const trainingOptions = {
       epochs: 40,
       progressEveryEpochs: 4,
       checkpointEveryEpochs: 4,
       targetLoss: 0,
+      batchSize: 2,
+      samplerSeed: 'deterministic-resume-test',
+      validationEveryEpochs: 1,
+    };
+    const uninterrupted = trainFrozenFeatureTinyAdapter(dataset, trainingOptions);
+    const paused = trainFrozenFeatureTinyAdapter(dataset, {
+      ...trainingOptions,
       shouldPause: (progress) => progress.epoch >= 12,
     });
 
     expect(paused.status).toBe('paused');
     expect(paused.checkpoint.epoch).toBe(12);
     expect(paused.recovery.resumable).toBe(true);
+    expect(paused.checkpoint.resumeState).toMatchObject({
+      schemaVersion: 1,
+      stateType: 'frozen-feature-tiny-adapter-resume-state',
+      epoch: 12,
+      nextEpoch: 13,
+      optimizerState: { optimizer: 'adamw' },
+      samplerState: {
+        deterministicOrdering: 'stable-hash-v1',
+        nextEpoch: 13,
+      },
+    });
+    expect(paused.checkpoint.resumeStateChecksum).toMatch(/^fnv1a32:[a-f0-9]{8}$/);
     expect(validateFrozenFeatureTinyAdapterCheckpoint(dataset, paused.checkpoint)).toBe(
       paused.checkpoint,
     );
 
     const resumed = trainFrozenFeatureTinyAdapter(dataset, {
-      epochs: 40,
+      ...trainingOptions,
       progressEveryEpochs: 10,
       checkpointEveryEpochs: 10,
-      targetLoss: 0,
       resumeFromCheckpoint: paused.checkpoint,
     });
 
     expect(resumed.status).toBe('completed');
     expect(resumed.metrics.epochsCompleted).toBe(40);
     expect(resumed.metrics.finalLoss).toBeLessThan(paused.metrics.finalLoss);
+    expect(resumed.metrics).toEqual(uninterrupted.metrics);
+    expect(resumed.diagnostics.optimization).toEqual(uninterrupted.diagnostics.optimization);
+    expect(resumed.diagnostics.validation).toEqual(uninterrupted.diagnostics.validation);
+    expect(resumed.artifact).toEqual(uninterrupted.artifact);
+    expect(resumed.checkpoint.resumeStateChecksum).toBe(
+      uninterrupted.checkpoint.resumeStateChecksum,
+    );
     expect(resumed.recovery.resumable).toBe(false);
   });
 
@@ -463,12 +488,63 @@ describe('browser frozen-feature tiny-adapter backend', () => {
         checkpointId: 'tampered',
       }),
     ).toThrow(/checkpointId/);
+    expect(() => {
+      const staleCheckpoint = { ...checkpoint } as Record<string, unknown>;
+      delete staleCheckpoint['resumeState'];
+      validateFrozenFeatureTinyAdapterCheckpoint(
+        dataset,
+        staleCheckpoint as unknown as FrozenFeatureTinyAdapterCheckpointV1,
+      );
+    }).toThrow(/resume state/);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterCheckpoint(dataset, {
+        ...checkpoint,
+        resumeStateChecksum: 'fnv1a32:00000000',
+      }),
+    ).toThrow(/resume state checksum/);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterCheckpoint(dataset, {
+        ...checkpoint,
+        resumeState: {
+          ...checkpoint.resumeState,
+          optimizerState: {
+            ...checkpoint.resumeState.optimizerState,
+            step: checkpoint.resumeState.optimizerState.step + 1,
+          },
+        },
+      }),
+    ).toThrow(/resume state checksum/);
     expect(() =>
       trainFrozenFeatureTinyAdapter(
         { ...dataset, datasetId: 'different-dataset' },
         { resumeFromCheckpoint: checkpoint },
       ),
     ).toThrow(/datasetId/);
+    expect(() =>
+      trainFrozenFeatureTinyAdapter(
+        {
+          ...dataset,
+          examples: [
+            { ...dataset.examples[0]!, features: [0.25, 0, 0.2, -0.1] },
+            ...dataset.examples.slice(1),
+          ],
+        },
+        { epochs: checkpoint.epochs, resumeFromCheckpoint: checkpoint },
+      ),
+    ).toThrow(/dataset fingerprint/);
+    expect(() =>
+      trainFrozenFeatureTinyAdapter(dataset, {
+        epochs: 13,
+        resumeFromCheckpoint: checkpoint,
+      }),
+    ).toThrow(/epoch budget/);
+    expect(() =>
+      trainFrozenFeatureTinyAdapter(dataset, {
+        epochs: checkpoint.epochs,
+        samplerSeed: 'changed-seed',
+        resumeFromCheckpoint: checkpoint,
+      }),
+    ).toThrow(/training options/);
   });
 
   it('refuses adapters that exceed the tiny parameter budget', () => {

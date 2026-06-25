@@ -381,9 +381,57 @@ export interface FrozenFeatureTinyAdapterCheckpointV1 {
   readonly loss: number;
   readonly initialLoss: number;
   readonly artifact: FrozenFeatureTinyAdapterArtifactV1;
+  readonly resumeState: FrozenFeatureTinyAdapterCheckpointResumeStateV1;
+  readonly resumeStateChecksum: string;
   readonly compatibility: FrozenFeatureTinyAdapterCompatibilityV1;
   readonly privacy: BrowserTrainingPrivacyV1;
 }
+
+export interface FrozenFeatureTinyAdapterCheckpointResumeStateV1 {
+  readonly schemaVersion: 1;
+  readonly stateType: 'frozen-feature-tiny-adapter-resume-state';
+  readonly trainingConfigFingerprint: string;
+  readonly datasetFingerprint: string;
+  readonly epoch: number;
+  readonly nextEpoch: number;
+  readonly loss: number;
+  readonly initialLoss: number;
+  readonly parameterState: {
+    readonly weights: readonly number[];
+    readonly bias: readonly number[];
+  };
+  readonly optimizerState: FrozenFeatureTinyAdapterCheckpointOptimizerStateV1;
+  readonly samplerState: {
+    readonly deterministicOrdering: 'stable-hash-v1';
+    readonly seedFingerprint: string;
+    readonly nextEpoch: number;
+  };
+  readonly validationState: {
+    readonly latestLoss?: number;
+    readonly bestLoss?: number;
+    readonly bestEpoch?: number;
+    readonly epochsWithoutImprovement: number;
+    readonly stoppedEarly: boolean;
+  };
+  readonly optimizationState: {
+    readonly gradientClipEvents: number;
+    readonly lastLearningRate: number;
+  };
+}
+
+export type FrozenFeatureTinyAdapterCheckpointOptimizerStateV1 =
+  | {
+      readonly optimizer: 'sgd';
+      readonly step: number;
+    }
+  | {
+      readonly optimizer: 'adamw';
+      readonly weightM: readonly number[];
+      readonly weightV: readonly number[];
+      readonly biasM: readonly number[];
+      readonly biasV: readonly number[];
+      readonly step: number;
+    };
 
 export interface FrozenFeatureTinyAdapterCompatibilityV1 {
   readonly baseModelId: string;
@@ -582,25 +630,21 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
     const checkpoint = this.options.resumeFromCheckpoint;
     if (checkpoint !== undefined) {
       validateFrozenFeatureTinyAdapterCheckpoint(dataset, checkpoint);
-      if (checkpoint.epochs > this.options.epochs) {
-        throw new Error(
-          'Frozen-feature checkpoint epoch budget exceeds requested training epochs.',
-        );
-      }
-      this.weights = [...checkpoint.artifact.weights];
-      this.bias = [...checkpoint.artifact.bias];
+      validateCheckpointResumeOptions(this.options, checkpoint);
+      this.weights = [...checkpoint.resumeState.parameterState.weights];
+      this.bias = [...checkpoint.resumeState.parameterState.bias];
+      restoreOptimizerState(this.optimizerState, checkpoint.resumeState.optimizerState);
       this.currentEpoch = checkpoint.epoch;
-      this.initialLoss = checkpoint.initialLoss;
-      this.currentLoss = checkpoint.loss;
-      this.latestValidationLoss = calculateValidationLoss(
-        this.validationExamples,
-        this.weights,
-        this.bias,
-        this.options.l2Regularization,
-      );
-      this.bestValidationLoss = this.latestValidationLoss;
-      this.bestValidationEpoch =
-        this.latestValidationLoss === undefined ? undefined : this.currentEpoch;
+      this.initialLoss = checkpoint.resumeState.initialLoss;
+      this.currentLoss = checkpoint.resumeState.loss;
+      this.latestValidationLoss = checkpoint.resumeState.validationState.latestLoss;
+      this.bestValidationLoss = checkpoint.resumeState.validationState.bestLoss;
+      this.bestValidationEpoch = checkpoint.resumeState.validationState.bestEpoch;
+      this.epochsWithoutValidationImprovement =
+        checkpoint.resumeState.validationState.epochsWithoutImprovement;
+      this.earlyStopped = checkpoint.resumeState.validationState.stoppedEarly;
+      this.gradientClipEvents = checkpoint.resumeState.optimizationState.gradientClipEvents;
+      this.lastLearningRate = checkpoint.resumeState.optimizationState.lastLearningRate;
       return;
     }
 
@@ -708,6 +752,8 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
 
   createCheckpoint(): FrozenFeatureTinyAdapterCheckpointV1 {
     const artifact = createArtifact(this.dataset, this.weights, this.bias, this.parameterCount);
+    const resumeState = this.createResumeState();
+    const resumeStateChecksum = checksumResumeState(resumeState);
     const checkpoint: FrozenFeatureTinyAdapterCheckpointV1 = {
       schemaVersion: 1,
       checkpointType: 'frozen-feature-tiny-adapter-checkpoint',
@@ -715,6 +761,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
         this.dataset.datasetId,
         this.currentEpoch,
         artifact.checksum,
+        resumeStateChecksum,
       ),
       datasetId: this.dataset.datasetId,
       epoch: this.currentEpoch,
@@ -722,6 +769,8 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
       loss: roundFloat(this.currentLoss),
       initialLoss: roundFloat(this.initialLoss),
       artifact,
+      resumeState,
+      resumeStateChecksum,
       compatibility: createCompatibility(this.dataset),
       privacy: createBrowserTrainingPrivacy({
         containsPrivateFrozenFeatureValues: this.dataset.privacy.containsPrivateFrozenFeatureValues,
@@ -772,6 +821,46 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
         containsPrivateFrozenFeatureValues: this.dataset.privacy.containsPrivateFrozenFeatureValues,
         containsProfileData: this.dataset.privacy.containsProfileData,
       }),
+    };
+  }
+
+  private createResumeState(): FrozenFeatureTinyAdapterCheckpointResumeStateV1 {
+    return {
+      schemaVersion: 1,
+      stateType: 'frozen-feature-tiny-adapter-resume-state',
+      trainingConfigFingerprint: createTrainingConfigFingerprint(this.options),
+      datasetFingerprint: createDatasetFingerprint(this.dataset),
+      epoch: this.currentEpoch,
+      nextEpoch: this.currentEpoch + 1,
+      loss: this.currentLoss,
+      initialLoss: this.initialLoss,
+      parameterState: {
+        weights: [...this.weights],
+        bias: [...this.bias],
+      },
+      optimizerState: createCheckpointOptimizerState(
+        this.options.optimizer,
+        this.optimizerState,
+        this.currentEpoch,
+      ),
+      samplerState: {
+        deterministicOrdering: 'stable-hash-v1',
+        seedFingerprint: createDiagnosticFingerprint('sampler-seed', this.options.samplerSeed),
+        nextEpoch: this.currentEpoch + 1,
+      },
+      validationState: {
+        ...(this.latestValidationLoss === undefined
+          ? {}
+          : { latestLoss: this.latestValidationLoss }),
+        ...(this.bestValidationLoss === undefined ? {} : { bestLoss: this.bestValidationLoss }),
+        ...(this.bestValidationEpoch === undefined ? {} : { bestEpoch: this.bestValidationEpoch }),
+        epochsWithoutImprovement: this.epochsWithoutValidationImprovement,
+        stoppedEarly: this.earlyStopped,
+      },
+      optimizationState: {
+        gradientClipEvents: this.gradientClipEvents,
+        lastLearningRate: this.lastLearningRate,
+      },
     };
   }
 
@@ -953,9 +1042,15 @@ export function validateFrozenFeatureTinyAdapterCheckpoint(
   assertFiniteNumber(checkpoint.loss, 'checkpoint loss');
   assertFiniteNumber(checkpoint.initialLoss, 'checkpoint initialLoss');
   validateArtifact(dataset, checkpoint.artifact);
+  validateCheckpointResumeState(dataset, checkpoint);
   if (
     checkpoint.checkpointId !==
-    createCheckpointId(dataset.datasetId, checkpoint.epoch, checkpoint.artifact.checksum)
+    createCheckpointId(
+      dataset.datasetId,
+      checkpoint.epoch,
+      checkpoint.artifact.checksum,
+      checkpoint.resumeStateChecksum,
+    )
   ) {
     throw new Error('Frozen-feature tiny-adapter checkpointId does not match checkpoint artifact.');
   }
@@ -977,6 +1072,176 @@ export function validateFrozenFeatureTinyAdapterCheckpoint(
     throw new Error('Frozen-feature tiny-adapter checkpoint privacy flags do not match dataset.');
   }
   return checkpoint;
+}
+
+function validateCheckpointResumeState(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  checkpoint: FrozenFeatureTinyAdapterCheckpointV1,
+): void {
+  const state = checkpoint.resumeState as
+    | FrozenFeatureTinyAdapterCheckpointResumeStateV1
+    | undefined;
+  if (
+    state === undefined ||
+    state.schemaVersion !== 1 ||
+    state.stateType !== 'frozen-feature-tiny-adapter-resume-state'
+  ) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint resume state is invalid.');
+  }
+  if (state.datasetFingerprint !== createDatasetFingerprint(dataset)) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint dataset fingerprint is invalid.');
+  }
+  if (state.epoch !== checkpoint.epoch || state.nextEpoch !== checkpoint.epoch + 1) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint resume epoch state is invalid.');
+  }
+  if (state.samplerState.nextEpoch !== state.nextEpoch) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint sampler state is invalid.');
+  }
+  if (state.samplerState.deterministicOrdering !== 'stable-hash-v1') {
+    throw new Error('Frozen-feature tiny-adapter checkpoint sampler ordering is unsupported.');
+  }
+  if (!/^sampler-seed:fnv1a32:[a-f0-9]{8}$/.test(state.samplerState.seedFingerprint)) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint sampler seed fingerprint is invalid.');
+  }
+  assertFiniteNumber(state.loss, 'checkpoint resume loss');
+  assertFiniteNumber(state.initialLoss, 'checkpoint resume initialLoss');
+  if (
+    checkpoint.loss !== roundFloat(state.loss) ||
+    checkpoint.initialLoss !== roundFloat(state.initialLoss)
+  ) {
+    throw new Error(
+      'Frozen-feature tiny-adapter checkpoint rounded losses do not match resume state.',
+    );
+  }
+  const expectedWeightCount = dataset.featureDimension * dataset.outputDimension;
+  if (state.parameterState.weights.length !== expectedWeightCount) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint resume weights have the wrong length.');
+  }
+  if (state.parameterState.bias.length !== dataset.outputDimension) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint resume bias has the wrong length.');
+  }
+  for (const value of [...state.parameterState.weights, ...state.parameterState.bias]) {
+    assertFiniteNumber(value, 'checkpoint resume parameter');
+  }
+  if (
+    checksumTinyAdapter(
+      state.parameterState.weights.map(roundFloat),
+      state.parameterState.bias.map(roundFloat),
+    ) !== checkpoint.artifact.checksum
+  ) {
+    throw new Error(
+      'Frozen-feature tiny-adapter checkpoint resume parameters do not match artifact.',
+    );
+  }
+  validateCheckpointOptimizerState(
+    state.optimizerState,
+    expectedWeightCount,
+    dataset.outputDimension,
+  );
+  validateCheckpointValidationState(state.validationState);
+  assertNonNegativeInteger(
+    state.optimizationState.gradientClipEvents,
+    'checkpoint resume gradientClipEvents',
+  );
+  assertFiniteNumber(
+    state.optimizationState.lastLearningRate,
+    'checkpoint resume lastLearningRate',
+  );
+  if (checkpoint.resumeStateChecksum !== checksumResumeState(state)) {
+    throw new Error('Frozen-feature tiny-adapter checkpoint resume state checksum is invalid.');
+  }
+}
+
+function validateCheckpointOptimizerState(
+  state: FrozenFeatureTinyAdapterCheckpointOptimizerStateV1,
+  weightParameterCount: number,
+  biasParameterCount: number,
+): void {
+  if (state.optimizer === 'sgd') {
+    assertNonNegativeInteger(state.step, 'checkpoint SGD optimizer step');
+    return;
+  }
+  if (state.optimizer !== 'adamw') {
+    throw new Error('Frozen-feature tiny-adapter checkpoint optimizer state is unsupported.');
+  }
+  if (
+    state.weightM.length !== weightParameterCount ||
+    state.weightV.length !== weightParameterCount ||
+    state.biasM.length !== biasParameterCount ||
+    state.biasV.length !== biasParameterCount
+  ) {
+    throw new Error(
+      'Frozen-feature tiny-adapter checkpoint AdamW optimizer state has wrong dimensions.',
+    );
+  }
+  for (const value of [...state.weightM, ...state.weightV, ...state.biasM, ...state.biasV]) {
+    assertFiniteNumber(value, 'checkpoint AdamW optimizer value');
+  }
+  assertNonNegativeInteger(state.step, 'checkpoint AdamW optimizer step');
+}
+
+function validateCheckpointValidationState(
+  state: FrozenFeatureTinyAdapterCheckpointResumeStateV1['validationState'],
+): void {
+  if (state.latestLoss !== undefined)
+    assertFiniteNumber(state.latestLoss, 'checkpoint validation loss');
+  if (state.bestLoss !== undefined)
+    assertFiniteNumber(state.bestLoss, 'checkpoint best validation loss');
+  if (state.bestEpoch !== undefined)
+    assertNonNegativeInteger(state.bestEpoch, 'checkpoint best validation epoch');
+  assertNonNegativeInteger(
+    state.epochsWithoutImprovement,
+    'checkpoint epochsWithoutValidationImprovement',
+  );
+}
+
+function validateCheckpointResumeOptions(
+  options: FrozenFeatureTinyAdapterTrainingOptions,
+  checkpoint: FrozenFeatureTinyAdapterCheckpointV1,
+): void {
+  if (checkpoint.epochs !== options.epochs) {
+    throw new Error(
+      'Frozen-feature checkpoint epoch budget must match requested training epochs for deterministic resume.',
+    );
+  }
+  const expectedConfigFingerprint = createTrainingConfigFingerprint(options);
+  if (checkpoint.resumeState.trainingConfigFingerprint !== expectedConfigFingerprint) {
+    throw new Error(
+      'Frozen-feature checkpoint training options do not match deterministic resume state.',
+    );
+  }
+  if (
+    checkpoint.resumeState.samplerState.seedFingerprint !==
+    createDiagnosticFingerprint('sampler-seed', options.samplerSeed)
+  ) {
+    throw new Error(
+      'Frozen-feature checkpoint sampler state does not match deterministic resume options.',
+    );
+  }
+  if (checkpoint.resumeState.optimizerState.optimizer !== options.optimizer) {
+    throw new Error(
+      'Frozen-feature checkpoint optimizer state does not match deterministic resume options.',
+    );
+  }
+}
+
+function restoreOptimizerState(
+  target: AdamWOptimizerState,
+  source: FrozenFeatureTinyAdapterCheckpointOptimizerStateV1,
+): void {
+  if (source.optimizer === 'sgd') {
+    target.step = source.step;
+    target.weightM.fill(0);
+    target.weightV.fill(0);
+    target.biasM.fill(0);
+    target.biasV.fill(0);
+    return;
+  }
+  target.weightM.splice(0, target.weightM.length, ...source.weightM);
+  target.weightV.splice(0, target.weightV.length, ...source.weightV);
+  target.biasM.splice(0, target.biasM.length, ...source.biasM);
+  target.biasV.splice(0, target.biasV.length, ...source.biasV);
+  target.step = source.step;
 }
 
 export function createBrowserTrainingPrivacy(
@@ -1163,6 +1428,27 @@ function createAdamWOptimizerState(
     biasM: new Array<number>(biasParameterCount).fill(0),
     biasV: new Array<number>(biasParameterCount).fill(0),
     step: 0,
+  };
+}
+
+function createCheckpointOptimizerState(
+  optimizer: FrozenFeatureTinyAdapterOptimizerKind,
+  state: AdamWOptimizerState,
+  epoch: number,
+): FrozenFeatureTinyAdapterCheckpointOptimizerStateV1 {
+  if (optimizer === 'sgd') {
+    return {
+      optimizer: 'sgd',
+      step: epoch,
+    };
+  }
+  return {
+    optimizer: 'adamw',
+    weightM: [...state.weightM],
+    weightV: [...state.weightV],
+    biasM: [...state.biasM],
+    biasV: [...state.biasV],
+    step: state.step,
   };
 }
 
@@ -1570,18 +1856,89 @@ function createProgress(input: {
   };
 }
 
-function createCheckpointId(datasetId: string, epoch: number, checksum: string): string {
-  return `${datasetId}:epoch-${epoch.toString()}:${checksum}`;
+function createCheckpointId(
+  datasetId: string,
+  epoch: number,
+  artifactChecksum: string,
+  resumeStateChecksum: string,
+): string {
+  return `${datasetId}:epoch-${epoch.toString()}:${artifactChecksum}:${resumeStateChecksum}`;
 }
 
 function checksumTinyAdapter(weights: readonly number[], bias: readonly number[]): string {
   const payload = JSON.stringify({ weights, bias });
+  return checksumString(payload);
+}
+
+function checksumResumeState(state: FrozenFeatureTinyAdapterCheckpointResumeStateV1): string {
+  return checksumJson(state);
+}
+
+function createDatasetFingerprint(dataset: FrozenFeatureTinyAdapterDatasetV1): string {
+  return checksumJson({
+    schemaVersion: dataset.schemaVersion,
+    datasetId: dataset.datasetId,
+    featureDimension: dataset.featureDimension,
+    outputDimension: dataset.outputDimension,
+    examples: dataset.examples.map((example) => ({
+      id: example.id,
+      features: example.features,
+      targetResidual: example.targetResidual,
+      weight: example.weight ?? null,
+      frameCount: example.frameCount ?? null,
+      conditionFingerprint:
+        example.conditionKey === undefined
+          ? null
+          : createDiagnosticFingerprint('condition', example.conditionKey.trim()),
+      split: example.split ?? 'train',
+    })),
+    source: dataset.source,
+    privacy: dataset.privacy,
+  });
+}
+
+function createTrainingConfigFingerprint(options: FrozenFeatureTinyAdapterTrainingOptions): string {
+  return checksumJson({
+    epochs: options.epochs,
+    learningRate: options.learningRate,
+    l2Regularization: options.l2Regularization,
+    maxParameterCount: options.maxParameterCount,
+    targetLoss: options.targetLoss ?? null,
+    optimizer: options.optimizer,
+    batchSize: options.batchSize,
+    samplerSeedFingerprint: createDiagnosticFingerprint('sampler-seed', options.samplerSeed),
+    lengthBucketCount: options.lengthBucketCount,
+    conditionBalanced: options.conditionBalanced,
+    gradientClipNorm: options.gradientClipNorm ?? null,
+    learningRateSchedule: options.learningRateSchedule,
+    minLearningRateRatio: options.minLearningRateRatio,
+    validationEveryEpochs: options.validationEveryEpochs ?? null,
+    earlyStoppingPatience: options.earlyStoppingPatience ?? null,
+    earlyStoppingMinDelta: options.earlyStoppingMinDelta,
+  });
+}
+
+function checksumJson(value: unknown): string {
+  return checksumString(stableStringify(value));
+}
+
+function checksumString(payload: string): string {
   let hash = 0x811c9dc5;
   for (let index = 0; index < payload.length; index += 1) {
     hash ^= payload.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return `fnv1a32:${hash.toString(16).padStart(8, '0')}`;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+  return `{${Object.entries(value as Readonly<Record<string, unknown>>)
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+    .join(',')}}`;
 }
 
 function assertPositiveInteger(value: number, name: string): number {
