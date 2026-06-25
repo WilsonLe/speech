@@ -21,6 +21,7 @@ import {
   type RuntimeCapabilities,
   type SpeechLanguageMode,
 } from '@speech/protocol';
+import { createAsrRuntimePriorityPublisher } from './asr-runtime-priority';
 
 const ctx = self as DedicatedWorkerGlobalScope;
 
@@ -34,6 +35,7 @@ const supportedLanguageModes = [
 let disposed = false;
 let currentRuntime: LoadedOnnxRuntimeWeb | undefined;
 let providerPreferenceStore: ProviderPreferenceStore | undefined;
+let asrPriority = createAsrRuntimePriorityPublisher();
 let languageModeDiagnostics: LanguageModeDiagnostics = createLanguageModeDiagnostics({
   requestedMode: 'auto',
   supportedLanguageModes,
@@ -52,10 +54,12 @@ async function handleMessage(message: MainToAsrWorker): Promise<void> {
   switch (message.type) {
     case 'INIT':
       disposed = false;
+      resetAsrPriorityPublisher();
       await initializeRuntime(message.preferredProvider, message.modelId);
       return;
     case 'DISPOSE':
       disposed = true;
+      disposeRuntimeResources();
       ctx.close();
       return;
     case 'SET_LANGUAGE_MODE':
@@ -64,13 +68,28 @@ async function handleMessage(message: MainToAsrWorker): Promise<void> {
     case 'LOAD_PROFILE':
       await loadProfileAdapter(message);
       return;
-    case 'RESET':
-    case 'SET_VOCABULARY':
-    case 'UNLOAD_PROFILE':
     case 'START_UTTERANCE':
+      asrPriority.markActive('utterance-started');
+      postZeroQueueMetrics();
+      return;
     case 'AUDIO_AVAILABLE':
     case 'AUDIO_CHUNK':
+      asrPriority.markActive('audio-available');
+      postZeroQueueMetrics();
+      return;
     case 'END_UTTERANCE':
+      asrPriority.markIdle('utterance-ended');
+      postZeroQueueMetrics();
+      return;
+    case 'RESET':
+      releaseRuntimeResources('reset');
+      postZeroQueueMetrics();
+      return;
+    case 'UNLOAD_PROFILE':
+      asrPriority.markIdle('profile-ready');
+      postZeroQueueMetrics();
+      return;
+    case 'SET_VOCABULARY':
       postError(
         'INFERENCE_FAILED',
         true,
@@ -84,6 +103,7 @@ async function initializeRuntime(
   preferredProvider: PreferredOrtProvider,
   modelId: string,
 ): Promise<void> {
+  asrPriority.markActive('runtime-initializing');
   try {
     const capabilities = detectWorkerCapabilities();
     const loadedRuntimes = new Map<OrtExecutionProvider, LoadedOnnxRuntimeWeb>();
@@ -139,7 +159,9 @@ async function initializeRuntime(
       type: 'READY',
       capabilities: runtimeCapabilities(runtime.importTarget === 'webgpu'),
     });
+    asrPriority.markIdle('runtime-ready');
   } catch (error) {
+    asrPriority.markIdle('error');
     postError('INFERENCE_FAILED', true, errorMessage(error));
   }
 }
@@ -168,6 +190,7 @@ async function loadProfileAdapter(
     return;
   }
   try {
+    asrPriority.markActive('profile-loading');
     postMessage({
       type: 'MODEL_PROGRESS',
       phase: 'loading-adapter-profile',
@@ -207,7 +230,9 @@ async function loadProfileAdapter(
       profileId: benchmark.profileId,
       adaptationType: benchmark.adaptationType,
     });
+    asrPriority.markIdle('profile-ready');
   } catch (error) {
+    asrPriority.markIdle('error');
     postError('PROFILE_CHECKSUM_MISMATCH', true, errorMessage(error));
   }
 }
@@ -223,6 +248,40 @@ function setLanguageMode(mode: SpeechLanguageMode): void {
 
 function postLanguageModeReady(): void {
   postMessage({ type: 'LANGUAGE_MODE_READY', diagnostics: languageModeDiagnostics });
+}
+
+function postZeroQueueMetrics(): void {
+  postMessage({
+    type: 'METRICS',
+    metrics: {
+      queueDepthFrames: 0,
+      audioOverruns: 0,
+      ...(currentRuntime === undefined
+        ? {}
+        : {
+            provider: currentRuntime.importTarget === 'webgpu' ? 'webgpu' : 'wasm',
+            wasmThreads: currentRuntime.wasmThreads,
+          }),
+    },
+  });
+}
+
+function releaseRuntimeResources(reason: 'reset'): void {
+  currentRuntime = undefined;
+  providerPreferenceStore = undefined;
+  asrPriority.markIdle(reason);
+}
+
+function disposeRuntimeResources(): void {
+  currentRuntime = undefined;
+  providerPreferenceStore = undefined;
+  asrPriority.markIdle('dispose');
+  asrPriority.close();
+}
+
+function resetAsrPriorityPublisher(): void {
+  asrPriority.close();
+  asrPriority = createAsrRuntimePriorityPublisher();
 }
 
 function detectWorkerCapabilities(): OrtRuntimeCapabilities {

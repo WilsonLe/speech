@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createBrowserTrainingPrivacy,
   createDefaultBrowserTrainingBackend,
+  createFrozenFeatureTinyAdapterTrainingSession,
   createRepositoryFixedAdapterMathBackend,
   createSyntheticFrozenFeatureTinyAdapterDataset,
   repositoryFixedAdapterMathBackendDescriptorV1,
@@ -132,6 +133,7 @@ describe('browser frozen-feature tiny-adapter backend', () => {
         checkpoint: true,
         fixedAdapterMath: true,
         onnxRuntimeTraining: false,
+        resourceCleanup: true,
       },
       privacy: {
         localOnly: true,
@@ -140,6 +142,22 @@ describe('browser frozen-feature tiny-adapter backend', () => {
         exposesConcreteRuntimeToUi: false,
       },
     });
+  });
+
+  it('zeros and closes mutable training resources when a session is disposed', () => {
+    const dataset = createSyntheticFrozenFeatureTinyAdapterDataset();
+    const session = createFrozenFeatureTinyAdapterTrainingSession(dataset, { epochs: 4 });
+
+    session.runEpoch();
+    const checkpoint = session.createCheckpoint();
+    session.dispose();
+    session.dispose();
+
+    expect(checkpoint.epoch).toBe(1);
+    expect(checkpoint.artifact.weights.some((value) => value !== 0)).toBe(true);
+    expect(() => session.runEpoch()).toThrow(/session is disposed/);
+    expect(() => session.createCheckpoint()).toThrow(/session is disposed/);
+    expect(() => session.finish('paused')).toThrow(/session is disposed/);
   });
 
   it('routes an ORT Training request without proof to the fixed adapter-math backend', () => {

@@ -48,11 +48,14 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   ).toBeVisible({ timeout: 10_000 });
   await secondTab.close();
 
-  await page.getByRole('button', { name: 'Cancel browser training' }).click();
-  await expect(browserTrainingStatus.getByText('cancelled', { exact: true })).toBeVisible({
+  await page.getByRole('button', { name: 'Benchmark worker provider' }).click();
+  await expect(browserTrainingStatus.getByText('paused', { exact: true })).toBeVisible({
     timeout: 10_000,
   });
-  await expect(browserTrainingRecovery.getByText('cancelled', { exact: true })).toBeVisible();
+  await expect(browserTrainingRecovery.getByText('paused', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(/ASR runtime is active .* browser training will pause cooperatively/),
+  ).toBeVisible();
 
   await page.reload({ waitUntil: 'networkidle' });
   browserTrainingRecovery = page.getByLabel('Browser training recovery status');

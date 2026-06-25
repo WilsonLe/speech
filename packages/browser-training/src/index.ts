@@ -39,6 +39,7 @@ export interface BrowserTrainingBackendDescriptorV1 {
     readonly reloadRecovery: true;
     readonly fixedAdapterMath: boolean;
     readonly onnxRuntimeTraining: boolean;
+    readonly resourceCleanup: true;
   };
   readonly privacy: {
     readonly localOnly: true;
@@ -64,6 +65,7 @@ export interface BrowserTrainingBackendSession {
   ): FrozenFeatureTinyAdapterProgressV1;
   createCheckpoint(): FrozenFeatureTinyAdapterCheckpointV1;
   finish(status: BrowserTrainingPrototypeStatus): FrozenFeatureTinyAdapterTrainingResultV1;
+  dispose(): void;
 }
 
 export interface BrowserTrainingBackend {
@@ -150,6 +152,7 @@ export const repositoryFixedAdapterMathBackendDescriptorV1: BrowserTrainingBacke
     reloadRecovery: true,
     fixedAdapterMath: true,
     onnxRuntimeTraining: false,
+    resourceCleanup: true,
   },
   privacy: {
     localOnly: true,
@@ -530,38 +533,42 @@ export function trainFrozenFeatureTinyAdapter(
   const session = createFrozenFeatureTinyAdapterTrainingSession(dataset, optionsInput);
   let status: BrowserTrainingPrototypeStatus = 'completed';
 
-  while (session.epoch < session.options.epochs) {
-    const progress = session.runEpoch();
-    if (shouldEmitProgress(progress.epoch, session.options) || session.hasReachedTargetLoss()) {
-      session.options.onProgress?.(progress);
+  try {
+    while (session.epoch < session.options.epochs) {
+      const progress = session.runEpoch();
+      if (shouldEmitProgress(progress.epoch, session.options) || session.hasReachedTargetLoss()) {
+        session.options.onProgress?.(progress);
+      }
+      if (session.shouldCheckpoint()) {
+        session.options.onCheckpoint?.(session.createCheckpoint());
+      }
+      if (session.options.shouldCancel?.(progress) === true) {
+        status = 'cancelled';
+        const cancelled = session.createProgress('cancelled');
+        session.options.onProgress?.(cancelled);
+        session.options.onCheckpoint?.(session.createCheckpoint());
+        break;
+      }
+      if (session.options.shouldPause?.(progress) === true) {
+        status = 'paused';
+        const paused = session.createProgress('paused');
+        session.options.onProgress?.(paused);
+        session.options.onCheckpoint?.(session.createCheckpoint());
+        break;
+      }
+      if (session.hasReachedTargetLoss()) {
+        break;
+      }
     }
-    if (session.shouldCheckpoint()) {
-      session.options.onCheckpoint?.(session.createCheckpoint());
-    }
-    if (session.options.shouldCancel?.(progress) === true) {
-      status = 'cancelled';
-      const cancelled = session.createProgress('cancelled');
-      session.options.onProgress?.(cancelled);
-      session.options.onCheckpoint?.(session.createCheckpoint());
-      break;
-    }
-    if (session.options.shouldPause?.(progress) === true) {
-      status = 'paused';
-      const paused = session.createProgress('paused');
-      session.options.onProgress?.(paused);
-      session.options.onCheckpoint?.(session.createCheckpoint());
-      break;
-    }
-    if (session.hasReachedTargetLoss()) {
-      break;
-    }
-  }
 
-  if (status === 'completed') {
-    session.options.onProgress?.(session.createProgress('completed'));
-  }
+    if (status === 'completed') {
+      session.options.onProgress?.(session.createProgress('completed'));
+    }
 
-  return session.finish(status);
+    return session.finish(status);
+  } finally {
+    session.dispose();
+  }
 }
 
 export function createFrozenFeatureTinyAdapterTrainingSession(
@@ -600,6 +607,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   private earlyStopped: boolean;
   private gradientClipEvents: number;
   private lastLearningRate: number;
+  private disposed: boolean;
 
   constructor(
     dataset: FrozenFeatureTinyAdapterDatasetV1,
@@ -621,6 +629,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
     this.earlyStopped = false;
     this.gradientClipEvents = 0;
     this.lastLearningRate = this.options.learningRate;
+    this.disposed = false;
     if (this.parameterCount > this.options.maxParameterCount) {
       throw new Error(
         `Frozen-feature adapter parameter count ${this.parameterCount.toString()} exceeds limit ${this.options.maxParameterCount.toString()}.`,
@@ -677,6 +686,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   }
 
   runEpoch(): FrozenFeatureTinyAdapterProgressV1 {
+    this.assertNotDisposed('run an epoch');
     if (this.currentEpoch >= this.options.epochs || this.earlyStopped) {
       return this.createProgress('completed');
     }
@@ -719,6 +729,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   }
 
   hasReachedTargetLoss(): boolean {
+    this.assertNotDisposed('read target-loss state');
     return (
       this.earlyStopped ||
       (this.options.targetLoss !== undefined && this.currentLoss <= this.options.targetLoss)
@@ -726,6 +737,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   }
 
   shouldCheckpoint(): boolean {
+    this.assertNotDisposed('read checkpoint cadence');
     return (
       this.options.checkpointEveryEpochs !== undefined &&
       this.currentEpoch > 0 &&
@@ -736,6 +748,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   createProgress(
     status: FrozenFeatureTinyAdapterProgressV1['status'],
   ): FrozenFeatureTinyAdapterProgressV1 {
+    this.assertNotDisposed('create progress');
     return createProgress({
       epoch: this.currentEpoch,
       epochs: this.options.epochs,
@@ -751,6 +764,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   }
 
   createCheckpoint(): FrozenFeatureTinyAdapterCheckpointV1 {
+    this.assertNotDisposed('create a checkpoint');
     const artifact = createArtifact(this.dataset, this.weights, this.bias, this.parameterCount);
     const resumeState = this.createResumeState();
     const resumeStateChecksum = checksumResumeState(resumeState);
@@ -781,6 +795,7 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   }
 
   finish(status: BrowserTrainingPrototypeStatus): FrozenFeatureTinyAdapterTrainingResultV1 {
+    this.assertNotDisposed('finish training');
     const artifact = createArtifact(this.dataset, this.weights, this.bias, this.parameterCount);
     const checkpoint = this.createCheckpoint();
     return {
@@ -822,6 +837,32 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
         containsProfileData: this.dataset.privacy.containsProfileData,
       }),
     };
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    zeroMutableArray(this.weights);
+    zeroMutableArray(this.bias);
+    zeroMutableArray(this.optimizerState.weightM);
+    zeroMutableArray(this.optimizerState.weightV);
+    zeroMutableArray(this.optimizerState.biasM);
+    zeroMutableArray(this.optimizerState.biasV);
+    this.optimizerState.step = 0;
+    this.gradientClipEvents = 0;
+    this.currentLoss = 0;
+    this.latestValidationLoss = undefined;
+    this.bestValidationLoss = undefined;
+    this.bestValidationEpoch = undefined;
+    this.epochsWithoutValidationImprovement = 0;
+    this.earlyStopped = false;
+    this.lastLearningRate = 0;
+  }
+
+  private assertNotDisposed(operation: string): void {
+    if (this.disposed) {
+      throw new Error(`Cannot ${operation}; frozen-feature tiny-adapter session is disposed.`);
+    }
   }
 
   private createResumeState(): FrozenFeatureTinyAdapterCheckpointResumeStateV1 {
@@ -1429,6 +1470,10 @@ function createAdamWOptimizerState(
     biasV: new Array<number>(biasParameterCount).fill(0),
     step: 0,
   };
+}
+
+function zeroMutableArray(values: number[]): void {
+  values.fill(0);
 }
 
 function createCheckpointOptimizerState(
