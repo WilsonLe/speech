@@ -1125,9 +1125,18 @@
                 "properties": {
                   "role": {
                     "const": "anchor-pack"
+                  },
+                  "license": {
+                    "type": "object",
+                    "properties": {
+                      "redistributionAllowed": {
+                        "const": true
+                      }
+                    },
+                    "required": ["redistributionAllowed"]
                   }
                 },
-                "required": ["role"]
+                "required": ["role", "license"]
               }
             ]
           },

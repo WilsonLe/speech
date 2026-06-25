@@ -1,5 +1,6 @@
 import hashlib
 import json
+import struct
 from pathlib import Path
 
 from speech_model_pack import validate_manifest_v3
@@ -90,6 +91,64 @@ def test_committed_browser_training_manifest_validates_and_hashes_artifacts() ->
         assert file_ref["mediaType"] == ARTIFACT_MEDIA_TYPE
         assert file_ref["sizeBytes"] == len(artifact_body)
         assert file_ref["sha256"] == hashlib.sha256(artifact_body).hexdigest()
+
+
+def test_committed_anchor_pack_is_generic_licensed_and_privacy_preserving() -> None:
+    artifact = json.loads((COMMITTED_ARTIFACT_DIR / "anchor-pack.json").read_text())
+    anchor_pack = artifact["anchorPack"]
+
+    assert artifact["artifactRole"] == "anchor-pack"
+    assert artifact["license"]["redistributionAllowed"] is True
+    assert artifact["provenance"]["source"] == "repo-generated-synthetic-fixture"
+    assert anchor_pack["kind"] == "generic-anchor-feature-pack-v1"
+    assert anchor_pack["contractVersion"] == 1
+    assert anchor_pack["featureTap"]["outputName"] == "encoded"
+    assert anchor_pack["featureEncoding"] == {
+        "valueEncoding": "json-float32",
+        "sourceDtype": "float16",
+        "frameDimension": 4,
+        "frameShiftMs": 10,
+    }
+    assert anchor_pack["licenseGate"] == {
+        "redistributionAllowed": True,
+        "sourceProvenanceRequired": True,
+        "syntheticOnly": True,
+        "participantConsentRequired": False,
+    }
+    assert anchor_pack["privacyGate"] == {
+        "containsRawAudio": False,
+        "containsTranscriptText": False,
+        "containsPrivateFrozenFeatureValues": False,
+        "containsPublicSyntheticFrozenFeatureValues": True,
+        "containsVoiceDerivedWeights": False,
+        "localOnly": True,
+    }
+    assert anchor_pack["caseCount"] == len(anchor_pack["cases"])
+    assert anchor_pack["caseIdSha256"] == [case["caseIdSha256"] for case in anchor_pack["cases"]]
+
+    for case in anchor_pack["cases"]:
+        assert set(case) == {
+            "caseIdSha256",
+            "language",
+            "voiceCondition",
+            "featureFrameCount",
+            "featureDimension",
+            "syntheticFeatureFrames",
+            "littleEndianFloat32FeatureSha256",
+            "expectedMetrics",
+            "license",
+            "provenance",
+        }
+        assert case["license"] == artifact["license"]
+        assert case["provenance"] == artifact["provenance"]
+        assert case["featureFrameCount"] == len(case["syntheticFeatureFrames"])
+        assert case["featureDimension"] == 4
+        assert all(
+            len(frame) == case["featureDimension"] for frame in case["syntheticFeatureFrames"]
+        )
+        flattened = [value for frame in case["syntheticFeatureFrames"] for value in frame]
+        feature_bytes = b"".join(struct.pack("<f", value) for value in flattened)
+        assert case["littleEndianFloat32FeatureSha256"] == hashlib.sha256(feature_bytes).hexdigest()
 
 
 def test_committed_ctc_projection_vectors_match_exported_projection_parameters() -> None:

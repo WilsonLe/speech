@@ -518,6 +518,29 @@ describe('model manifest validation', () => {
     );
   });
 
+  it('rejects non-redistributable anchor-pack artifact refs', () => {
+    const manifest = createManifestV3({
+      browserTraining: browserTrainingContract({
+        artifacts: {
+          ...browserTrainingContract().artifacts,
+          anchorPack: [
+            {
+              ...trainingArtifact('anchor-pack', 'anchor-pack'),
+              license: { ...artifactLicense, redistributionAllowed: false },
+            },
+          ],
+        },
+      }),
+    });
+
+    const result = validateSpeechModelManifestV3(manifest);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      'browserTraining.artifacts.anchorPack[0].license.redistributionAllowed must be true for anchor packs',
+    );
+  });
+
   it('rejects unsupported manifest schema versions through the dispatch validator', () => {
     expect(validateSpeechModelManifest({ schemaVersion: 4 })).toEqual({
       ok: false,

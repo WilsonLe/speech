@@ -358,6 +358,28 @@ def test_validate_manifest_v3_rejects_training_artifact_and_limit_mismatches() -
     )
 
 
+def test_validate_manifest_v3_rejects_non_redistributable_anchor_pack_refs() -> None:
+    manifest = load_v3_manifest()
+    browser_training = deepcopy(manifest["browserTraining"])
+    assert isinstance(browser_training, dict)
+    artifacts = browser_training["artifacts"]
+    assert isinstance(artifacts, dict)
+    anchor_ref = training_artifact("anchor-pack", "anchor-pack")
+    license_info = deepcopy(anchor_ref["license"])
+    assert isinstance(license_info, dict)
+    license_info["redistributionAllowed"] = False
+    anchor_ref["license"] = license_info
+    artifacts["anchorPack"] = [anchor_ref]
+    manifest["browserTraining"] = browser_training
+
+    errors = validate_manifest_v3(manifest)
+
+    assert (
+        "browserTraining.artifacts.anchorPack[0].license.redistributionAllowed must be true "
+        "for anchor packs" in errors
+    )
+
+
 def test_validate_manifest_dispatch_rejects_unknown_schema_version() -> None:
     assert validate_manifest({"schemaVersion": 4}) == ["schemaVersion must be 2 or 3"]
 
@@ -381,6 +403,12 @@ def test_manifest_v3_json_schema_declares_browser_training_contract() -> None:
     assert ctc_projection_schema["properties"]["artifact"]["allOf"][1]["properties"]["role"] == {
         "const": "eval-model"
     }
+    anchor_pack_schema = schema["$defs"]["browserTrainingArtifacts"]["properties"]["anchorPack"]
+    anchor_pack_item_gate = anchor_pack_schema["items"]["allOf"][1]
+    assert anchor_pack_item_gate["properties"]["role"] == {"const": "anchor-pack"}
+    assert anchor_pack_item_gate["properties"]["license"]["properties"][
+        "redistributionAllowed"
+    ] == {"const": True}
     adapter_schema = schema["$defs"]["browserTrainingAdapter"]
     assert adapter_schema["properties"]["runtimeGraph"]["allOf"][1]["properties"]["role"] == {
         "const": "runtime-adapter"

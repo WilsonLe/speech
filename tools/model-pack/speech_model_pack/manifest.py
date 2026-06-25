@@ -1114,13 +1114,33 @@ def _browser_training_artifacts(value: Any, file_keys: set[str], errors: list[st
         file_keys,
         errors,
     )
-    _browser_training_artifact_array(
+    _browser_training_anchor_pack_artifacts(
         value.get("anchorPack"),
         "browserTraining.artifacts.anchorPack",
-        "anchor-pack",
         file_keys,
         errors,
     )
+
+
+def _browser_training_anchor_pack_artifacts(
+    value: Any,
+    path: str,
+    file_keys: set[str],
+    errors: list[str],
+) -> None:
+    if not isinstance(value, Sequence) or isinstance(value, str) or len(value) == 0:
+        errors.append(f"{path} must be a non-empty array")
+        return
+    for index, entry in enumerate(value):
+        _browser_training_artifact_ref(entry, f"{path}[{index}]", "anchor-pack", file_keys, errors)
+        if (
+            isinstance(entry, Mapping)
+            and isinstance(entry.get("license"), Mapping)
+            and entry["license"].get("redistributionAllowed") is not True
+        ):
+            errors.append(
+                f"{path}[{index}].license.redistributionAllowed must be true for anchor packs"
+            )
 
 
 def _browser_training_artifact_array(

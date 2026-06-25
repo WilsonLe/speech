@@ -132,8 +132,8 @@
     },
     "anchor-pack": {
       "url": "browser-training/anchor-pack.json",
-      "sha256": "8e4d41f1ad60f9ccbf819d1b80c5aa2aa2a0f0aceb46650207aa1bc1ad955a98",
-      "sizeBytes": 1635,
+      "sha256": "5b838ed92ec98cf14b6901a03737830b93b7c29787969491551f6d897ac50335",
+      "sizeBytes": 6278,
       "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
     }
   },
