@@ -1,8 +1,11 @@
 import {
   createDefaultModelStorageBackend,
   deleteInstalledModelRecord,
+  getInferenceModelFileKeys,
   getInstalledModelRecord,
   getManifestRequiredStorageBytes,
+  getTrainingCompanionFileKeys,
+  getTrainingCompanionRequiredStorageBytes,
   installModelPack,
   parseModelCatalogV1,
   sha256ArrayBuffer,
@@ -11,7 +14,7 @@ import {
   type ModelCatalogV1,
   type ModelStorageBackend,
 } from '@speech/model-manager';
-import { parseSpeechModelManifestV2, type SpeechModelManifestV2 } from '@speech/protocol';
+import { parseSpeechModelManifest, type SpeechModelManifest } from '@speech/protocol';
 import type { ModelLifecycleRequest, ModelLifecycleResponse } from './model-lifecycle-client';
 
 const catalogUrl = '/model-catalog.json';
@@ -19,7 +22,7 @@ const textDecoder = new TextDecoder();
 
 let storagePromise: Promise<ModelStorageBackend> | null = null;
 let catalogPromise: Promise<ModelCatalogV1> | null = null;
-let manifestCache = new Map<string, SpeechModelManifestV2>();
+let manifestCache = new Map<string, SpeechModelManifest>();
 
 self.addEventListener('message', (event: MessageEvent<ModelLifecycleRequest>) => {
   void handleRequest(event.data);
@@ -64,10 +67,13 @@ async function handleInspectModel(modelId: string): Promise<void> {
       modelId: manifest.id,
       version: manifest.version,
       requiredStorageBytes: getManifestRequiredStorageBytes(manifest),
+      trainingCompanionRequiredStorageBytes: getTrainingCompanionRequiredStorageBytes(manifest),
       manifestSha256,
       manifestSha256MatchesCatalog: manifestSha256 === catalogEntry.manifestSha256,
       streamingReady: catalogEntry.runtime.streamingReady,
-      fileCount: Object.keys(manifest.files).length,
+      fileCount: getInferenceModelFileKeys(manifest).length,
+      inferenceFileCount: getInferenceModelFileKeys(manifest).length,
+      trainingCompanionFileCount: getTrainingCompanionFileKeys(manifest).length,
     },
   });
 }
@@ -99,7 +105,7 @@ async function getCatalogEntryAndManifest(modelId: string): Promise<{
     readonly manifestUrl: string;
     readonly manifestSha256: string;
   };
-  readonly manifest: SpeechModelManifestV2;
+  readonly manifest: SpeechModelManifest;
   readonly manifestBytes: ArrayBuffer;
 }> {
   const catalogEntry = await getCatalogEntry(modelId);
@@ -118,7 +124,7 @@ async function getCatalogEntryAndManifest(modelId: string): Promise<{
   }
 
   const manifestBytes = await fetchManifestBytes(manifestCatalogEntry.manifestUrl);
-  const manifest = parseSpeechModelManifestV2(
+  const manifest = parseSpeechModelManifest(
     JSON.parse(textDecoder.decode(manifestBytes)) as unknown,
   );
   manifestCache = new Map(manifestCache).set(modelId, manifest);
