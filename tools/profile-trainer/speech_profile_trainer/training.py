@@ -281,6 +281,7 @@ def _training_metadata(
                 "test": len(dataset.test),
             },
             "promptSplits": [_prompt_split_metadata(entry) for entry in dataset.prompt_splits],
+            "selectedVocabulary": _selected_vocabulary_metadata(dataset),
             "languages": _count_by(dataset.records, "language"),
             "voiceConditions": _count_by(dataset.records, "voice_condition"),
         },
@@ -297,6 +298,7 @@ def _training_metadata(
             "containsTranscriptText": False,
             "containsBaseModelWeights": False,
             "containsAdapterWeights": True,
+            "exposesRawVocabularyEntryIds": False,
         },
     }
 
@@ -367,6 +369,8 @@ def _dataset_seed(dataset: ProfileDataset, config: FrozenBaseAdapterTrainingConf
         hasher.update(record.prompt_id.encode())
         hasher.update(record.language.encode())
         hasher.update(record.voice_condition.encode())
+        for entry_id in record.selected_vocabulary_entry_ids:
+            hasher.update(entry_id.encode())
     return hasher.digest()
 
 
@@ -387,8 +391,31 @@ def _loss_curve(
     ]
 
 
-def _prompt_split_metadata(entry: ProfilePromptSplit) -> dict[str, str]:
-    return {"promptIdSha256": _sha256(entry.prompt_id.encode()), "split": entry.split}
+def _prompt_split_metadata(entry: ProfilePromptSplit) -> dict[str, Any]:
+    return {
+        "promptIdSha256": _sha256(entry.prompt_id.encode()),
+        "split": entry.split,
+        "selectedVocabularyEntryIdSha256": [
+            _sha256(entry_id.encode()) for entry_id in entry.selected_vocabulary_entry_ids
+        ],
+    }
+
+
+def _selected_vocabulary_metadata(dataset: ProfileDataset) -> dict[str, Any]:
+    entry_ids = sorted(
+        {
+            entry_id
+            for record in dataset.records
+            for entry_id in record.selected_vocabulary_entry_ids
+        }
+    )
+    return {
+        "selectedEntryCount": len(entry_ids),
+        "selectedUtteranceCount": sum(
+            1 for record in dataset.records if record.selected_vocabulary_entry_ids
+        ),
+        "selectedEntryIdSha256": [_sha256(entry_id.encode()) for entry_id in entry_ids],
+    }
 
 
 def _base_graph_file_keys(manifest: dict[str, Any]) -> dict[str, str]:

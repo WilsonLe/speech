@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VocabularyEntryV1 } from '@speech/protocol';
 import {
+  parseCustomVocabularyPromptId,
   scheduleCustomVocabularyPrompts,
   userVocabularyPromptLicenseId,
   type CustomVocabularyPromptTemplateV1,
@@ -42,6 +43,36 @@ describe('custom vocabulary prompt scheduling', () => {
       ),
     ).toBe(true);
     expect(result.prompts[0]?.customVocabulary.spokenAliases).toEqual(['dashboard dự án']);
+    expect(result.prompts[0]?.customVocabulary.selectedVocabularyEntryIds).toEqual([
+      'term-dashboard',
+    ]);
+  });
+
+  it('binds generated prompt metadata to the selected vocabulary revision hash', () => {
+    const result = scheduleCustomVocabularyPrompts({
+      entries: [baseEntry],
+      maxPromptsPerEntry: 1,
+      vocabularyRevisionSha256: 'f'.repeat(64),
+    });
+
+    expect(result.prompts[0]?.customVocabulary).toMatchObject({
+      vocabularyEntryId: 'term-dashboard',
+      selectedVocabularyEntryIds: ['term-dashboard'],
+      vocabularyRevisionSha256: 'f'.repeat(64),
+    });
+  });
+
+  it('parses generated prompt ids without losing vocabulary ids that contain colons', () => {
+    const result = scheduleCustomVocabularyPrompts({
+      entries: [{ ...baseEntry, id: 'team:alpha:launch' }],
+      maxPromptsPerEntry: 1,
+    });
+
+    expect(parseCustomVocabularyPromptId(result.prompts[0]!.id)).toEqual({
+      vocabularyEntryId: 'team:alpha:launch',
+      templateId: 'en-beginning-review',
+      voiceCondition: 'normal',
+    });
   });
 
   it('selects highest-priority enabled entries before lower-priority entries', () => {

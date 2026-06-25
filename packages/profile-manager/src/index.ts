@@ -3,6 +3,7 @@ import {
   buildCtcForcedAlignment,
   buildPromptIdentitySplitPlan,
   buildTrainingReadinessCoverageReport,
+  parseCustomVocabularyPromptId,
   summarizePromptIdentitySplitPlan,
   type CtcForcedAlignmentOptionsV1,
   type CtcForcedAlignmentResultV1,
@@ -85,6 +86,7 @@ export interface EnrollmentUtteranceV1 {
   readonly language: EnrollmentSentenceLanguage;
   readonly voiceCondition: EnrollmentVoiceCondition;
   readonly repetitionIndex: number;
+  readonly customVocabularyEntryIds?: readonly string[];
   readonly audio: EnrollmentUtteranceAudioV1;
   readonly capture: EnrollmentCaptureMetadataV1;
   readonly quality: EnrollmentQualityReportV1;
@@ -169,6 +171,7 @@ export interface TrainingJobEnrollmentUtteranceRefV1 {
   readonly repetitionIndex: number;
   readonly durationMs: number;
   readonly qualityStatus: EnrollmentQualityReportV1['status'];
+  readonly selectedVocabularyEntryIds: readonly string[];
   readonly audio: {
     readonly path: string;
     readonly sha256: string;
@@ -185,6 +188,12 @@ export interface TrainingJobEnrollmentRevisionV1 {
   readonly acceptedUtterances: number;
   readonly acceptedSeconds: number;
   readonly utterances: readonly TrainingJobEnrollmentUtteranceRefV1[];
+  readonly selectedVocabulary?: {
+    readonly vocabularyRevisionSha256: string;
+    readonly selectedEntryIds: readonly string[];
+    readonly selectedEntryCount: number;
+    readonly utteranceCount: number;
+  };
   readonly revisionSha256: string;
 }
 
@@ -232,6 +241,8 @@ export interface TrainingJobRevisionSummaryV1 {
     readonly storeRevision: number;
     readonly activeEntryCount: number;
     readonly revisionSha256: string;
+    readonly selectedEntryCount: number;
+    readonly selectedUtteranceCount: number;
   };
   readonly privacy: {
     readonly aggregateOnly: true;
@@ -293,6 +304,7 @@ export interface TrainingJobPromptIdentitySplitPlanV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: true;
+    readonly exposesRawVocabularyEntryIds: true;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -313,6 +325,7 @@ export interface TrainingJobPromptIdentitySplitSummaryV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: false;
+    readonly exposesRawVocabularyEntryIds: false;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -334,6 +347,7 @@ export interface TrainingJobFeatureShardUtteranceV1 {
   readonly frameCount: number;
   readonly durationMs: number;
   readonly audioSha256: string;
+  readonly selectedVocabularyEntryIds: readonly string[];
 }
 
 export interface TrainingJobFeatureShardV1 {
@@ -356,6 +370,21 @@ export interface TrainingJobFeatureSplitTotalsV1 {
   readonly shards: number;
   readonly durationSeconds: number;
   readonly sizeBytes: number;
+}
+
+export interface TrainingJobFeatureSelectedVocabularySplitTotalsV1 {
+  readonly utterances: number;
+  readonly frames: number;
+}
+
+export interface TrainingJobFeatureSelectedVocabularyTotalsV1 {
+  readonly vocabularyRevisionSha256?: string;
+  readonly selectedEntryCount: number;
+  readonly utterances: number;
+  readonly frames: number;
+  readonly splits: Readonly<
+    Record<'train' | 'validation' | 'test', TrainingJobFeatureSelectedVocabularySplitTotalsV1>
+  >;
 }
 
 export interface TrainingJobFeaturePreparationManifestV1 {
@@ -384,6 +413,7 @@ export interface TrainingJobFeaturePreparationManifestV1 {
       Record<'train' | 'validation' | 'test', TrainingJobFeatureSplitTotalsV1>
     >;
   };
+  readonly selectedVocabulary: TrainingJobFeatureSelectedVocabularyTotalsV1;
   readonly shards: readonly TrainingJobFeatureShardV1[];
   readonly manifestSha256: string;
   readonly privacy: {
@@ -396,6 +426,7 @@ export interface TrainingJobFeaturePreparationManifestV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: true;
+    readonly exposesRawVocabularyEntryIds: true;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -416,6 +447,7 @@ export interface TrainingJobFeaturePreparationSummaryV1 {
     'sampleRateHz' | 'melBinCount' | 'frameLengthMs' | 'frameShiftMs' | 'fftSize' | 'snipEdges'
   >;
   readonly totals: TrainingJobFeaturePreparationManifestV1['totals'];
+  readonly selectedVocabulary: TrainingJobFeaturePreparationManifestV1['selectedVocabulary'];
   readonly privacy: {
     readonly aggregateOnly: true;
     readonly localOnly: true;
@@ -425,6 +457,7 @@ export interface TrainingJobFeaturePreparationSummaryV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: false;
+    readonly exposesRawVocabularyEntryIds: false;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -490,6 +523,7 @@ export interface TrainingJobFrameLabelsUtteranceV1 {
   readonly lowConfidenceFrameCount: number;
   readonly meanFrameConfidence: number;
   readonly meanTokenConfidence: number | null;
+  readonly selectedVocabularyEntryIds: readonly string[];
 }
 
 export interface TrainingJobFrameLabelsSplitTotalsV1 {
@@ -499,6 +533,25 @@ export interface TrainingJobFrameLabelsSplitTotalsV1 {
   readonly frames: number;
   readonly usableFrames: number;
   readonly excludedFrames: number;
+}
+
+export interface TrainingJobFrameLabelsSelectedVocabularySplitTotalsV1 {
+  readonly utterances: number;
+  readonly frames: number;
+  readonly usableFrames: number;
+  readonly excludedFrames: number;
+}
+
+export interface TrainingJobFrameLabelsSelectedVocabularyTotalsV1 {
+  readonly vocabularyRevisionSha256?: string;
+  readonly selectedEntryCount: number;
+  readonly utterances: number;
+  readonly frames: number;
+  readonly usableFrames: number;
+  readonly excludedFrames: number;
+  readonly splits: Readonly<
+    Record<'train' | 'validation' | 'test', TrainingJobFrameLabelsSelectedVocabularySplitTotalsV1>
+  >;
 }
 
 export interface TrainingJobFrameLabelsManifestV1 {
@@ -534,6 +587,7 @@ export interface TrainingJobFrameLabelsManifestV1 {
       Record<'train' | 'validation' | 'test', TrainingJobFrameLabelsSplitTotalsV1>
     >;
   };
+  readonly selectedVocabulary: TrainingJobFrameLabelsSelectedVocabularyTotalsV1;
   readonly utterances: readonly TrainingJobFrameLabelsUtteranceV1[];
   readonly manifestSha256: string;
   readonly privacy: {
@@ -547,6 +601,7 @@ export interface TrainingJobFrameLabelsManifestV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: true;
+    readonly exposesRawVocabularyEntryIds: true;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -564,6 +619,7 @@ export interface TrainingJobFrameLabelsSummaryV1 {
   readonly featureManifestSha256: string;
   readonly manifestSha256: string;
   readonly totals: TrainingJobFrameLabelsManifestV1['totals'];
+  readonly selectedVocabulary: TrainingJobFrameLabelsManifestV1['selectedVocabulary'];
   readonly privacy: {
     readonly aggregateOnly: true;
     readonly localOnly: true;
@@ -575,6 +631,7 @@ export interface TrainingJobFrameLabelsSummaryV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly exposesRawPromptIds: false;
+    readonly exposesRawVocabularyEntryIds: false;
     readonly networkUpload: false;
     readonly telemetry: false;
   };
@@ -624,6 +681,7 @@ export interface SaveEnrollmentUtteranceInput {
   readonly capture: EnrollmentCaptureMetadataV1;
   readonly quality: EnrollmentQualityReportV1;
   readonly acceptedBy: EnrollmentAcceptedBy;
+  readonly customVocabularyEntryIds?: readonly string[];
   readonly utteranceId?: string;
 }
 
@@ -875,6 +933,9 @@ export class EnrollmentProfileStore {
     const metadataPath = profilePath(profileId, 'utterances', `${utteranceId}.json`);
     const createdAt = this.options.now?.() ?? new Date().toISOString();
     const audioSha256 = await this.digest(wavBytes);
+    const customVocabularyEntryIds = normalizeSelectedVocabularyEntryIds(
+      input.customVocabularyEntryIds ?? [],
+    );
     const utterance: EnrollmentUtteranceV1 = {
       schemaVersion: 1,
       id: utteranceId,
@@ -885,6 +946,7 @@ export class EnrollmentProfileStore {
       language: input.language,
       voiceCondition: input.voiceCondition,
       repetitionIndex: assertPositiveInteger(input.repetitionIndex, 'repetitionIndex'),
+      ...(customVocabularyEntryIds.length === 0 ? {} : { customVocabularyEntryIds }),
       audio: {
         path: pathToPortableString(audioPath),
         format: 'pcm_s16le_wav',
@@ -1096,17 +1158,18 @@ export class EnrollmentProfileStore {
     if (summary === undefined) {
       throw new Error(`Cannot freeze training job for missing enrollment profile ${profileId}.`);
     }
-    const enrollment = await buildTrainingJobEnrollmentRevision(
-      summary,
-      (bytes) => this.digest(bytes),
-      (path) => this.backend.getFile(path),
-    );
     const vocabulary =
       input.vocabularyStore === undefined
         ? undefined
         : await buildTrainingJobVocabularyRevision(input.vocabularyStore, (bytes) =>
             this.digest(bytes),
           );
+    const enrollment = await buildTrainingJobEnrollmentRevision(
+      summary,
+      (bytes) => this.digest(bytes),
+      (path) => this.backend.getFile(path),
+      vocabulary,
+    );
     const revision: TrainingJobRevisionV1 = {
       schemaVersion: 1,
       jobId,
@@ -1178,6 +1241,7 @@ export class EnrollmentProfileStore {
           summary,
           (bytes) => this.digest(bytes),
           (path) => this.backend.getFile(path),
+          revision.vocabulary,
         );
         const status =
           actualEnrollment.revisionSha256 === revision.enrollment.revisionSha256
@@ -1745,6 +1809,8 @@ export function summarizeTrainingJobRevision(
             storeRevision: revision.vocabulary.storeRevision,
             activeEntryCount: revision.vocabulary.activeEntryCount,
             revisionSha256: revision.vocabulary.revisionSha256,
+            selectedEntryCount: revision.enrollment.selectedVocabulary?.selectedEntryCount ?? 0,
+            selectedUtteranceCount: revision.enrollment.selectedVocabulary?.utteranceCount ?? 0,
           },
         }),
     privacy: {
@@ -1771,6 +1837,7 @@ export function buildTrainingJobPromptIdentitySplitPlan(
       language: utterance.language,
       voiceCondition: utterance.voiceCondition,
       durationMs: utterance.durationMs,
+      customVocabularyEntryIds: utterance.selectedVocabularyEntryIds,
     })),
     config,
   );
@@ -1788,6 +1855,7 @@ export function buildTrainingJobPromptIdentitySplitPlan(
       containsCheckpoints: false,
       containsAdapterWeights: false,
       exposesRawPromptIds: true,
+      exposesRawVocabularyEntryIds: true,
       networkUpload: false,
       telemetry: false,
     },
@@ -1812,6 +1880,7 @@ export function summarizeTrainingJobPromptIdentitySplitPlan(
       containsCheckpoints: false,
       containsAdapterWeights: false,
       exposesRawPromptIds: false,
+      exposesRawVocabularyEntryIds: false,
       networkUpload: false,
       telemetry: false,
     },
@@ -1840,6 +1909,7 @@ export function summarizeTrainingJobFeaturePreparationManifest(
       snipEdges: manifest.feature.snipEdges,
     },
     totals: manifest.totals,
+    selectedVocabulary: manifest.selectedVocabulary,
     privacy: createFeatureSummaryPrivacy(),
   };
 }
@@ -1859,6 +1929,7 @@ export function summarizeTrainingJobFrameLabelsManifest(
     featureManifestSha256: manifest.featureManifestSha256,
     manifestSha256: manifest.manifestSha256,
     totals: manifest.totals,
+    selectedVocabulary: manifest.selectedVocabulary,
     privacy: createFrameLabelsSummaryPrivacy(),
   };
 }
@@ -1925,6 +1996,10 @@ async function prepareFeatureShardFiles(
   }
 
   const totals = summarizeFeatureShardTotals(shards);
+  const selectedVocabulary = summarizeFeatureSelectedVocabulary(
+    shards,
+    input.revision.enrollment.selectedVocabulary?.vocabularyRevisionSha256,
+  );
   return {
     manifest: {
       schemaVersion: 1,
@@ -1943,6 +2018,7 @@ async function prepareFeatureShardFiles(
       dtype: 'float16-le',
       maxFramesPerShard: input.maxFramesPerShard,
       totals,
+      selectedVocabulary,
       privacy: {
         localOnly: true,
         defaultExportIncludesFeatures: false,
@@ -1953,6 +2029,7 @@ async function prepareFeatureShardFiles(
         containsCheckpoints: false,
         containsAdapterWeights: false,
         exposesRawPromptIds: true,
+        exposesRawVocabularyEntryIds: true,
         networkUpload: false,
         telemetry: false,
       },
@@ -2011,6 +2088,7 @@ interface TrainingJobFrameLabelsFileV1 {
     readonly frameCount: number;
     readonly targetTokenCount: number;
     readonly status: CtcForcedAlignmentResultV1['summary']['status'];
+    readonly selectedVocabularyEntryIds: readonly string[];
     readonly frames: readonly {
       readonly tokenId: number;
       readonly targetTokenIndex?: number;
@@ -2093,6 +2171,7 @@ async function prepareFrameLabelFiles(
       lowConfidenceFrameCount: alignment.summary.lowConfidenceFrameCount,
       meanFrameConfidence: alignment.summary.meanFrameConfidence,
       meanTokenConfidence: alignment.summary.meanTokenConfidence,
+      selectedVocabularyEntryIds: featureUtterance.selectedVocabularyEntryIds,
     });
     labelFileUtterances.push({
       utteranceId: featureUtterance.utteranceId,
@@ -2100,6 +2179,7 @@ async function prepareFrameLabelFiles(
       frameCount: featureUtterance.frameCount,
       targetTokenCount: alignment.targetTokenCount,
       status: alignment.summary.status,
+      selectedVocabularyEntryIds: featureUtterance.selectedVocabularyEntryIds,
       frames: alignment.frames.map((frame) => ({
         tokenId: frame.tokenId,
         ...(frame.targetTokenIndex === undefined
@@ -2161,6 +2241,10 @@ async function prepareFrameLabelFiles(
       sha256: labelSha256,
     },
     totals: summarizeFrameLabelTotals(utterances),
+    selectedVocabulary: summarizeFrameLabelSelectedVocabulary(
+      utterances,
+      input.featureManifest.selectedVocabulary.vocabularyRevisionSha256,
+    ),
     utterances,
     privacy,
   };
@@ -2266,6 +2350,88 @@ function createEmptyFrameLabelSplitTotals(): MutableFrameLabelSplitTotals {
   };
 }
 
+function summarizeFeatureSelectedVocabulary(
+  shards: readonly PreparedFeatureShardRecord[],
+  vocabularyRevisionSha256: string | undefined,
+): TrainingJobFeatureSelectedVocabularyTotalsV1 {
+  const entryIds = new Set<string>();
+  const splits = createSelectedFeatureSplits();
+  let utterances = 0;
+  let frames = 0;
+  for (const shard of shards) {
+    for (const utterance of shard.utterances) {
+      if (utterance.selectedVocabularyEntryIds.length === 0) continue;
+      utterances += 1;
+      frames += utterance.frameCount;
+      splits[utterance.split].utterances += 1;
+      splits[utterance.split].frames += utterance.frameCount;
+      utterance.selectedVocabularyEntryIds.forEach((entryId) => entryIds.add(entryId));
+    }
+  }
+  return {
+    ...(vocabularyRevisionSha256 === undefined ? {} : { vocabularyRevisionSha256 }),
+    selectedEntryCount: entryIds.size,
+    utterances,
+    frames,
+    splits,
+  };
+}
+
+function summarizeFrameLabelSelectedVocabulary(
+  utterances: readonly TrainingJobFrameLabelsUtteranceV1[],
+  vocabularyRevisionSha256: string | undefined,
+): TrainingJobFrameLabelsSelectedVocabularyTotalsV1 {
+  const entryIds = new Set<string>();
+  const splits = createSelectedFrameLabelSplits();
+  let utteranceCount = 0;
+  let frames = 0;
+  let usableFrames = 0;
+  let excludedFrames = 0;
+  for (const utterance of utterances) {
+    if (utterance.selectedVocabularyEntryIds.length === 0) continue;
+    utteranceCount += 1;
+    frames += utterance.frameCount;
+    usableFrames += utterance.usableFrameCount;
+    excludedFrames += utterance.excludedFrameCount;
+    splits[utterance.split].utterances += 1;
+    splits[utterance.split].frames += utterance.frameCount;
+    splits[utterance.split].usableFrames += utterance.usableFrameCount;
+    splits[utterance.split].excludedFrames += utterance.excludedFrameCount;
+    utterance.selectedVocabularyEntryIds.forEach((entryId) => entryIds.add(entryId));
+  }
+  return {
+    ...(vocabularyRevisionSha256 === undefined ? {} : { vocabularyRevisionSha256 }),
+    selectedEntryCount: entryIds.size,
+    utterances: utteranceCount,
+    frames,
+    usableFrames,
+    excludedFrames,
+    splits,
+  };
+}
+
+function createSelectedFeatureSplits(): Record<
+  (typeof featureSplitNames)[number],
+  { utterances: number; frames: number }
+> {
+  return {
+    train: { utterances: 0, frames: 0 },
+    validation: { utterances: 0, frames: 0 },
+    test: { utterances: 0, frames: 0 },
+  };
+}
+
+function createSelectedFrameLabelSplits(): Record<
+  (typeof featureSplitNames)[number],
+  { utterances: number; frames: number; usableFrames: number; excludedFrames: number }
+> {
+  return {
+    train: { utterances: 0, frames: 0, usableFrames: 0, excludedFrames: 0 },
+    validation: { utterances: 0, frames: 0, usableFrames: 0, excludedFrames: 0 },
+    test: { utterances: 0, frames: 0, usableFrames: 0, excludedFrames: 0 },
+  };
+}
+
 const featureSplitNames = ['train', 'validation', 'test'] as const;
 
 interface MutableFeatureShardBuilder {
@@ -2319,6 +2485,7 @@ function addUtteranceFeaturesToShardBuilders(
     frameCount: features.frameCount,
     durationMs: utterance.durationMs,
     audioSha256: utterance.audio.sha256,
+    selectedVocabularyEntryIds: utterance.selectedVocabularyEntryIds,
   });
 }
 
@@ -2506,6 +2673,7 @@ function createFeatureSummaryPrivacy(): TrainingJobFeaturePreparationSummaryV1['
     containsCheckpoints: false,
     containsAdapterWeights: false,
     exposesRawPromptIds: false,
+    exposesRawVocabularyEntryIds: false,
     networkUpload: false,
     telemetry: false,
   };
@@ -2523,6 +2691,7 @@ function createFrameLabelsManifestPrivacy(): TrainingJobFrameLabelsManifestV1['p
     containsCheckpoints: false,
     containsAdapterWeights: false,
     exposesRawPromptIds: true,
+    exposesRawVocabularyEntryIds: true,
     networkUpload: false,
     telemetry: false,
   };
@@ -2540,6 +2709,7 @@ function createFrameLabelsSummaryPrivacy(): TrainingJobFrameLabelsSummaryV1['pri
     containsCheckpoints: false,
     containsAdapterWeights: false,
     exposesRawPromptIds: false,
+    exposesRawVocabularyEntryIds: false,
     networkUpload: false,
     telemetry: false,
   };
@@ -2549,6 +2719,7 @@ async function buildTrainingJobEnrollmentRevision(
   summary: EnrollmentProfileSummaryV1,
   digest: (bytes: ArrayBuffer) => Promise<string>,
   readFile?: (path: readonly string[]) => Promise<ArrayBuffer | undefined>,
+  vocabulary?: TrainingJobVocabularyRevisionV1,
 ): Promise<TrainingJobEnrollmentRevisionV1> {
   const utterances = await Promise.all(
     summary.utterances.map(async (utterance): Promise<TrainingJobEnrollmentUtteranceRefV1> => {
@@ -2560,6 +2731,10 @@ async function buildTrainingJobEnrollmentRevision(
         audioBytes === undefined ? utterance.audio.sha256 : await digest(audioBytes);
       const audioSizeBytes =
         audioBytes === undefined ? utterance.audio.sizeBytes : audioBytes.byteLength;
+      const selectedVocabularyEntryIds = selectedVocabularyEntryIdsForUtterance(
+        utterance,
+        vocabulary,
+      );
       return {
         id: utterance.id,
         promptId: utterance.promptId,
@@ -2569,6 +2744,7 @@ async function buildTrainingJobEnrollmentRevision(
         repetitionIndex: utterance.repetitionIndex,
         durationMs: utterance.audio.durationMs,
         qualityStatus: utterance.quality.status,
+        selectedVocabularyEntryIds,
         audio: {
           path: utterance.audio.path,
           sha256: audioSha256,
@@ -2581,6 +2757,7 @@ async function buildTrainingJobEnrollmentRevision(
       };
     }),
   );
+  const selectedVocabulary = summarizeEnrollmentSelectedVocabulary(utterances, vocabulary);
   const unsigned = {
     schemaVersion: 1,
     profileUpdatedAt: summary.profile.updatedAt,
@@ -2588,6 +2765,7 @@ async function buildTrainingJobEnrollmentRevision(
     acceptedUtterances: summary.profile.enrollment.acceptedUtterances,
     acceptedSeconds: summary.profile.enrollment.acceptedSeconds,
     utterances,
+    ...(selectedVocabulary === undefined ? {} : { selectedVocabulary }),
   } satisfies Omit<TrainingJobEnrollmentRevisionV1, 'revisionSha256'>;
   return {
     ...unsigned,
@@ -2620,6 +2798,49 @@ async function buildTrainingJobVocabularyRevision(
   };
 }
 
+function selectedVocabularyEntryIdsForUtterance(
+  utterance: EnrollmentUtteranceV1,
+  vocabulary: TrainingJobVocabularyRevisionV1 | undefined,
+): readonly string[] {
+  if (vocabulary === undefined) return [];
+  const activeEntryIds = new Set(vocabulary.revision.entries.map((entry) => entry.id));
+  const explicitIds = normalizeSelectedVocabularyEntryIds(utterance.customVocabularyEntryIds ?? []);
+  const parsedId = parseCustomVocabularyPromptId(utterance.promptId)?.vocabularyEntryId;
+  return normalizeSelectedVocabularyEntryIds([
+    ...explicitIds,
+    ...(parsedId === undefined ? [] : [parsedId]),
+  ]).filter((entryId) => activeEntryIds.has(entryId));
+}
+
+function summarizeEnrollmentSelectedVocabulary(
+  utterances: readonly TrainingJobEnrollmentUtteranceRefV1[],
+  vocabulary: TrainingJobVocabularyRevisionV1 | undefined,
+): TrainingJobEnrollmentRevisionV1['selectedVocabulary'] {
+  if (vocabulary === undefined) return undefined;
+  const selectedEntryIds = normalizeSelectedVocabularyEntryIds(
+    utterances.flatMap((utterance) => utterance.selectedVocabularyEntryIds),
+  );
+  return {
+    vocabularyRevisionSha256: vocabulary.revisionSha256,
+    selectedEntryIds,
+    selectedEntryCount: selectedEntryIds.length,
+    utteranceCount: utterances.filter(
+      (utterance) => utterance.selectedVocabularyEntryIds.length > 0,
+    ).length,
+  };
+}
+
+function normalizeSelectedVocabularyEntryIds(entryIds: readonly string[]): readonly string[] {
+  return [
+    ...new Set(
+      entryIds
+        .map((entryId) => entryId.trim())
+        .filter(Boolean)
+        .map((entryId) => normalizeSegment(entryId, 'vocabularyEntryId')),
+    ),
+  ].sort((left, right) => left.localeCompare(right, 'vi'));
+}
+
 export function buildTrainingReadinessCoverageReportForProfile(
   summary: EnrollmentProfileSummaryV1,
   policy?: TrainingReadinessPolicyV1,
@@ -2643,6 +2864,9 @@ function toTrainingReadinessUtterance(
     voiceCondition: utterance.voiceCondition,
     durationMs: utterance.audio.durationMs,
     qualityStatus: utterance.quality.status,
+    ...(utterance.customVocabularyEntryIds === undefined
+      ? {}
+      : { customVocabularyEntryIds: utterance.customVocabularyEntryIds }),
   };
 }
 

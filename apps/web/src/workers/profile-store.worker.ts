@@ -52,6 +52,7 @@ export type ProfileStoreWorkerRequest =
       readonly capture: EnrollmentCaptureMetadataV1;
       readonly quality: EnrollmentQualityReportV1;
       readonly acceptedBy: 'manual' | 'automatic';
+      readonly customVocabularyEntryIds?: readonly string[];
     }
   | {
       readonly type: 'FREEZE_TRAINING_JOB_REVISION';
@@ -249,6 +250,9 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
           capture: message.capture,
           quality: message.quality,
           acceptedBy: message.acceptedBy,
+          ...(message.customVocabularyEntryIds === undefined
+            ? {}
+            : { customVocabularyEntryIds: message.customVocabularyEntryIds }),
         });
         const summary = await store.getProfileSummary(message.profileId);
         if (summary === undefined) {

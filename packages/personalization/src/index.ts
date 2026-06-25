@@ -300,6 +300,7 @@ export interface HeldOutProfileEvaluationPrivacyV1 {
   readonly containsTranscriptText: false;
   readonly containsRawProfileData: false;
   readonly containsModelWeights: false;
+  readonly exposesRawVocabularyEntryIds: false;
   readonly networkUpload: false;
   readonly localOnly: true;
 }
@@ -333,6 +334,7 @@ export interface HeldOutProfileEvaluationCaseInputV1 {
   readonly id: string;
   readonly language: EnrollmentSentenceLanguage;
   readonly voiceCondition: EnrollmentVoiceCondition;
+  readonly selectedVocabularyEntryIds?: readonly string[];
   readonly nonTargetCustomTermUtterance?: boolean;
   readonly base: HeldOutProfileEvaluationCaseMetricsInputV1;
   readonly profile: HeldOutProfileEvaluationCaseMetricsInputV1;
@@ -362,6 +364,11 @@ export interface HeldOutProfileEvaluationMetricComparisonV1 {
   readonly status: HeldOutProfileEvaluationComparisonStatus;
 }
 
+export interface HeldOutProfileEvaluationSelectedVocabularySummaryV1 {
+  readonly selectedEntryCount: number;
+  readonly selectedCaseCount: number;
+}
+
 export interface HeldOutProfileEvaluationSliceV1 {
   readonly id: string;
   readonly label: string;
@@ -370,6 +377,7 @@ export interface HeldOutProfileEvaluationSliceV1 {
     readonly voiceCondition?: EnrollmentVoiceCondition;
   };
   readonly caseCount: number;
+  readonly selectedVocabulary: HeldOutProfileEvaluationSelectedVocabularySummaryV1;
   readonly metrics: readonly HeldOutProfileEvaluationMetricComparisonV1[];
 }
 
@@ -407,6 +415,7 @@ export interface HeldOutProfileEvaluationSummaryV1 {
   readonly caseCount: number;
   readonly languageCounts: Readonly<Record<EnrollmentSentenceLanguage, number>>;
   readonly voiceConditionCounts: Readonly<Record<EnrollmentVoiceCondition, number>>;
+  readonly selectedVocabulary: HeldOutProfileEvaluationSelectedVocabularySummaryV1;
 }
 
 export interface HeldOutProfileEvaluationReportV1 {
@@ -549,6 +558,7 @@ function createHeldOutEvaluationPrivacy(): HeldOutProfileEvaluationPrivacyV1 {
     containsTranscriptText: false,
     containsRawProfileData: false,
     containsModelWeights: false,
+    exposesRawVocabularyEntryIds: false,
     networkUpload: false,
     localOnly: true,
   };
@@ -566,10 +576,14 @@ function copyAndValidateHeldOutCase(
     validateNoExpectedCustomTargets(input.base, `${input.id}.base`);
     validateNoExpectedCustomTargets(input.profile, `${input.id}.profile`);
   }
+  const selectedVocabularyEntryIds = normalizeSelectedVocabularyEntryIds(
+    input.selectedVocabularyEntryIds ?? [],
+  );
   return {
     id: input.id,
     language: input.language,
     voiceCondition: input.voiceCondition,
+    ...(selectedVocabularyEntryIds.length === 0 ? {} : { selectedVocabularyEntryIds }),
     ...(input.nonTargetCustomTermUtterance === undefined
       ? {}
       : { nonTargetCustomTermUtterance: input.nonTargetCustomTermUtterance }),
@@ -719,6 +733,7 @@ function createHeldOutSlice(
     label,
     filters: { ...filters },
     caseCount: cases.length,
+    selectedVocabulary: summarizeHeldOutSelectedVocabulary(cases),
     metrics: [
       createRateComparison('wordErrorRate', 'ratio', 'lower-is-better', cases, (metrics) => ({
         numerator: metrics.wordErrorCount,
@@ -931,7 +946,35 @@ function summarizeHeldOutCases(
     languageCounts[testCase.language] += 1;
     voiceConditionCounts[testCase.voiceCondition] += 1;
   }
-  return { caseCount: cases.length, languageCounts, voiceConditionCounts };
+  return {
+    caseCount: cases.length,
+    languageCounts,
+    voiceConditionCounts,
+    selectedVocabulary: summarizeHeldOutSelectedVocabulary(cases),
+  };
+}
+
+function summarizeHeldOutSelectedVocabulary(
+  cases: readonly HeldOutProfileEvaluationCaseInputV1[],
+): HeldOutProfileEvaluationSelectedVocabularySummaryV1 {
+  const selectedEntryIds = new Set<string>();
+  let selectedCaseCount = 0;
+  for (const testCase of cases) {
+    const entryIds = normalizeSelectedVocabularyEntryIds(testCase.selectedVocabularyEntryIds ?? []);
+    if (entryIds.length === 0) continue;
+    selectedCaseCount += 1;
+    entryIds.forEach((entryId) => selectedEntryIds.add(entryId));
+  }
+  return {
+    selectedEntryCount: selectedEntryIds.size,
+    selectedCaseCount,
+  };
+}
+
+function normalizeSelectedVocabularyEntryIds(entryIds: readonly string[]): readonly string[] {
+  return [...new Set(entryIds.map((entryId) => entryId.trim()).filter(Boolean))].sort(
+    (left, right) => left.localeCompare(right, 'vi'),
+  );
 }
 
 function evaluateHeldOutActivationGate(

@@ -36,8 +36,16 @@ def test_activation_gate_passes_with_personal_improvement_and_clean_anchor(
         "anchor": 2,
     }
     assert report["evaluation"]["personalHoldout"]["wer"]["relativeImprovement"] > 0.05
+    assert report["evaluation"]["personalHoldout"]["selectedVocabulary"] == {
+        "selectedEntryCount": 2,
+        "selectedCaseCount": 2,
+    }
     assert report["evaluation"]["anchor"]["wer"]["delta"] == 0
     assert report["evaluation"]["anchor"]["customTermRecall"]["base"] is None
+    assert report["evaluation"]["anchor"]["selectedVocabulary"] == {
+        "selectedEntryCount": 0,
+        "selectedCaseCount": 0,
+    }
     assert report["evaluation"]["overall"]["falseInsertionRate"]["inactiveTargets"] == 5
     assert report["evaluation"]["overall"]["falseInsertionRate"]["insertions"]["adapted"] == 0
     assert report["privacy"] == {
@@ -46,11 +54,14 @@ def test_activation_gate_passes_with_personal_improvement_and_clean_anchor(
         "containsCaseIds": False,
         "containsBaseModelWeights": False,
         "containsAdapterWeights": False,
+        "exposesRawVocabularyEntryIds": False,
     }
     report_text = json.dumps(report, ensure_ascii=False)
     assert "Wilson Speech private launch" not in report_text
     assert "case-personal" not in report_text
     assert "SecretInactiveTerm" not in report_text
+    assert "term-secret" not in report_text
+    assert "term-dashboard" not in report_text
 
 
 def test_activation_gate_fails_on_anchor_regression_and_adapter_size() -> None:
@@ -72,6 +83,13 @@ def test_anchor_cases_cannot_declare_expected_custom_terms() -> None:
     case = _passing_cases()[2] | {"expectedCustomTerms": ["should-not-be-here"]}
 
     with pytest.raises(ValueError, match="anchor evaluation cases"):
+        parse_evaluation_case(case)
+
+
+def test_anchor_cases_cannot_declare_selected_vocabulary_ids() -> None:
+    case = _passing_cases()[2] | {"selectedVocabularyEntryIds": ["term-secret"]}
+
+    with pytest.raises(ValueError, match="selectedVocabularyEntryIds"):
         parse_evaluation_case(case)
 
 
@@ -129,6 +147,7 @@ def _passing_cases() -> list[dict[str, Any]]:
             "adaptedText": "Please open Wilson Speech private launch.",
             "expectedCustomTerms": ["Wilson Speech"],
             "inactiveCustomTerms": ["SecretInactiveTerm"],
+            "selectedVocabularyEntryIds": ["term-secret", "term-secret"],
             "durationMs": 3000,
             "baseRtf": 0.1,
             "adaptedRtf": 0.11,
@@ -143,6 +162,7 @@ def _passing_cases() -> list[dict[str, Any]]:
             "adaptedText": "Tôi vừa update dashboard hôm nay.",
             "expectedCustomTerms": ["update dashboard"],
             "inactiveCustomTerms": ["SecretInactiveTerm", "dash"],
+            "selectedVocabularyEntryIds": ["term-dashboard"],
             "durationMs": 2800,
             "baseRtf": 0.1,
             "adaptedRtf": 0.11,

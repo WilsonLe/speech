@@ -26,6 +26,7 @@ class EvaluationCase:
     adapted_text: str
     expected_custom_terms: tuple[str, ...]
     inactive_custom_terms: tuple[str, ...]
+    selected_vocabulary_entry_ids: tuple[str, ...]
     duration_ms: int
     base_rtf: float
     adapted_rtf: float
@@ -136,6 +137,7 @@ def evaluate_adapter_activation(
             "containsCaseIds": False,
             "containsBaseModelWeights": False,
             "containsAdapterWeights": False,
+            "exposesRawVocabularyEntryIds": False,
         },
     }
     activation_gate = _activation_gate(report, gate_config)
@@ -185,8 +187,13 @@ def parse_evaluation_case(value: dict[str, Any]) -> EvaluationCase:
     adapted_text = _required_string(value, "adaptedText")
     expected_custom_terms = tuple(_string_list(value, "expectedCustomTerms", required=False))
     inactive_custom_terms = tuple(_string_list(value, "inactiveCustomTerms", required=False))
+    selected_vocabulary_entry_ids = tuple(
+        _dedupe_sorted(_string_list(value, "selectedVocabularyEntryIds", required=False))
+    )
     if split == "anchor" and expected_custom_terms:
         raise ValueError("anchor evaluation cases must not declare expectedCustomTerms")
+    if split == "anchor" and selected_vocabulary_entry_ids:
+        raise ValueError("anchor evaluation cases must not declare selectedVocabularyEntryIds")
     return EvaluationCase(
         case_id=_required_string(value, "id"),
         split=split,  # type: ignore[arg-type]
@@ -197,6 +204,7 @@ def parse_evaluation_case(value: dict[str, Any]) -> EvaluationCase:
         adapted_text=adapted_text,
         expected_custom_terms=expected_custom_terms,
         inactive_custom_terms=inactive_custom_terms,
+        selected_vocabulary_entry_ids=selected_vocabulary_entry_ids,
         duration_ms=_positive_int(value, "durationMs"),
         base_rtf=_non_negative_number(value, "baseRtf"),
         adapted_rtf=_non_negative_number(value, "adaptedRtf"),
@@ -221,6 +229,8 @@ def _summarize_cases(cases: tuple[EvaluationCase, ...]) -> dict[str, Any]:
     total_duration_ms = 0
     base_rtf_sum = 0.0
     adapted_rtf_sum = 0.0
+    selected_vocabulary_entry_ids: set[str] = set()
+    selected_vocabulary_case_count = 0
     for case in cases:
         reference_words = _word_tokens(case.reference_text)
         base_words = _word_tokens(case.base_text)
@@ -242,6 +252,9 @@ def _summarize_cases(cases: tuple[EvaluationCase, ...]) -> dict[str, Any]:
             inactive_targets += 1
             base_false_insertions += int(_contains_term(case.base_text, term))
             adapted_false_insertions += int(_contains_term(case.adapted_text, term))
+        if case.selected_vocabulary_entry_ids:
+            selected_vocabulary_case_count += 1
+            selected_vocabulary_entry_ids.update(case.selected_vocabulary_entry_ids)
         total_duration_ms += case.duration_ms
         base_rtf_sum += case.base_rtf
         adapted_rtf_sum += case.adapted_rtf
@@ -256,6 +269,10 @@ def _summarize_cases(cases: tuple[EvaluationCase, ...]) -> dict[str, Any]:
         "durationMs": total_duration_ms,
         "wer": _metric(base_word_errors, adapted_word_errors, word_count),
         "cer": _metric(base_char_errors, adapted_char_errors, char_count),
+        "selectedVocabulary": {
+            "selectedEntryCount": len(selected_vocabulary_entry_ids),
+            "selectedCaseCount": selected_vocabulary_case_count,
+        },
         "customTermRecall": {
             "base": round(base_custom_recall, 6) if custom_targets else None,
             "adapted": round(adapted_custom_recall, 6) if custom_targets else None,
@@ -288,6 +305,7 @@ def _empty_summary() -> dict[str, Any]:
         "durationMs": 0,
         "wer": _metric(0, 0, 0),
         "cer": _metric(0, 0, 0),
+        "selectedVocabulary": {"selectedEntryCount": 0, "selectedCaseCount": 0},
         "customTermRecall": {
             "base": None,
             "adapted": None,
@@ -467,6 +485,10 @@ def _string_list(value: dict[str, Any], key: str, *, required: bool) -> list[str
             raise ValueError(f"{key}[{index}] must be a non-empty string")
         output.append(item)
     return output
+
+
+def _dedupe_sorted(values: list[str]) -> list[str]:
+    return sorted(set(item.strip() for item in values if item.strip()))
 
 
 def _enum(value: Any, path: str, allowed: set[str]) -> str:

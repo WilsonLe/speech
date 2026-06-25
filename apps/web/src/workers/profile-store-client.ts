@@ -75,6 +75,7 @@ export interface SaveAcceptedEnrollmentTakeOptions {
   readonly capture: EnrollmentCaptureMetadataV1;
   readonly quality: EnrollmentQualityReportV1;
   readonly acceptedBy: 'manual' | 'automatic';
+  readonly customVocabularyEntryIds?: readonly string[];
   readonly timeoutMs?: number;
 }
 
@@ -246,6 +247,9 @@ export function saveAcceptedEnrollmentTake(
     capture: options.capture,
     quality: options.quality,
     acceptedBy: options.acceptedBy,
+    ...(options.customVocabularyEntryIds === undefined
+      ? {}
+      : { customVocabularyEntryIds: options.customVocabularyEntryIds }),
   };
   return requestProfileStore(message, options.timeoutMs, [message.pcm]).then((response) => {
     if (response.type !== 'PROFILE_STORE_SAVE_COMPLETE') {

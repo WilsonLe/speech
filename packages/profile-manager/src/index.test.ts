@@ -253,6 +253,99 @@ describe('enrollment profile store', () => {
     ).rejects.toThrow(/already exists/);
   });
 
+  it('carries selected vocabulary ids through prompt, feature, and frame-label metadata', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveSelectedVocabularyTake(store, {
+      utteranceId: 'utt-selected-vocab',
+      promptId: 'custom-vocab:term-secret:en-beginning-review:normal',
+    });
+    const vocabularyStore = createVocabularyStoreFixture();
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-selected-vocab',
+      jobId: 'job-selected-vocab',
+      vocabularyStore,
+    });
+
+    expect(revision.enrollment.utterances[0]).toMatchObject({
+      promptId: 'custom-vocab:term-secret:en-beginning-review:normal',
+      selectedVocabularyEntryIds: ['term-secret'],
+    });
+    expect(revision.enrollment.selectedVocabulary).toMatchObject({
+      vocabularyRevisionSha256: revision.vocabulary?.revisionSha256,
+      selectedEntryIds: ['term-secret'],
+      selectedEntryCount: 1,
+      utteranceCount: 1,
+    });
+    expect(summarizeTrainingJobRevision(revision).vocabulary).toMatchObject({
+      activeEntryCount: 1,
+      selectedEntryCount: 1,
+      selectedUtteranceCount: 1,
+    });
+
+    const split = await store.buildTrainingJobPromptIdentitySplit({
+      jobId: revision.jobId,
+      config: { seed: 'selected-vocab', trainRatio: 1, validationRatio: 0, testRatio: 0 },
+    });
+    expect(split.split.assignments[0]).toMatchObject({
+      selectedVocabularyEntryIds: ['term-secret'],
+    });
+    const splitSummary = summarizeTrainingJobPromptIdentitySplitPlan(split);
+    expect(splitSummary.split.assignments[0]).toMatchObject({ selectedVocabularyEntryCount: 1 });
+    expect(splitSummary.privacy.exposesRawVocabularyEntryIds).toBe(false);
+
+    const featureManifest = await store.prepareTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-selected-vocab',
+      splitConfig: { seed: 'selected-vocab', trainRatio: 1, validationRatio: 0, testRatio: 0 },
+    });
+    expect(featureManifest.selectedVocabulary).toMatchObject({
+      vocabularyRevisionSha256: revision.vocabulary?.revisionSha256,
+      selectedEntryCount: 1,
+      utterances: 1,
+      frames: featureManifest.totals.frames,
+    });
+    expect(featureManifest.shards[0]?.utterances[0]?.selectedVocabularyEntryIds).toEqual([
+      'term-secret',
+    ]);
+    const featureSummary = summarizeTrainingJobFeaturePreparationManifest(featureManifest);
+    expect(featureSummary.selectedVocabulary).toMatchObject({ selectedEntryCount: 1 });
+    expect(featureSummary.privacy.exposesRawVocabularyEntryIds).toBe(false);
+
+    const featureUtterance = featureManifest.shards[0]?.utterances[0];
+    if (featureUtterance === undefined) throw new Error('Expected selected vocabulary feature.');
+    const labels = await store.prepareTrainingJobFrameLabels({
+      jobId: revision.jobId,
+      featureSetId: 'features-selected-vocab',
+      alignmentSetId: 'alignments-selected-vocab',
+      alignments: [
+        {
+          utteranceId: featureUtterance.utteranceId,
+          targetTokenIds: [1, 2, 3],
+          frameCount: featureUtterance.frameCount,
+          vocabularySize: 5,
+          blankId: 0,
+          frameLogits: makeCtcLogitsForFrames(featureUtterance.frameCount, [1, 2, 3], 5, 0),
+        },
+      ],
+    });
+    expect(labels.utterances[0]).toMatchObject({ selectedVocabularyEntryIds: ['term-secret'] });
+    expect(labels.selectedVocabulary).toMatchObject({
+      vocabularyRevisionSha256: revision.vocabulary?.revisionSha256,
+      selectedEntryCount: 1,
+      utterances: 1,
+      frames: featureUtterance.frameCount,
+      usableFrames: labels.utterances[0]?.usableFrameCount,
+    });
+    const labelSummary = summarizeTrainingJobFrameLabelsManifest(labels);
+    expect(labelSummary.selectedVocabulary).toMatchObject({ selectedEntryCount: 1 });
+    expect(labelSummary.privacy.exposesRawVocabularyEntryIds).toBe(false);
+
+    const redactedText = JSON.stringify({ splitSummary, featureSummary, labelSummary });
+    expect(redactedText).not.toContain('term-secret');
+    expect(redactedText).not.toContain('Project Condor');
+  });
+
   it('builds deterministic prompt-identity splits from frozen training job revisions', async () => {
     const store = createStore(new InMemoryProfileStorageBackend());
     await saveSplitTake(
@@ -1068,6 +1161,34 @@ async function saveSplitTake(
     quality,
     acceptedBy: 'manual',
     utteranceId,
+  });
+}
+
+async function saveSelectedVocabularyTake(
+  store: EnrollmentProfileStore,
+  input: {
+    readonly utteranceId: string;
+    readonly promptId: string;
+  },
+): Promise<void> {
+  await store.saveEnrollmentUtterance({
+    profileId: 'profile-selected-vocab',
+    profileDisplayName: 'Profile selected vocabulary',
+    sentenceBankVersion: 'synthetic-v1',
+    promptId: input.promptId,
+    promptVersion: 1,
+    referenceText: 'Please review Project Condor today.',
+    language: 'en',
+    voiceCondition: 'normal',
+    repetitionIndex: 1,
+    wavBytes: encodePcm16Wav(makeTone(1_200, 0.1), 16_000),
+    sampleRateHz: 16_000,
+    durationMs: 1_200,
+    capture,
+    quality,
+    acceptedBy: 'manual',
+    customVocabularyEntryIds: ['term-secret'],
+    utteranceId: input.utteranceId,
   });
 }
 

@@ -1,3 +1,4 @@
+import { parseCustomVocabularyPromptId } from './custom-vocabulary-prompts';
 import {
   enrollmentSentenceLanguageValues,
   enrollmentVoiceConditionValues,
@@ -30,6 +31,7 @@ export interface TrainingReadinessAcceptedUtteranceV1 {
   readonly durationMs: number;
   readonly qualityStatus?: EnrollmentTakeQualityStatus;
   readonly customVocabularyEntryId?: string;
+  readonly customVocabularyEntryIds?: readonly string[];
 }
 
 export interface TrainingReadinessBucketTargetV1<TValue extends string> {
@@ -286,8 +288,7 @@ export function buildTrainingReadinessCoverageReport(
 }
 
 export function inferCustomVocabularyEntryIdFromPromptId(promptId: string): string | undefined {
-  const match = /^custom-vocab:(.+):[^:]+:(?:whisper|normal|projected)$/u.exec(promptId);
-  return match?.[1];
+  return parseCustomVocabularyPromptId(promptId)?.vocabularyEntryId;
 }
 
 function summarizePolicyForReport(
@@ -370,11 +371,20 @@ function validateTrainingReadinessUtterance(
     throw new Error(`Unsupported utterance voice condition ${utterance.voiceCondition}.`);
   }
   requireNonNegativeNumber(utterance.durationMs, 'utterance.durationMs');
-  const inferredCustomVocabularyEntryId =
-    utterance.customVocabularyEntryId ??
-    inferCustomVocabularyEntryIdFromPromptId(utterance.promptId);
-  if (inferredCustomVocabularyEntryId === undefined) return utterance;
-  return { ...utterance, customVocabularyEntryId: inferredCustomVocabularyEntryId };
+  const inferredCustomVocabularyEntryId = inferCustomVocabularyEntryIdFromPromptId(
+    utterance.promptId,
+  );
+  const customVocabularyEntryIds = normalizeCustomVocabularyEntryIds([
+    ...(utterance.customVocabularyEntryIds ?? []),
+    ...(utterance.customVocabularyEntryId === undefined ? [] : [utterance.customVocabularyEntryId]),
+    ...(inferredCustomVocabularyEntryId === undefined ? [] : [inferredCustomVocabularyEntryId]),
+  ]);
+  if (customVocabularyEntryIds.length === 0) return utterance;
+  return {
+    ...utterance,
+    customVocabularyEntryId: customVocabularyEntryIds[0]!,
+    customVocabularyEntryIds,
+  };
 }
 
 function buildBucketCoverage<TValue extends EnrollmentSentenceLanguage | EnrollmentVoiceCondition>(
@@ -442,12 +452,14 @@ function buildVocabularyCoverage(
   const grouped = new Map<string, MutableDurationBucket>();
   const requiredIds = new Set(policy.requiredEntryIds ?? []);
   for (const utterance of utterances) {
-    const entryId = utterance.customVocabularyEntryId;
-    if (entryId === undefined || entryId.length === 0) continue;
-    const bucket = getDurationBucket(grouped, entryId);
-    bucket.utterances += 1;
-    bucket.durationSeconds += utterance.durationMs / 1_000;
-    requiredIds.add(entryId);
+    const entryIds = customVocabularyEntryIdsForUtterance(utterance);
+    if (entryIds.length === 0) continue;
+    for (const entryId of entryIds) {
+      const bucket = getDurationBucket(grouped, entryId);
+      bucket.utterances += 1;
+      bucket.durationSeconds += utterance.durationMs / 1_000;
+      requiredIds.add(entryId);
+    }
   }
   const targetIds = [...new Set([...requiredIds, ...grouped.keys()])].sort((left, right) =>
     left.localeCompare(right, 'vi'),
@@ -547,6 +559,21 @@ function countQualityStatuses(
   }
   return Object.fromEntries(
     Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function customVocabularyEntryIdsForUtterance(
+  utterance: TrainingReadinessAcceptedUtteranceV1,
+): readonly string[] {
+  return normalizeCustomVocabularyEntryIds([
+    ...(utterance.customVocabularyEntryIds ?? []),
+    ...(utterance.customVocabularyEntryId === undefined ? [] : [utterance.customVocabularyEntryId]),
+  ]);
+}
+
+function normalizeCustomVocabularyEntryIds(entryIds: readonly string[]): readonly string[] {
+  return [...new Set(entryIds.map((entryId) => entryId.trim()).filter(Boolean))].sort(
+    (left, right) => left.localeCompare(right, 'vi'),
   );
 }
 

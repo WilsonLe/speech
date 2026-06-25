@@ -266,7 +266,8 @@ function summarizePythonAdapter(
     privacy['containsTranscriptText'] !== false ||
     privacy['containsCaseIds'] !== false ||
     privacy['containsBaseModelWeights'] !== false ||
-    privacy['containsAdapterWeights'] !== false
+    privacy['containsAdapterWeights'] !== false ||
+    privacy['exposesRawVocabularyEntryIds'] !== false
   ) {
     throw new Error(
       'Python evaluation report must be aggregate-only and exclude private artifacts.',
