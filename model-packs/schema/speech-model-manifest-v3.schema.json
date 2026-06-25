@@ -830,6 +830,73 @@
         }
       }
     },
+    "browserTrainingCtcProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "inputGraphId",
+        "inputName",
+        "inputDimension",
+        "logitsName",
+        "logitsDtype",
+        "vocabularySize",
+        "blankId",
+        "trainable",
+        "artifact"
+      ],
+      "properties": {
+        "kind": {
+          "const": "frozen-linear-ctc-projection-v1"
+        },
+        "inputGraphId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputDimension": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "logitsName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logitsDtype": {
+          "const": "float32"
+        },
+        "vocabularySize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "blankId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trainable": {
+          "const": false
+        },
+        "artifact": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/browserTrainingArtifactRef"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "eval-model"
+                }
+              },
+              "required": ["role"]
+            }
+          ]
+        }
+      }
+    },
     "browserTrainingAdapter": {
       "type": "object",
       "additionalProperties": false,
@@ -1117,6 +1184,7 @@
         "minimumAppVersion",
         "exactBaseModel",
         "featureTap",
+        "ctcProjection",
         "adapter",
         "artifacts",
         "limits"
@@ -1142,6 +1210,9 @@
         },
         "featureTap": {
           "$ref": "#/$defs/browserTrainingFeatureTap"
+        },
+        "ctcProjection": {
+          "$ref": "#/$defs/browserTrainingCtcProjection"
         },
         "adapter": {
           "$ref": "#/$defs/browserTrainingAdapter"

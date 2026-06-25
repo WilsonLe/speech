@@ -96,14 +96,14 @@
     },
     "training-model": {
       "url": "browser-training/training-model.json",
-      "sha256": "9109a15f62e67cb7d36742242291b7f29e52e9665ba3177635da427591b13848",
-      "sizeBytes": 2849,
+      "sha256": "30dc8046934285832c8789c167df612c1beb35dff972e581db27fcab996ee88f",
+      "sizeBytes": 3944,
       "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
     },
     "eval-model": {
       "url": "browser-training/eval-model.json",
-      "sha256": "faf13e87c42d298d2315bc7861851f8bb9a0e91b22446dae991265cf800951d0",
-      "sizeBytes": 2686,
+      "sha256": "9684032e4fcb800517618f9198b52f4643fb8c91b1216d6546f75c7b5cb3acb8",
+      "sizeBytes": 3791,
       "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
     },
     "optimizer-model": {
@@ -126,8 +126,8 @@
     },
     "contract-test-vectors": {
       "url": "browser-training/contract-test-vectors.json",
-      "sha256": "3100d5e741c6fc4d98b97a91f6682f6c772db3e8f28f01415c603e4ab7550fa3",
-      "sizeBytes": 1834,
+      "sha256": "0066084ecb516300256930d7ddb592447621f461eb937e1fb551900818a68440",
+      "sizeBytes": 2106,
       "mediaType": "application/vnd.wilsonle.speech.browser-training-artifact+json"
     },
     "anchor-pack": {
@@ -249,6 +249,32 @@
       "dimension": 4,
       "frameShiftMs": 10,
       "persistedDtype": "float16"
+    },
+    "ctcProjection": {
+      "kind": "frozen-linear-ctc-projection-v1",
+      "inputGraphId": "encoder",
+      "inputName": "encoded",
+      "inputDimension": 4,
+      "logitsName": "ctc_logits",
+      "logitsDtype": "float32",
+      "vocabularySize": 4,
+      "blankId": 0,
+      "trainable": false,
+      "artifact": {
+        "fileKey": "eval-model",
+        "role": "eval-model",
+        "license": {
+          "spdx": "Apache-2.0",
+          "name": "Synthetic browser-training artifact fixture",
+          "noticeUrl": "../../MODEL_LICENSES.md",
+          "redistributionAllowed": true
+        },
+        "provenance": {
+          "source": "repo-generated-synthetic-fixture",
+          "generatedBy": "tools/model-pack/speech_model_pack/browser_training_artifacts.py",
+          "createdAt": "2026-06-25T00:00:00.000Z"
+        }
+      }
     },
     "adapter": {
       "architecture": "residual-bottleneck-lhuc-v1",
