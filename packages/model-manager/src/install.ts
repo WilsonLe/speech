@@ -1,4 +1,10 @@
-import { parseSpeechModelManifestV2, type SpeechModelManifestV2 } from '@speech/protocol';
+import {
+  parseSpeechModelManifest,
+  parseSpeechModelManifestV3,
+  type BrowserTrainingArtifactRefV1,
+  type SpeechModelManifest,
+  type SpeechModelManifestV3,
+} from '@speech/protocol';
 import type { BinaryModelFile, ModelStorageBackend, ModelStorageLocator } from './storage';
 
 export type ModelInstallErrorCode =
@@ -8,7 +14,9 @@ export type ModelInstallErrorCode =
   | 'MODEL_CHECKSUM_MISMATCH'
   | 'MODEL_STORAGE_QUOTA_EXCEEDED'
   | 'MODEL_STORAGE_WRITE_FAILED'
-  | 'MODEL_VERSION_ACTIVE';
+  | 'MODEL_VERSION_ACTIVE'
+  | 'MODEL_VERSION_NOT_ACTIVE'
+  | 'MODEL_TRAINING_COMPANION_UNAVAILABLE';
 
 export type ModelInstallProgressPhase =
   | 'validating-manifest'
@@ -34,7 +42,7 @@ export interface ModelInstallProgress {
 }
 
 export interface ModelPackFileDownloadRequest {
-  readonly manifest: SpeechModelManifestV2;
+  readonly manifest: SpeechModelManifest;
   readonly fileKey: string;
   readonly url: string;
   readonly mediaType: string;
@@ -54,7 +62,7 @@ export interface InstallModelPackOptions {
   readonly downloadFile?: ModelPackFileDownloader;
   readonly hashFile?: ModelPackFileHasher;
   readonly requestPersistentStorage?: () => Promise<boolean>;
-  readonly acceptLicense?: (manifest: SpeechModelManifestV2) => boolean | Promise<boolean>;
+  readonly acceptLicense?: (manifest: SpeechModelManifest) => boolean | Promise<boolean>;
   readonly onProgress?: (progress: ModelInstallProgress) => void;
   readonly installId?: string;
   readonly now?: () => Date;
@@ -68,11 +76,20 @@ export interface InstalledModelFileRecord {
   readonly mediaType: string;
 }
 
+export interface InstalledTrainingCompanionRecord {
+  readonly contractVersion: 1;
+  readonly files: readonly InstalledModelFileRecord[];
+  readonly requiredStorageBytes: number;
+  readonly installId: string;
+  readonly installedAt: string;
+  readonly activatedAt: string;
+}
+
 export interface InstalledModelRecord {
   readonly schemaVersion: 1;
   readonly modelId: string;
   readonly activeVersion: string;
-  readonly manifest: SpeechModelManifestV2;
+  readonly manifest: SpeechModelManifest;
   readonly files: readonly InstalledModelFileRecord[];
   readonly requiredStorageBytes: number;
   readonly backendKind: ModelStorageBackend['kind'];
@@ -80,6 +97,7 @@ export interface InstalledModelRecord {
   readonly installedAt: string;
   readonly activatedAt: string;
   readonly persistentStorageGranted?: boolean;
+  readonly trainingCompanion?: InstalledTrainingCompanionRecord;
 }
 
 export interface ModelFileVerificationResult {
@@ -118,10 +136,10 @@ export async function installModelPack(
   const now = options.now ?? (() => new Date());
   const installId = options.installId ?? createInstallId();
 
-  let manifest: SpeechModelManifestV2;
+  let manifest: SpeechModelManifest;
   try {
     emitProgress(options, { phase: 'validating-manifest' });
-    manifest = parseSpeechModelManifestV2(manifestInput);
+    manifest = parseSpeechModelManifest(manifestInput);
   } catch (error) {
     throw new ModelInstallError('MODEL_MANIFEST_INVALID', errorMessage(error), {
       cause: error,
@@ -146,7 +164,7 @@ export async function installModelPack(
   }
 
   const tempVersion = `${manifest.version}__install-${installId}`;
-  const fileKeys = Object.keys(manifest.files).sort();
+  const fileKeys = getInferenceModelFileKeys(manifest);
   const installedAt = now().toISOString();
   const installedFiles: InstalledModelFileRecord[] = [];
 
@@ -280,8 +298,234 @@ export async function installModelPack(
   }
 }
 
-export function getManifestRequiredStorageBytes(manifest: SpeechModelManifestV2): number {
-  return Object.values(manifest.files).reduce((total, file) => total + file.sizeBytes, 0);
+export async function installTrainingCompanionPack(
+  manifestInput: unknown,
+  options: InstallModelPackOptions,
+): Promise<InstalledModelRecord> {
+  const { storage } = options;
+  const hashFile = options.hashFile ?? sha256ArrayBuffer;
+  const downloadFile = options.downloadFile ?? defaultDownloadModelFile;
+  const now = options.now ?? (() => new Date());
+  const installId = options.installId ?? createInstallId();
+
+  let manifest: SpeechModelManifestV3;
+  try {
+    emitProgress(options, { phase: 'validating-manifest' });
+    manifest = parseSpeechModelManifestV3(manifestInput);
+  } catch (error) {
+    throw new ModelInstallError('MODEL_MANIFEST_INVALID', errorMessage(error), {
+      cause: error,
+    });
+  }
+
+  const activeRecord = await getInstalledModelRecord(storage, manifest.id);
+  if (activeRecord?.activeVersion !== manifest.version) {
+    throw new ModelInstallError(
+      'MODEL_VERSION_NOT_ACTIVE',
+      `Training companion pack for ${manifest.id}@${manifest.version} requires that exact model version to be active.`,
+    );
+  }
+
+  await assertLicenseAccepted(manifest, options.acceptLicense);
+  assertTrainingCompanionArtifactLicenses(manifest);
+
+  const activeVerification = await verifyInstalledModelFiles(storage, manifest, { hashFile });
+  if (!activeVerification.ok) {
+    throw new ModelInstallError(
+      'MODEL_STORAGE_WRITE_FAILED',
+      `Active model version verification failed before training companion install: ${activeVerification.errors.join('; ')}`,
+    );
+  }
+
+  const fileKeys = getTrainingCompanionFileKeys(manifest);
+  if (fileKeys.length === 0) {
+    throw new ModelInstallError(
+      'MODEL_TRAINING_COMPANION_UNAVAILABLE',
+      `Model ${manifest.id}@${manifest.version} does not declare browser-training companion files.`,
+    );
+  }
+
+  const requiredStorageBytes = getTrainingCompanionRequiredStorageBytes(manifest);
+  let persistentStorageGranted = activeRecord.persistentStorageGranted;
+  if (options.requestPersistentStorage !== undefined) {
+    emitProgress(options, modelProgress(manifest, 'requesting-persistence'));
+    persistentStorageGranted = await options.requestPersistentStorage();
+  }
+
+  const tempVersion = `${manifest.version}__training-companion-${installId}`;
+  const installedAt = now().toISOString();
+  const installedFiles: InstalledModelFileRecord[] = [];
+
+  try {
+    throwIfAborted(options.signal);
+    await storage.clearVersion(manifest.id, tempVersion);
+
+    for (const [index, fileKey] of fileKeys.entries()) {
+      const file = manifest.files[fileKey];
+      if (file === undefined) {
+        throw new ModelInstallError(
+          'MODEL_MANIFEST_INVALID',
+          `Training companion file entry ${fileKey} disappeared during installation.`,
+        );
+      }
+
+      const progressBase = fileProgress(manifest, fileKey, index, fileKeys.length, file.sizeBytes);
+      emitProgress(options, { ...progressBase, phase: 'downloading-file', completedBytes: 0 });
+      const bytes = await withDownloadErrors(fileKey, () =>
+        downloadFile(
+          downloadRequest(manifest, fileKey, file, options.signal, (completedBytes, totalBytes) => {
+            emitProgress(options, {
+              ...progressBase,
+              phase: 'downloading-file',
+              completedBytes,
+              ...(totalBytes === undefined ? {} : { totalBytes }),
+            });
+          }),
+        ),
+      );
+
+      assertExpectedSize(fileKey, bytes.byteLength, file.sizeBytes);
+      emitProgress(options, {
+        ...progressBase,
+        phase: 'hashing-file',
+        completedBytes: bytes.byteLength,
+      });
+      const downloadedSha256 = await hashFile(bytes);
+      assertExpectedSha256(fileKey, downloadedSha256, file.sha256);
+
+      emitProgress(options, {
+        ...progressBase,
+        phase: 'writing-temporary-file',
+        completedBytes: bytes.byteLength,
+      });
+      await withStorageErrors(() =>
+        storage.putFile({ modelId: manifest.id, version: tempVersion, fileKey }, bytes),
+      );
+
+      emitProgress(options, {
+        ...progressBase,
+        phase: 'verifying-temporary-file',
+        completedBytes: bytes.byteLength,
+      });
+      await verifyStoredFile(
+        storage,
+        { modelId: manifest.id, version: tempVersion, fileKey },
+        file,
+        hashFile,
+      );
+      installedFiles.push({
+        fileKey,
+        sha256: file.sha256,
+        sizeBytes: file.sizeBytes,
+        mediaType: file.mediaType,
+      });
+    }
+
+    for (const [index, installedFile] of installedFiles.entries()) {
+      const bytes = await storage.getFile({
+        modelId: manifest.id,
+        version: tempVersion,
+        fileKey: installedFile.fileKey,
+      });
+      if (bytes === undefined) {
+        throw new ModelInstallError(
+          'MODEL_STORAGE_WRITE_FAILED',
+          `Temporary training companion file ${installedFile.fileKey} is missing before activation.`,
+        );
+      }
+      emitProgress(options, {
+        ...fileProgress(
+          manifest,
+          installedFile.fileKey,
+          index,
+          installedFiles.length,
+          installedFile.sizeBytes,
+        ),
+        phase: 'copying-active-version',
+        completedBytes: bytes.byteLength,
+      });
+      await withStorageErrors(() =>
+        storage.putFile(
+          { modelId: manifest.id, version: manifest.version, fileKey: installedFile.fileKey },
+          bytes,
+        ),
+      );
+    }
+
+    emitProgress(options, modelProgress(manifest, 'verifying-active-version'));
+    const verification = await verifyInstalledTrainingCompanionFiles(storage, manifest, {
+      hashFile,
+    });
+    if (!verification.ok) {
+      throw new ModelInstallError(
+        'MODEL_STORAGE_WRITE_FAILED',
+        `Training companion verification failed: ${verification.errors.join('; ')}`,
+      );
+    }
+
+    emitProgress(options, modelProgress(manifest, 'cleaning-temporary-version'));
+    await storage.clearVersion(manifest.id, tempVersion);
+
+    const activatedAt = now().toISOString();
+    const record: InstalledModelRecord = {
+      ...activeRecord,
+      manifest: cloneJson(manifest),
+      ...(persistentStorageGranted === undefined ? {} : { persistentStorageGranted }),
+      trainingCompanion: {
+        contractVersion: manifest.browserTraining.contractVersion,
+        files: installedFiles.map((file) => ({ ...file })),
+        requiredStorageBytes,
+        installId,
+        installedAt,
+        activatedAt,
+      },
+    };
+
+    emitProgress(options, modelProgress(manifest, 'activating-version'));
+    await writeInstalledModelRecord(storage, record);
+    return record;
+  } catch (error) {
+    await clearTemporaryVersionAfterFailure(storage, manifest.id, tempVersion);
+    throw normalizeInstallError(error);
+  }
+}
+
+export interface ManifestStorageByteOptions {
+  readonly includeTrainingCompanion?: boolean;
+}
+
+export function getManifestRequiredStorageBytes(
+  manifest: SpeechModelManifest,
+  options: ManifestStorageByteOptions = {},
+): number {
+  return manifestFileKeysForStorage(manifest, options).reduce((total, fileKey) => {
+    const file = manifest.files[fileKey];
+    return file === undefined ? total : total + file.sizeBytes;
+  }, 0);
+}
+
+export function getInferenceModelFileKeys(manifest: SpeechModelManifest): string[] {
+  if (manifest.schemaVersion === 2) {
+    return Object.keys(manifest.files).sort();
+  }
+  return uniqueSorted(
+    Object.values(manifest.graphs).flatMap((graph) => (graph === undefined ? [] : [graph.fileKey])),
+  );
+}
+
+export function getTrainingCompanionFileKeys(manifest: SpeechModelManifest): string[] {
+  if (manifest.schemaVersion !== 3) return [];
+  const { browserTraining } = manifest;
+  return uniqueSorted(
+    trainingCompanionArtifactRefs(browserTraining).map((artifactRef) => artifactRef.fileKey),
+  );
+}
+
+export function getTrainingCompanionRequiredStorageBytes(manifest: SpeechModelManifest): number {
+  return getTrainingCompanionFileKeys(manifest).reduce((total, fileKey) => {
+    const file = manifest.files[fileKey];
+    return file === undefined ? total : total + file.sizeBytes;
+  }, 0);
 }
 
 export async function deleteInstalledModelRecord(
@@ -324,14 +568,32 @@ export async function getInstalledModelRecord(
 
 export async function verifyInstalledModelFiles(
   storage: ModelStorageBackend,
-  manifest: SpeechModelManifestV2,
-  options: { readonly version?: string; readonly hashFile?: ModelPackFileHasher } = {},
+  manifest: SpeechModelManifest,
+  options: {
+    readonly version?: string;
+    readonly hashFile?: ModelPackFileHasher;
+    readonly includeTrainingCompanion?: boolean;
+    readonly fileKeys?: readonly string[];
+  } = {},
 ): Promise<ModelFileVerificationResult> {
   const version = options.version ?? manifest.version;
   const hashFile = options.hashFile ?? sha256ArrayBuffer;
   const errors: string[] = [];
+  const fileKeys =
+    options.fileKeys ??
+    manifestFileKeysForStorage(
+      manifest,
+      options.includeTrainingCompanion === undefined
+        ? {}
+        : { includeTrainingCompanion: options.includeTrainingCompanion },
+    );
 
-  for (const [fileKey, file] of Object.entries(manifest.files)) {
+  for (const fileKey of fileKeys) {
+    const file = manifest.files[fileKey];
+    if (file === undefined) {
+      errors.push(`${fileKey} is not declared in ${manifest.id}@${version}`);
+      continue;
+    }
     const bytes = await storage.getFile({ modelId: manifest.id, version, fileKey });
     if (bytes === undefined) {
       errors.push(`${fileKey} is missing from ${manifest.id}@${version}`);
@@ -348,6 +610,17 @@ export async function verifyInstalledModelFiles(
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+export async function verifyInstalledTrainingCompanionFiles(
+  storage: ModelStorageBackend,
+  manifest: SpeechModelManifestV3,
+  options: { readonly version?: string; readonly hashFile?: ModelPackFileHasher } = {},
+): Promise<ModelFileVerificationResult> {
+  return verifyInstalledModelFiles(storage, manifest, {
+    ...options,
+    fileKeys: getTrainingCompanionFileKeys(manifest),
+  });
 }
 
 export async function sha256ArrayBuffer(bytes: ArrayBuffer): Promise<string> {
@@ -408,7 +681,7 @@ async function defaultDownloadModelFile(
 }
 
 function makeInstalledModelRecord(input: {
-  readonly manifest: SpeechModelManifestV2;
+  readonly manifest: SpeechModelManifest;
   readonly files: readonly InstalledModelFileRecord[];
   readonly requiredStorageBytes: number;
   readonly backendKind: ModelStorageBackend['kind'];
@@ -435,7 +708,7 @@ function makeInstalledModelRecord(input: {
 }
 
 async function assertLicenseAccepted(
-  manifest: SpeechModelManifestV2,
+  manifest: SpeechModelManifest,
   acceptLicense: InstallModelPackOptions['acceptLicense'],
 ): Promise<void> {
   if (manifest.license.redistributionAllowed) {
@@ -450,10 +723,55 @@ async function assertLicenseAccepted(
   );
 }
 
+function assertTrainingCompanionArtifactLicenses(manifest: SpeechModelManifestV3): void {
+  const blocked = trainingCompanionArtifactRefs(manifest.browserTraining).filter(
+    (artifactRef) => artifactRef.license.redistributionAllowed !== true,
+  );
+  if (blocked.length === 0) return;
+  throw new ModelInstallError(
+    'MODEL_LICENSE_REJECTED',
+    `Training companion pack for ${manifest.id}@${manifest.version} contains non-redistributable artifact refs: ${blocked
+      .map((artifactRef) => artifactRef.fileKey)
+      .join(', ')}.`,
+  );
+}
+
+function manifestFileKeysForStorage(
+  manifest: SpeechModelManifest,
+  options: ManifestStorageByteOptions,
+): string[] {
+  const fileKeys = new Set(getInferenceModelFileKeys(manifest));
+  if (options.includeTrainingCompanion === true) {
+    for (const fileKey of getTrainingCompanionFileKeys(manifest)) {
+      fileKeys.add(fileKey);
+    }
+  }
+  return uniqueSorted(fileKeys);
+}
+
+function trainingCompanionArtifactRefs(
+  browserTraining: SpeechModelManifestV3['browserTraining'],
+): BrowserTrainingArtifactRefV1[] {
+  return [
+    browserTraining.ctcProjection.artifact,
+    browserTraining.adapter.runtimeGraph,
+    browserTraining.artifacts.trainingModel,
+    browserTraining.artifacts.evalModel,
+    browserTraining.artifacts.optimizerModel,
+    browserTraining.artifacts.contractTestVectors,
+    ...browserTraining.artifacts.nominalCheckpoint,
+    ...browserTraining.artifacts.anchorPack,
+  ];
+}
+
+function uniqueSorted(values: Iterable<string>): string[] {
+  return [...new Set(values)].sort();
+}
+
 function downloadRequest(
-  manifest: SpeechModelManifestV2,
+  manifest: SpeechModelManifest,
   fileKey: string,
-  file: SpeechModelManifestV2['files'][string],
+  file: SpeechModelManifest['files'][string],
   signal: AbortSignal | undefined,
   onProgress: ModelPackFileDownloadRequest['onProgress'],
 ): ModelPackFileDownloadRequest {
@@ -471,7 +789,7 @@ function downloadRequest(
 async function verifyStoredFile(
   storage: ModelStorageBackend,
   locator: ModelStorageLocator,
-  file: SpeechModelManifestV2['files'][string],
+  file: SpeechModelManifest['files'][string],
   hashFile: ModelPackFileHasher,
 ): Promise<void> {
   const bytes = await storage.getFile(locator);
@@ -511,7 +829,7 @@ function registryLocator(modelId: string): ModelStorageLocator {
 }
 
 function modelProgress(
-  manifest: SpeechModelManifestV2,
+  manifest: SpeechModelManifest,
   phase: ModelInstallProgressPhase,
 ): ModelInstallProgress {
   return {
@@ -522,7 +840,7 @@ function modelProgress(
 }
 
 function fileProgress(
-  manifest: SpeechModelManifestV2,
+  manifest: SpeechModelManifest,
   fileKey: string,
   completedFiles: number,
   totalFiles: number,
@@ -645,6 +963,22 @@ function isInstalledModelRecord(value: unknown): value is InstalledModelRecord {
     Array.isArray(value['files']) &&
     typeof value['requiredStorageBytes'] === 'number' &&
     typeof value['backendKind'] === 'string' &&
+    typeof value['installId'] === 'string' &&
+    typeof value['installedAt'] === 'string' &&
+    typeof value['activatedAt'] === 'string' &&
+    (value['trainingCompanion'] === undefined ||
+      isInstalledTrainingCompanionRecord(value['trainingCompanion']))
+  );
+}
+
+function isInstalledTrainingCompanionRecord(
+  value: unknown,
+): value is InstalledTrainingCompanionRecord {
+  return (
+    isRecord(value) &&
+    value['contractVersion'] === 1 &&
+    Array.isArray(value['files']) &&
+    typeof value['requiredStorageBytes'] === 'number' &&
     typeof value['installId'] === 'string' &&
     typeof value['installedAt'] === 'string' &&
     typeof value['activatedAt'] === 'string'

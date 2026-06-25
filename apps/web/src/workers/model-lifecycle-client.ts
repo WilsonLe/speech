@@ -18,10 +18,13 @@ export interface ManifestInspectionResult {
   readonly modelId: string;
   readonly version: string;
   readonly requiredStorageBytes: number;
+  readonly trainingCompanionRequiredStorageBytes: number;
   readonly manifestSha256: string;
   readonly manifestSha256MatchesCatalog: boolean;
   readonly streamingReady: boolean;
   readonly fileCount: number;
+  readonly inferenceFileCount: number;
+  readonly trainingCompanionFileCount: number;
 }
 
 export type ModelLifecycleResponse =

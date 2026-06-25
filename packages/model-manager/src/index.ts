@@ -12,5 +12,5 @@ export const packageInfo: ModelManagerPackageInfo = {
   name: '@speech/model-manager',
   status: 'active',
   description:
-    'Model catalog, install, checksum, storage, activation, rollback, and deletion lifecycle.',
+    'Model catalog, install, checksum, storage, activation, optional training companion packs, rollback, and deletion lifecycle.',
 };
