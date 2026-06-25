@@ -2,7 +2,7 @@ import { createPinnedOnnxRuntimeWebTrainingSpikeReport } from '@speech/inference
 import type {
   FrozenFeatureTinyAdapterProgressV1,
   FrozenFeatureTinyAdapterTrainingResultV1,
-} from '@speech/personalization';
+} from '@speech/browser-training';
 import { useRef, useState } from 'react';
 import {
   checkAsrWorkerRuntime,

@@ -1,8 +1,8 @@
 {
-  "name": "@speech/personalization",
+  "name": "@speech/browser-training",
   "version": "0.1.0",
   "private": true,
-  "description": "Speaker profile, adapter runtime, browser-vs-Python comparison, and residual/LHUC personalization contracts.",
+  "description": "BrowserTrainingBackend contracts and fixed local adapter-math implementation for in-browser personal models.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -14,8 +14,6 @@
     "test": "vitest run --passWithNoTests --exclude=dist/**"
   },
   "dependencies": {
-    "@speech/browser-training": "workspace:*",
-    "@speech/enrollment": "workspace:*",
     "@speech/protocol": "workspace:*"
   },
   "devDependencies": {}
