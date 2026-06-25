@@ -1,5 +1,6 @@
 export * from './adapter-comparison';
 export * from './browser-training';
+export * from './residual-bottleneck-lhuc';
 
 import type {
   EnrollmentQualityReportV1,
@@ -530,7 +531,7 @@ export const packageInfo: PersonalizationPackageInfo = {
   name: '@speech/personalization',
   status: 'active',
   description:
-    'Speaker profile, held-out evaluation, adapter runtime, and browser-vs-Python comparison contracts.',
+    'Speaker profile, held-out evaluation, residual/LHUC adapter reference math, adapter runtime, and browser-vs-Python comparison contracts.',
 };
 
 type HeldOutCaseVariant = 'base' | 'profile';
