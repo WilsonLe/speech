@@ -238,11 +238,18 @@ function hasPassedOnnxRuntimeTrainingWorkerProof(proof: OnnxRuntimeTrainingWorke
   );
 }
 
+export type FrozenFeatureTinyAdapterExampleSplit = 'train' | 'validation';
+export type FrozenFeatureTinyAdapterOptimizerKind = 'sgd' | 'adamw';
+export type FrozenFeatureTinyAdapterLearningRateSchedule = 'constant' | 'linear-decay';
+
 export interface FrozenFeatureTinyAdapterExampleV1 {
   readonly id: string;
   readonly features: readonly number[];
   readonly targetResidual: readonly number[];
   readonly weight?: number;
+  readonly frameCount?: number;
+  readonly conditionKey?: string;
+  readonly split?: FrozenFeatureTinyAdapterExampleSplit;
 }
 
 export interface FrozenFeatureTinyAdapterDatasetV1 {
@@ -276,6 +283,17 @@ export interface FrozenFeatureTinyAdapterTrainingOptions {
   readonly l2Regularization: number;
   readonly maxParameterCount: number;
   readonly targetLoss?: number;
+  readonly optimizer: FrozenFeatureTinyAdapterOptimizerKind;
+  readonly batchSize: number;
+  readonly samplerSeed: string;
+  readonly lengthBucketCount: number;
+  readonly conditionBalanced: boolean;
+  readonly gradientClipNorm?: number;
+  readonly learningRateSchedule: FrozenFeatureTinyAdapterLearningRateSchedule;
+  readonly minLearningRateRatio: number;
+  readonly validationEveryEpochs?: number;
+  readonly earlyStoppingPatience?: number;
+  readonly earlyStoppingMinDelta: number;
   readonly progressEveryEpochs?: number;
   readonly checkpointEveryEpochs?: number;
   readonly resumeFromCheckpoint?: FrozenFeatureTinyAdapterCheckpointV1;
@@ -285,12 +303,59 @@ export interface FrozenFeatureTinyAdapterTrainingOptions {
   readonly onCheckpoint?: (checkpoint: FrozenFeatureTinyAdapterCheckpointV1) => void;
 }
 
+export interface FrozenFeatureTinyAdapterSamplerDiagnosticsV1 {
+  readonly seedFingerprint: string;
+  readonly batchSize: number;
+  readonly lengthBucketCount: number;
+  readonly conditionBalanced: boolean;
+  readonly trainingExamples: number;
+  readonly validationExamples: number;
+  readonly batchesPerEpoch: number;
+  readonly conditionExampleCounts: Readonly<Record<string, number>>;
+  readonly lengthBucketExampleCounts: Readonly<Record<string, number>>;
+}
+
+export interface FrozenFeatureTinyAdapterOptimizationDiagnosticsV1 {
+  readonly optimizer: FrozenFeatureTinyAdapterOptimizerKind;
+  readonly learningRateSchedule: FrozenFeatureTinyAdapterLearningRateSchedule;
+  readonly minLearningRateRatio: number;
+  readonly lastLearningRate: number;
+  readonly gradientClipNorm?: number;
+  readonly gradientClipEvents: number;
+}
+
+export interface FrozenFeatureTinyAdapterValidationDiagnosticsV1 {
+  readonly enabled: boolean;
+  readonly everyEpochs?: number;
+  readonly loss?: number;
+  readonly bestLoss?: number;
+  readonly bestEpoch?: number;
+  readonly epochsWithoutImprovement: number;
+  readonly stoppedEarly: boolean;
+}
+
+export interface FrozenFeatureTinyAdapterSafetyDiagnosticsV1 {
+  readonly finiteLoss: true;
+  readonly nanInfGuardTriggered: false;
+}
+
+export interface FrozenFeatureTinyAdapterTrainingDiagnosticsV1 {
+  readonly sampler: FrozenFeatureTinyAdapterSamplerDiagnosticsV1;
+  readonly optimization: FrozenFeatureTinyAdapterOptimizationDiagnosticsV1;
+  readonly validation: FrozenFeatureTinyAdapterValidationDiagnosticsV1;
+  readonly safety: FrozenFeatureTinyAdapterSafetyDiagnosticsV1;
+}
+
 export interface FrozenFeatureTinyAdapterProgressV1 {
   readonly schemaVersion: 1;
   readonly epoch: number;
   readonly epochs: number;
   readonly loss: number;
   readonly status: 'training' | 'completed' | 'cancelled' | 'paused';
+  readonly validationLoss?: number;
+  readonly learningRate?: number;
+  readonly optimizer?: FrozenFeatureTinyAdapterOptimizerKind;
+  readonly stoppedEarly?: boolean;
 }
 
 export interface FrozenFeatureTinyAdapterArtifactV1 {
@@ -351,7 +416,12 @@ export interface FrozenFeatureTinyAdapterTrainingResultV1 {
     readonly initialLoss: number;
     readonly finalLoss: number;
     readonly lossReduction: number;
+    readonly validationLoss?: number;
+    readonly bestValidationLoss?: number;
+    readonly bestValidationEpoch?: number;
+    readonly stoppedEarly: boolean;
   };
+  readonly diagnostics: FrozenFeatureTinyAdapterTrainingDiagnosticsV1;
   readonly compatibility: FrozenFeatureTinyAdapterCompatibilityV1;
   readonly recovery: FrozenFeatureTinyAdapterRecoveryV1;
   readonly privacy: BrowserTrainingPrivacyV1;
@@ -364,6 +434,16 @@ export const defaultFrozenFeatureTinyAdapterTrainingOptions: FrozenFeatureTinyAd
     l2Regularization: 0.001,
     maxParameterCount: 1_024,
     targetLoss: 0.0005,
+    optimizer: 'adamw',
+    batchSize: 8,
+    samplerSeed: 'browser-training-fixed-adapter-v1',
+    lengthBucketCount: 4,
+    conditionBalanced: true,
+    gradientClipNorm: 1,
+    learningRateSchedule: 'linear-decay',
+    minLearningRateRatio: 0.1,
+    validationEveryEpochs: 1,
+    earlyStoppingMinDelta: 0,
     progressEveryEpochs: 10,
     checkpointEveryEpochs: 10,
   };
@@ -457,10 +537,21 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   readonly parameterCount: number;
   readonly initialLoss: number;
 
+  private readonly trainExamples: readonly FrozenFeatureTinyAdapterExampleV1[];
+  private readonly validationExamples: readonly FrozenFeatureTinyAdapterExampleV1[];
+  private readonly samplerDiagnostics: FrozenFeatureTinyAdapterSamplerDiagnosticsV1;
   private readonly weights: number[];
   private readonly bias: number[];
+  private readonly optimizerState: AdamWOptimizerState;
   private currentEpoch: number;
   private currentLoss: number;
+  private latestValidationLoss: number | undefined;
+  private bestValidationLoss: number | undefined;
+  private bestValidationEpoch: number | undefined;
+  private epochsWithoutValidationImprovement: number;
+  private earlyStopped: boolean;
+  private gradientClipEvents: number;
+  private lastLearningRate: number;
 
   constructor(
     dataset: FrozenFeatureTinyAdapterDatasetV1,
@@ -469,8 +560,19 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
     validateFrozenFeatureTinyAdapterDataset(dataset);
     this.options = normalizeTrainingOptions(optionsInput);
     this.dataset = dataset;
+    this.trainExamples = dataset.examples.filter((example) => example.split !== 'validation');
+    this.validationExamples = dataset.examples.filter((example) => example.split === 'validation');
+    this.samplerDiagnostics = createSamplerDiagnostics(dataset, this.trainExamples, this.options);
     this.parameterCount =
       dataset.featureDimension * dataset.outputDimension + dataset.outputDimension;
+    this.optimizerState = createAdamWOptimizerState(
+      dataset.featureDimension * dataset.outputDimension,
+      dataset.outputDimension,
+    );
+    this.epochsWithoutValidationImprovement = 0;
+    this.earlyStopped = false;
+    this.gradientClipEvents = 0;
+    this.lastLearningRate = this.options.learningRate;
     if (this.parameterCount > this.options.maxParameterCount) {
       throw new Error(
         `Frozen-feature adapter parameter count ${this.parameterCount.toString()} exceeds limit ${this.options.maxParameterCount.toString()}.`,
@@ -490,6 +592,15 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
       this.currentEpoch = checkpoint.epoch;
       this.initialLoss = checkpoint.initialLoss;
       this.currentLoss = checkpoint.loss;
+      this.latestValidationLoss = calculateValidationLoss(
+        this.validationExamples,
+        this.weights,
+        this.bias,
+        this.options.l2Regularization,
+      );
+      this.bestValidationLoss = this.latestValidationLoss;
+      this.bestValidationEpoch =
+        this.latestValidationLoss === undefined ? undefined : this.currentEpoch;
       return;
     }
 
@@ -503,6 +614,14 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
       this.options.l2Regularization,
     );
     this.currentLoss = this.initialLoss;
+    this.latestValidationLoss = calculateValidationLoss(
+      this.validationExamples,
+      this.weights,
+      this.bias,
+      this.options.l2Regularization,
+    );
+    this.bestValidationLoss = this.latestValidationLoss;
+    this.bestValidationEpoch = this.latestValidationLoss === undefined ? undefined : 0;
   }
 
   get epoch(): number {
@@ -514,28 +633,52 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   }
 
   runEpoch(): FrozenFeatureTinyAdapterProgressV1 {
-    if (this.currentEpoch >= this.options.epochs) {
+    if (this.currentEpoch >= this.options.epochs || this.earlyStopped) {
       return this.createProgress('completed');
     }
-    runSgdEpoch(
-      this.dataset,
-      this.weights,
-      this.bias,
-      this.options.learningRate,
-      this.options.l2Regularization,
-    );
-    this.currentEpoch += 1;
+    const nextEpoch = this.currentEpoch + 1;
+    this.lastLearningRate = getScheduledLearningRate(this.options, nextEpoch);
+    if (this.options.optimizer === 'sgd') {
+      runSgdEpoch(
+        this.trainExamples,
+        this.weights,
+        this.bias,
+        this.dataset.featureDimension,
+        this.dataset.outputDimension,
+        this.lastLearningRate,
+        this.options.l2Regularization,
+      );
+    } else {
+      const outcome = runAdamWEpoch(
+        this.dataset,
+        this.trainExamples,
+        this.weights,
+        this.bias,
+        this.optimizerState,
+        this.options,
+        nextEpoch,
+        this.lastLearningRate,
+      );
+      this.gradientClipEvents += outcome.gradientClipEvents;
+    }
+    assertFiniteTrainingState(this.weights, this.bias, 'frozen-feature tiny-adapter parameters');
+    this.currentEpoch = nextEpoch;
     this.currentLoss = calculateLoss(
       this.dataset,
       this.weights,
       this.bias,
       this.options.l2Regularization,
     );
+    assertFiniteNumber(this.currentLoss, 'frozen-feature tiny-adapter loss');
+    this.updateValidationState();
     return this.createProgress('training');
   }
 
   hasReachedTargetLoss(): boolean {
-    return this.options.targetLoss !== undefined && this.currentLoss <= this.options.targetLoss;
+    return (
+      this.earlyStopped ||
+      (this.options.targetLoss !== undefined && this.currentLoss <= this.options.targetLoss)
+    );
   }
 
   shouldCheckpoint(): boolean {
@@ -549,7 +692,18 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
   createProgress(
     status: FrozenFeatureTinyAdapterProgressV1['status'],
   ): FrozenFeatureTinyAdapterProgressV1 {
-    return createProgress(this.currentEpoch, this.options.epochs, this.currentLoss, status);
+    return createProgress({
+      epoch: this.currentEpoch,
+      epochs: this.options.epochs,
+      loss: this.currentLoss,
+      status,
+      ...(this.latestValidationLoss === undefined
+        ? {}
+        : { validationLoss: this.latestValidationLoss }),
+      learningRate: this.lastLearningRate,
+      optimizer: this.options.optimizer,
+      stoppedEarly: this.earlyStopped,
+    });
   }
 
   createCheckpoint(): FrozenFeatureTinyAdapterCheckpointV1 {
@@ -593,7 +747,18 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
         initialLoss: roundFloat(this.initialLoss),
         finalLoss: roundFloat(this.currentLoss),
         lossReduction: roundFloat(this.initialLoss - this.currentLoss),
+        ...(this.latestValidationLoss === undefined
+          ? {}
+          : { validationLoss: roundFloat(this.latestValidationLoss) }),
+        ...(this.bestValidationLoss === undefined
+          ? {}
+          : { bestValidationLoss: roundFloat(this.bestValidationLoss) }),
+        ...(this.bestValidationEpoch === undefined
+          ? {}
+          : { bestValidationEpoch: this.bestValidationEpoch }),
+        stoppedEarly: this.earlyStopped,
       },
+      diagnostics: this.createDiagnostics(),
       compatibility: createCompatibility(this.dataset),
       recovery: {
         checkpointId: checkpoint.checkpointId,
@@ -607,6 +772,76 @@ export class FrozenFeatureTinyAdapterTrainingSession implements BrowserTrainingB
         containsPrivateFrozenFeatureValues: this.dataset.privacy.containsPrivateFrozenFeatureValues,
         containsProfileData: this.dataset.privacy.containsProfileData,
       }),
+    };
+  }
+
+  private updateValidationState(): void {
+    if (
+      this.validationExamples.length === 0 ||
+      this.options.validationEveryEpochs === undefined ||
+      this.currentEpoch % this.options.validationEveryEpochs !== 0
+    ) {
+      return;
+    }
+    this.latestValidationLoss = calculateValidationLoss(
+      this.validationExamples,
+      this.weights,
+      this.bias,
+      this.options.l2Regularization,
+    );
+    if (this.latestValidationLoss === undefined) return;
+    assertFiniteNumber(this.latestValidationLoss, 'frozen-feature tiny-adapter validation loss');
+    const minDelta = this.options.earlyStoppingMinDelta;
+    if (
+      this.bestValidationLoss === undefined ||
+      this.latestValidationLoss < this.bestValidationLoss - minDelta
+    ) {
+      this.bestValidationLoss = this.latestValidationLoss;
+      this.bestValidationEpoch = this.currentEpoch;
+      this.epochsWithoutValidationImprovement = 0;
+      return;
+    }
+    this.epochsWithoutValidationImprovement += 1;
+    if (
+      this.options.earlyStoppingPatience !== undefined &&
+      this.epochsWithoutValidationImprovement >= this.options.earlyStoppingPatience
+    ) {
+      this.earlyStopped = true;
+    }
+  }
+
+  private createDiagnostics(): FrozenFeatureTinyAdapterTrainingDiagnosticsV1 {
+    return {
+      sampler: this.samplerDiagnostics,
+      optimization: {
+        optimizer: this.options.optimizer,
+        learningRateSchedule: this.options.learningRateSchedule,
+        minLearningRateRatio: roundFloat(this.options.minLearningRateRatio),
+        lastLearningRate: roundFloat(this.lastLearningRate),
+        ...(this.options.gradientClipNorm === undefined
+          ? {}
+          : { gradientClipNorm: roundFloat(this.options.gradientClipNorm) }),
+        gradientClipEvents: this.gradientClipEvents,
+      },
+      validation: {
+        enabled: this.validationExamples.length > 0,
+        ...(this.options.validationEveryEpochs === undefined
+          ? {}
+          : { everyEpochs: this.options.validationEveryEpochs }),
+        ...(this.latestValidationLoss === undefined
+          ? {}
+          : { loss: roundFloat(this.latestValidationLoss) }),
+        ...(this.bestValidationLoss === undefined
+          ? {}
+          : { bestLoss: roundFloat(this.bestValidationLoss) }),
+        ...(this.bestValidationEpoch === undefined ? {} : { bestEpoch: this.bestValidationEpoch }),
+        epochsWithoutImprovement: this.epochsWithoutValidationImprovement,
+        stoppedEarly: this.earlyStopped,
+      },
+      safety: {
+        finiteLoss: true,
+        nanInfGuardTriggered: false,
+      },
     };
   }
 }
@@ -626,6 +861,7 @@ export function validateFrozenFeatureTinyAdapterDataset(
     throw new Error('Frozen-feature tiny-adapter training requires at least two examples.');
   }
   const seenIds = new Set<string>();
+  let trainingExampleCount = 0;
   for (const example of dataset.examples) {
     if (!example.id.trim()) {
       throw new Error('Frozen-feature tiny-adapter example id is required.');
@@ -646,6 +882,27 @@ export function validateFrozenFeatureTinyAdapterDataset(
     if (example.weight !== undefined && (!Number.isFinite(example.weight) || example.weight <= 0)) {
       throw new Error(`Example ${example.id} weight must be a positive finite number.`);
     }
+    if (example.frameCount !== undefined) {
+      assertPositiveInteger(example.frameCount, `example ${example.id} frameCount`);
+    }
+    if (example.conditionKey !== undefined && !example.conditionKey.trim()) {
+      throw new Error(`Example ${example.id} conditionKey must not be empty.`);
+    }
+    if (
+      example.split !== undefined &&
+      example.split !== 'train' &&
+      example.split !== 'validation'
+    ) {
+      throw new Error(`Example ${example.id} split is unsupported.`);
+    }
+    if (example.split !== 'validation') {
+      trainingExampleCount += 1;
+    }
+  }
+  if (trainingExampleCount === 0) {
+    throw new Error(
+      'Frozen-feature tiny-adapter training requires at least one train split example.',
+    );
   }
   if (
     dataset.source.kind !== 'synthetic-ci-fixture' &&
@@ -755,6 +1012,39 @@ function normalizeTrainingOptions(
   ) {
     throw new Error('targetLoss must be non-negative when provided.');
   }
+  if (options.optimizer !== 'sgd' && options.optimizer !== 'adamw') {
+    throw new Error('optimizer must be sgd or adamw.');
+  }
+  assertPositiveInteger(options.batchSize, 'batchSize');
+  if (!options.samplerSeed.trim()) {
+    throw new Error('samplerSeed is required.');
+  }
+  assertPositiveInteger(options.lengthBucketCount, 'lengthBucketCount');
+  if (options.gradientClipNorm !== undefined) {
+    assertPositiveFinite(options.gradientClipNorm, 'gradientClipNorm');
+  }
+  if (
+    options.learningRateSchedule !== 'constant' &&
+    options.learningRateSchedule !== 'linear-decay'
+  ) {
+    throw new Error('learningRateSchedule must be constant or linear-decay.');
+  }
+  if (
+    !Number.isFinite(options.minLearningRateRatio) ||
+    options.minLearningRateRatio < 0 ||
+    options.minLearningRateRatio > 1
+  ) {
+    throw new Error('minLearningRateRatio must be between 0 and 1.');
+  }
+  if (options.validationEveryEpochs !== undefined) {
+    assertPositiveInteger(options.validationEveryEpochs, 'validationEveryEpochs');
+  }
+  if (options.earlyStoppingPatience !== undefined) {
+    assertPositiveInteger(options.earlyStoppingPatience, 'earlyStoppingPatience');
+  }
+  if (!Number.isFinite(options.earlyStoppingMinDelta) || options.earlyStoppingMinDelta < 0) {
+    throw new Error('earlyStoppingMinDelta must be a finite non-negative number.');
+  }
   if (options.progressEveryEpochs !== undefined) {
     assertPositiveInteger(options.progressEveryEpochs, 'progressEveryEpochs');
   }
@@ -851,21 +1141,48 @@ function validateCompatibility(
   }
 }
 
+interface AdamWOptimizerState {
+  readonly weightM: number[];
+  readonly weightV: number[];
+  readonly biasM: number[];
+  readonly biasV: number[];
+  step: number;
+}
+
+interface AdamWEpochOutcome {
+  readonly gradientClipEvents: number;
+}
+
+function createAdamWOptimizerState(
+  weightParameterCount: number,
+  biasParameterCount: number,
+): AdamWOptimizerState {
+  return {
+    weightM: new Array<number>(weightParameterCount).fill(0),
+    weightV: new Array<number>(weightParameterCount).fill(0),
+    biasM: new Array<number>(biasParameterCount).fill(0),
+    biasV: new Array<number>(biasParameterCount).fill(0),
+    step: 0,
+  };
+}
+
 function runSgdEpoch(
-  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  examples: readonly FrozenFeatureTinyAdapterExampleV1[],
   weights: number[],
   bias: number[],
+  featureDimension: number,
+  outputDimension: number,
   learningRate: number,
   l2Regularization: number,
 ): void {
-  for (const example of dataset.examples) {
-    const prediction = predict(example.features, weights, bias, dataset.outputDimension);
+  for (const example of examples) {
+    const prediction = predict(example.features, weights, bias, outputDimension);
     const exampleWeight = example.weight ?? 1;
-    for (let outputIndex = 0; outputIndex < dataset.outputDimension; outputIndex += 1) {
+    for (let outputIndex = 0; outputIndex < outputDimension; outputIndex += 1) {
       const error = (prediction[outputIndex] ?? 0) - (example.targetResidual[outputIndex] ?? 0);
-      const gradientScale = (2 * error * exampleWeight) / dataset.outputDimension;
-      for (let featureIndex = 0; featureIndex < dataset.featureDimension; featureIndex += 1) {
-        const weightIndex = outputIndex * dataset.featureDimension + featureIndex;
+      const gradientScale = (2 * error * exampleWeight) / outputDimension;
+      for (let featureIndex = 0; featureIndex < featureDimension; featureIndex += 1) {
+        const weightIndex = outputIndex * featureDimension + featureIndex;
         const weight = weights[weightIndex] ?? 0;
         const feature = example.features[featureIndex] ?? 0;
         weights[weightIndex] =
@@ -876,26 +1193,330 @@ function runSgdEpoch(
   }
 }
 
+function runAdamWEpoch(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  examples: readonly FrozenFeatureTinyAdapterExampleV1[],
+  weights: number[],
+  bias: number[],
+  state: AdamWOptimizerState,
+  options: FrozenFeatureTinyAdapterTrainingOptions,
+  epoch: number,
+  learningRate: number,
+): AdamWEpochOutcome {
+  let gradientClipEvents = 0;
+  const batches = createBalancedEpochBatches(examples, options, epoch);
+  for (const batch of batches) {
+    const gradients = calculateBatchGradients(dataset, batch, weights, bias);
+    const clipScale = getGradientClipScale(
+      gradients.weightGradients,
+      gradients.biasGradients,
+      options.gradientClipNorm,
+    );
+    if (clipScale < 1) {
+      gradientClipEvents += 1;
+      scaleInPlace(gradients.weightGradients, clipScale);
+      scaleInPlace(gradients.biasGradients, clipScale);
+    }
+    applyAdamW(
+      weights,
+      bias,
+      gradients.weightGradients,
+      gradients.biasGradients,
+      state,
+      learningRate,
+      options.l2Regularization,
+    );
+    assertFiniteTrainingState(weights, bias, 'frozen-feature tiny-adapter AdamW step');
+  }
+  return { gradientClipEvents };
+}
+
+function calculateBatchGradients(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  examples: readonly FrozenFeatureTinyAdapterExampleV1[],
+  weights: readonly number[],
+  bias: readonly number[],
+): { readonly weightGradients: number[]; readonly biasGradients: number[] } {
+  const weightGradients = new Array<number>(weights.length).fill(0);
+  const biasGradients = new Array<number>(bias.length).fill(0);
+  let totalWeight = 0;
+  for (const example of examples) {
+    const prediction = predict(example.features, weights, bias, dataset.outputDimension);
+    const exampleWeight = example.weight ?? 1;
+    totalWeight += exampleWeight;
+    for (let outputIndex = 0; outputIndex < dataset.outputDimension; outputIndex += 1) {
+      const error = (prediction[outputIndex] ?? 0) - (example.targetResidual[outputIndex] ?? 0);
+      const gradientScale = (2 * error * exampleWeight) / dataset.outputDimension;
+      for (let featureIndex = 0; featureIndex < dataset.featureDimension; featureIndex += 1) {
+        const weightIndex = outputIndex * dataset.featureDimension + featureIndex;
+        weightGradients[weightIndex] =
+          (weightGradients[weightIndex] ?? 0) +
+          gradientScale * (example.features[featureIndex] ?? 0);
+      }
+      biasGradients[outputIndex] = (biasGradients[outputIndex] ?? 0) + gradientScale;
+    }
+  }
+  const normalization = Math.max(1, totalWeight);
+  scaleInPlace(weightGradients, 1 / normalization);
+  scaleInPlace(biasGradients, 1 / normalization);
+  return { weightGradients, biasGradients };
+}
+
+function applyAdamW(
+  weights: number[],
+  bias: number[],
+  weightGradients: readonly number[],
+  biasGradients: readonly number[],
+  state: AdamWOptimizerState,
+  learningRate: number,
+  weightDecay: number,
+): void {
+  state.step += 1;
+  const beta1 = 0.9;
+  const beta2 = 0.999;
+  const epsilon = 1e-8;
+  const beta1Correction = 1 - beta1 ** state.step;
+  const beta2Correction = 1 - beta2 ** state.step;
+  for (let index = 0; index < weights.length; index += 1) {
+    const gradient = weightGradients[index] ?? 0;
+    state.weightM[index] = beta1 * (state.weightM[index] ?? 0) + (1 - beta1) * gradient;
+    state.weightV[index] = beta2 * (state.weightV[index] ?? 0) + (1 - beta2) * gradient * gradient;
+    const mHat = (state.weightM[index] ?? 0) / beta1Correction;
+    const vHat = (state.weightV[index] ?? 0) / beta2Correction;
+    const decayedWeight = (weights[index] ?? 0) * (1 - learningRate * weightDecay);
+    weights[index] = decayedWeight - learningRate * (mHat / (Math.sqrt(vHat) + epsilon));
+  }
+  for (let index = 0; index < bias.length; index += 1) {
+    const gradient = biasGradients[index] ?? 0;
+    state.biasM[index] = beta1 * (state.biasM[index] ?? 0) + (1 - beta1) * gradient;
+    state.biasV[index] = beta2 * (state.biasV[index] ?? 0) + (1 - beta2) * gradient * gradient;
+    const mHat = (state.biasM[index] ?? 0) / beta1Correction;
+    const vHat = (state.biasV[index] ?? 0) / beta2Correction;
+    bias[index] = (bias[index] ?? 0) - learningRate * (mHat / (Math.sqrt(vHat) + epsilon));
+  }
+}
+
 function calculateLoss(
   dataset: FrozenFeatureTinyAdapterDatasetV1,
   weights: readonly number[],
   bias: readonly number[],
   l2Regularization: number,
 ): number {
+  return calculateExamplesLoss(
+    dataset.examples,
+    dataset.outputDimension,
+    weights,
+    bias,
+    l2Regularization,
+  );
+}
+
+function calculateValidationLoss(
+  examples: readonly FrozenFeatureTinyAdapterExampleV1[],
+  weights: readonly number[],
+  bias: readonly number[],
+  l2Regularization: number,
+): number | undefined {
+  if (examples.length === 0) return undefined;
+  const outputDimension = examples[0]?.targetResidual.length ?? 0;
+  return calculateExamplesLoss(examples, outputDimension, weights, bias, l2Regularization);
+}
+
+function calculateExamplesLoss(
+  examples: readonly FrozenFeatureTinyAdapterExampleV1[],
+  outputDimension: number,
+  weights: readonly number[],
+  bias: readonly number[],
+  l2Regularization: number,
+): number {
   let totalError = 0;
   let totalWeight = 0;
-  for (const example of dataset.examples) {
-    const prediction = predict(example.features, weights, bias, dataset.outputDimension);
+  for (const example of examples) {
+    const prediction = predict(example.features, weights, bias, outputDimension);
     const exampleWeight = example.weight ?? 1;
-    for (let outputIndex = 0; outputIndex < dataset.outputDimension; outputIndex += 1) {
+    for (let outputIndex = 0; outputIndex < outputDimension; outputIndex += 1) {
       const error = (prediction[outputIndex] ?? 0) - (example.targetResidual[outputIndex] ?? 0);
       totalError += error * error * exampleWeight;
       totalWeight += exampleWeight;
     }
   }
-  const mse = totalError / Math.max(1, totalWeight * dataset.outputDimension);
+  const mse = totalError / Math.max(1, totalWeight * outputDimension);
   const l2 = weights.reduce((sum, value) => sum + value * value, 0) * l2Regularization;
   return mse + l2;
+}
+
+function createSamplerDiagnostics(
+  dataset: FrozenFeatureTinyAdapterDatasetV1,
+  trainExamples: readonly FrozenFeatureTinyAdapterExampleV1[],
+  options: FrozenFeatureTinyAdapterTrainingOptions,
+): FrozenFeatureTinyAdapterSamplerDiagnosticsV1 {
+  const lengthBuckets = createLengthBucketLookup(trainExamples, options.lengthBucketCount);
+  const conditionExampleCounts: Record<string, number> = {};
+  const lengthBucketExampleCounts: Record<string, number> = {};
+  for (const example of trainExamples) {
+    const conditionKey = createDiagnosticFingerprint(
+      'condition',
+      getConditionKey(example, options.conditionBalanced),
+    );
+    conditionExampleCounts[conditionKey] = (conditionExampleCounts[conditionKey] ?? 0) + 1;
+    const lengthBucket = String(lengthBuckets.get(example.id) ?? 0);
+    lengthBucketExampleCounts[lengthBucket] = (lengthBucketExampleCounts[lengthBucket] ?? 0) + 1;
+  }
+  return {
+    seedFingerprint: createDiagnosticFingerprint('sampler-seed', options.samplerSeed),
+    batchSize: options.batchSize,
+    lengthBucketCount: options.lengthBucketCount,
+    conditionBalanced: options.conditionBalanced,
+    trainingExamples: trainExamples.length,
+    validationExamples: dataset.examples.length - trainExamples.length,
+    batchesPerEpoch: Math.ceil(trainExamples.length / options.batchSize),
+    conditionExampleCounts: sortRecord(conditionExampleCounts),
+    lengthBucketExampleCounts: sortRecord(lengthBucketExampleCounts),
+  };
+}
+
+function createBalancedEpochBatches(
+  examples: readonly FrozenFeatureTinyAdapterExampleV1[],
+  options: FrozenFeatureTinyAdapterTrainingOptions,
+  epoch: number,
+): readonly (readonly FrozenFeatureTinyAdapterExampleV1[])[] {
+  const lengthBuckets = createLengthBucketLookup(examples, options.lengthBucketCount);
+  const strata = new Map<string, FrozenFeatureTinyAdapterExampleV1[]>();
+  for (const example of examples) {
+    const conditionKey = getConditionKey(example, options.conditionBalanced);
+    const lengthBucket = lengthBuckets.get(example.id) ?? 0;
+    const key = `${conditionKey}\u0000${lengthBucket.toString()}`;
+    const stratum = strata.get(key) ?? [];
+    stratum.push(example);
+    strata.set(key, stratum);
+  }
+  const orderedStrata = [...strata.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, stratum]) => ({
+      key,
+      examples: stratum
+        .map((example) => ({
+          example,
+          key: stableHash(`${options.samplerSeed}:${epoch.toString()}:${key}:${example.id}`),
+        }))
+        .sort(
+          (left, right) => left.key - right.key || left.example.id.localeCompare(right.example.id),
+        )
+        .map((entry) => entry.example),
+      index: 0,
+    }));
+  const orderedExamples: FrozenFeatureTinyAdapterExampleV1[] = [];
+  while (orderedExamples.length < examples.length) {
+    let added = false;
+    for (const stratum of orderedStrata) {
+      const example = stratum.examples[stratum.index];
+      if (example === undefined) continue;
+      orderedExamples.push(example);
+      stratum.index += 1;
+      added = true;
+    }
+    if (!added) break;
+  }
+  const batches: FrozenFeatureTinyAdapterExampleV1[][] = [];
+  for (let index = 0; index < orderedExamples.length; index += options.batchSize) {
+    batches.push(orderedExamples.slice(index, index + options.batchSize));
+  }
+  return batches;
+}
+
+function createLengthBucketLookup(
+  examples: readonly FrozenFeatureTinyAdapterExampleV1[],
+  bucketCount: number,
+): ReadonlyMap<string, number> {
+  const lengths = examples.map((example) => getExampleLength(example));
+  const minLength = Math.min(...lengths);
+  const maxLength = Math.max(...lengths);
+  const lookup = new Map<string, number>();
+  examples.forEach((example, index) => {
+    const length = lengths[index] ?? getExampleLength(example);
+    const bucket =
+      maxLength === minLength
+        ? 0
+        : Math.min(
+            bucketCount - 1,
+            Math.floor(((length - minLength) / (maxLength - minLength + 1)) * bucketCount),
+          );
+    lookup.set(example.id, bucket);
+  });
+  return lookup;
+}
+
+function getExampleLength(example: FrozenFeatureTinyAdapterExampleV1): number {
+  return example.frameCount ?? example.features.length;
+}
+
+function getConditionKey(
+  example: FrozenFeatureTinyAdapterExampleV1,
+  conditionBalanced: boolean,
+): string {
+  if (!conditionBalanced) return 'all';
+  return example.conditionKey?.trim() || 'unspecified';
+}
+
+function getScheduledLearningRate(
+  options: FrozenFeatureTinyAdapterTrainingOptions,
+  epoch: number,
+): number {
+  if (options.learningRateSchedule === 'constant' || options.epochs <= 1) {
+    return options.learningRate;
+  }
+  const progress = Math.min(1, Math.max(0, (epoch - 1) / Math.max(1, options.epochs - 1)));
+  const ratio = 1 - progress * (1 - options.minLearningRateRatio);
+  return options.learningRate * ratio;
+}
+
+function getGradientClipScale(
+  weightGradients: readonly number[],
+  biasGradients: readonly number[],
+  clipNorm: number | undefined,
+): number {
+  if (clipNorm === undefined) return 1;
+  const norm = Math.sqrt(
+    [...weightGradients, ...biasGradients].reduce((sum, value) => sum + value * value, 0),
+  );
+  assertFiniteNumber(norm, 'frozen-feature tiny-adapter gradient norm');
+  if (norm <= clipNorm || norm === 0) return 1;
+  return clipNorm / norm;
+}
+
+function scaleInPlace(values: number[], scale: number): void {
+  for (let index = 0; index < values.length; index += 1) {
+    values[index] = (values[index] ?? 0) * scale;
+  }
+}
+
+function assertFiniteTrainingState(
+  weights: readonly number[],
+  bias: readonly number[],
+  name: string,
+): void {
+  for (const value of [...weights, ...bias]) {
+    assertFiniteNumber(value, name);
+  }
+}
+
+function stableHash(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash;
+}
+
+function sortRecord(input: Readonly<Record<string, number>>): Readonly<Record<string, number>> {
+  return Object.fromEntries(
+    Object.entries(input).sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function createDiagnosticFingerprint(kind: string, value: string): string {
+  return `${kind}:fnv1a32:${stableHash(`${kind}:${value}`).toString(16).padStart(8, '0')}`;
 }
 
 function predict(
@@ -924,18 +1545,28 @@ function shouldEmitProgress(
   return options.progressEveryEpochs !== undefined && epoch % options.progressEveryEpochs === 0;
 }
 
-function createProgress(
-  epoch: number,
-  epochs: number,
-  loss: number,
-  status: FrozenFeatureTinyAdapterProgressV1['status'],
-): FrozenFeatureTinyAdapterProgressV1 {
+function createProgress(input: {
+  readonly epoch: number;
+  readonly epochs: number;
+  readonly loss: number;
+  readonly status: FrozenFeatureTinyAdapterProgressV1['status'];
+  readonly validationLoss?: number;
+  readonly learningRate?: number;
+  readonly optimizer?: FrozenFeatureTinyAdapterOptimizerKind;
+  readonly stoppedEarly?: boolean;
+}): FrozenFeatureTinyAdapterProgressV1 {
   return {
     schemaVersion: 1,
-    epoch,
-    epochs,
-    loss: roundFloat(loss),
-    status,
+    epoch: input.epoch,
+    epochs: input.epochs,
+    loss: roundFloat(input.loss),
+    status: input.status,
+    ...(input.validationLoss === undefined
+      ? {}
+      : { validationLoss: roundFloat(input.validationLoss) }),
+    ...(input.learningRate === undefined ? {} : { learningRate: roundFloat(input.learningRate) }),
+    ...(input.optimizer === undefined ? {} : { optimizer: input.optimizer }),
+    ...(input.stoppedEarly === undefined ? {} : { stoppedEarly: input.stoppedEarly }),
   };
 }
 

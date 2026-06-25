@@ -42,6 +42,76 @@ function createBlockedOrtTrainingProof(): OnnxRuntimeTrainingBackendProofV1 {
   };
 }
 
+function createBalancedSamplerDataset(): FrozenFeatureTinyAdapterDatasetV1 {
+  const base = createSyntheticFrozenFeatureTinyAdapterDataset();
+  return {
+    ...base,
+    datasetId: 'synthetic-balanced-sampler-dataset-v1',
+    featureDimension: 3,
+    outputDimension: 1,
+    examples: [
+      {
+        id: 'normal-short-a',
+        features: [1, 0, 0.1],
+        targetResidual: [0.2],
+        frameCount: 20,
+        conditionKey: 'normal',
+      },
+      {
+        id: 'normal-long-a',
+        features: [0.8, 0.1, 0.4],
+        targetResidual: [0.16],
+        frameCount: 120,
+        conditionKey: 'normal',
+      },
+      {
+        id: 'whisper-short-a',
+        features: [0.1, 1, -0.2],
+        targetResidual: [-0.1],
+        frameCount: 24,
+        conditionKey: 'whisper',
+      },
+      {
+        id: 'whisper-long-a',
+        features: [0.2, 0.9, 0.5],
+        targetResidual: [-0.06],
+        frameCount: 110,
+        conditionKey: 'whisper',
+      },
+      {
+        id: 'projected-mid-a',
+        features: [-0.3, 0.2, 1],
+        targetResidual: [0.08],
+        frameCount: 64,
+        conditionKey: 'projected',
+      },
+      {
+        id: 'projected-long-a',
+        features: [0.4, -0.1, 0.9],
+        targetResidual: [0.12],
+        frameCount: 140,
+        conditionKey: 'projected',
+      },
+      {
+        id: 'validation-normal',
+        features: [0.9, 0.05, 0.2],
+        targetResidual: [0.18],
+        frameCount: 42,
+        conditionKey: 'normal',
+        split: 'validation',
+      },
+      {
+        id: 'validation-whisper',
+        features: [0.05, 0.8, -0.1],
+        targetResidual: [-0.08],
+        frameCount: 44,
+        conditionKey: 'whisper',
+        split: 'validation',
+      },
+    ],
+  };
+}
+
 describe('browser frozen-feature tiny-adapter backend', () => {
   it('exposes an implementation-agnostic BrowserTrainingBackend descriptor', () => {
     const backend = createDefaultBrowserTrainingBackend();
@@ -186,6 +256,119 @@ describe('browser frozen-feature tiny-adapter backend', () => {
       telemetry: false,
       localOnly: true,
     });
+    expect(first.diagnostics.optimization.optimizer).toBe('adamw');
+    expect(first.diagnostics.safety).toEqual({
+      finiteLoss: true,
+      nanInfGuardTriggered: false,
+    });
+  });
+
+  it('uses balanced sampler diagnostics, AdamW clipping, validation loss, and scheduling', () => {
+    const result = trainFrozenFeatureTinyAdapter(createBalancedSamplerDataset(), {
+      epochs: 12,
+      batchSize: 2,
+      samplerSeed: 'unit-balanced-sampler',
+      lengthBucketCount: 3,
+      conditionBalanced: true,
+      gradientClipNorm: 0.000001,
+      validationEveryEpochs: 1,
+      targetLoss: 0,
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.metrics.stoppedEarly).toBe(false);
+    expect(result.metrics.validationLoss).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.bestValidationLoss).toBeGreaterThanOrEqual(0);
+    expect(result.diagnostics.sampler).toMatchObject({
+      batchSize: 2,
+      lengthBucketCount: 3,
+      conditionBalanced: true,
+      trainingExamples: 6,
+      validationExamples: 2,
+      batchesPerEpoch: 3,
+    });
+    expect(result.diagnostics.sampler.seedFingerprint).toMatch(/^sampler-seed:fnv1a32:/);
+    expect(Object.keys(result.diagnostics.sampler.conditionExampleCounts)).toHaveLength(3);
+    expect(Object.keys(result.diagnostics.sampler.conditionExampleCounts)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^condition:fnv1a32:/),
+        expect.stringMatching(/^condition:fnv1a32:/),
+        expect.stringMatching(/^condition:fnv1a32:/),
+      ]),
+    );
+    expect(Object.values(result.diagnostics.sampler.conditionExampleCounts)).toEqual([2, 2, 2]);
+    expect(Object.values(result.diagnostics.sampler.lengthBucketExampleCounts)).toHaveLength(3);
+    expect(
+      Object.values(result.diagnostics.sampler.lengthBucketExampleCounts).reduce(
+        (sum, count) => sum + count,
+        0,
+      ),
+    ).toBe(6);
+    expect(result.diagnostics.optimization).toMatchObject({
+      optimizer: 'adamw',
+      learningRateSchedule: 'linear-decay',
+      gradientClipNorm: 0.000001,
+    });
+    expect(result.diagnostics.optimization.gradientClipEvents).toBeGreaterThan(0);
+    expect(result.diagnostics.optimization.lastLearningRate).toBeLessThan(0.04);
+    expect(result.diagnostics.validation).toMatchObject({
+      enabled: true,
+      everyEpochs: 1,
+      stoppedEarly: false,
+    });
+  });
+
+  it('stops early when validation loss does not improve by the configured delta', () => {
+    const progressStoppedEarly: boolean[] = [];
+    const result = trainFrozenFeatureTinyAdapter(createBalancedSamplerDataset(), {
+      epochs: 80,
+      targetLoss: 0,
+      batchSize: 2,
+      validationEveryEpochs: 1,
+      earlyStoppingPatience: 2,
+      earlyStoppingMinDelta: 1,
+      onProgress: (progress) => {
+        progressStoppedEarly.push(progress.stoppedEarly === true);
+      },
+      progressEveryEpochs: 1,
+    });
+
+    expect(result.metrics.epochsCompleted).toBeLessThan(80);
+    expect(result.metrics.stoppedEarly).toBe(true);
+    expect(result.diagnostics.validation.stoppedEarly).toBe(true);
+    expect(result.diagnostics.validation.epochsWithoutImprovement).toBeGreaterThanOrEqual(2);
+    expect(progressStoppedEarly).toContain(true);
+  });
+
+  it('validates sampler, optimizer, split, and finite-value guards', () => {
+    const dataset = createBalancedSamplerDataset();
+    expect(() =>
+      validateFrozenFeatureTinyAdapterDataset({
+        ...dataset,
+        examples: dataset.examples.map((example) => ({ ...example, split: 'validation' as const })),
+      }),
+    ).toThrow(/train split/);
+    expect(() =>
+      validateFrozenFeatureTinyAdapterDataset({
+        ...dataset,
+        examples: [{ ...dataset.examples[0]!, conditionKey: ' ' }, ...dataset.examples.slice(1)],
+      }),
+    ).toThrow(/conditionKey/);
+    expect(() => trainFrozenFeatureTinyAdapter(dataset, { optimizer: 'rmsprop' as never })).toThrow(
+      /optimizer/,
+    );
+    expect(() => trainFrozenFeatureTinyAdapter(dataset, { gradientClipNorm: 0 })).toThrow(
+      /gradientClipNorm/,
+    );
+    expect(() =>
+      trainFrozenFeatureTinyAdapter({
+        ...dataset,
+        examples: [
+          { ...dataset.examples[0]!, features: [Number.NaN, 0, 0] },
+          ...dataset.examples.slice(1),
+        ],
+      }),
+    ).toThrow(/finite/);
   });
 
   it('emits progress and supports cooperative cancellation without mutating active profiles', () => {
