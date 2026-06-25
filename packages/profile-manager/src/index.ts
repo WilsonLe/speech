@@ -1,9 +1,14 @@
 import { validateVocabularyStoreSnapshot } from '@speech/context-bias';
 import {
+  buildPromptIdentitySplitPlan,
   buildTrainingReadinessCoverageReport,
+  summarizePromptIdentitySplitPlan,
   type EnrollmentQualityReportV1,
   type EnrollmentSentenceLanguage,
   type EnrollmentVoiceCondition,
+  type PromptIdentitySplitConfigV1,
+  type PromptIdentitySplitPlanV1,
+  type PromptIdentitySplitReportV1,
   type TrainingReadinessAcceptedUtteranceV1,
   type TrainingReadinessCoverageReportV1,
   type TrainingReadinessIdentityOptions,
@@ -256,6 +261,50 @@ export interface TrainingJobRevisionVerificationResultV1 {
     readonly networkUpload: false;
     readonly telemetry: false;
     readonly localOnly: true;
+  };
+}
+
+export interface TrainingJobPromptIdentitySplitInput {
+  readonly jobId: string;
+  readonly config?: PromptIdentitySplitConfigV1;
+}
+
+export interface TrainingJobPromptIdentitySplitPlanV1 {
+  readonly schemaVersion: 1;
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly enrollmentRevisionSha256: string;
+  readonly split: PromptIdentitySplitPlanV1;
+  readonly privacy: {
+    readonly localOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawPromptIds: true;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+  };
+}
+
+export interface TrainingJobPromptIdentitySplitSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly enrollmentRevisionSha256: string;
+  readonly split: PromptIdentitySplitReportV1;
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly localOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawPromptIds: false;
+    readonly networkUpload: false;
+    readonly telemetry: false;
   };
 }
 
@@ -901,6 +950,17 @@ export class EnrollmentProfileStore {
     };
   }
 
+  async buildTrainingJobPromptIdentitySplit(
+    input: TrainingJobPromptIdentitySplitInput,
+  ): Promise<TrainingJobPromptIdentitySplitPlanV1> {
+    const jobId = normalizeSegment(input.jobId, 'trainingJobId');
+    const revision = await this.getTrainingJobRevision(jobId);
+    if (revision === undefined) {
+      throw new Error(`Training job revision ${jobId} was not found.`);
+    }
+    return buildTrainingJobPromptIdentitySplitPlan(revision, input.config);
+  }
+
   async deleteProfile(profileId: string): Promise<void> {
     const normalizedProfileId = normalizeSegment(profileId, 'profileId');
     await this.backend.deleteDirectory(['profiles', normalizedProfileId]);
@@ -1096,6 +1156,65 @@ export function summarizeTrainingJobRevision(
   };
 }
 
+export function buildTrainingJobPromptIdentitySplitPlan(
+  revision: TrainingJobRevisionV1,
+  config?: PromptIdentitySplitConfigV1,
+): TrainingJobPromptIdentitySplitPlanV1 {
+  const split = buildPromptIdentitySplitPlan(
+    revision.enrollment.utterances.map((utterance) => ({
+      schemaVersion: 1,
+      utteranceId: utterance.id,
+      promptId: utterance.promptId,
+      language: utterance.language,
+      voiceCondition: utterance.voiceCondition,
+      durationMs: utterance.durationMs,
+    })),
+    config,
+  );
+  return {
+    schemaVersion: 1,
+    jobId: revision.jobId,
+    profileId: revision.profileId,
+    enrollmentRevisionSha256: revision.enrollment.revisionSha256,
+    split,
+    privacy: {
+      localOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      exposesRawPromptIds: true,
+      networkUpload: false,
+      telemetry: false,
+    },
+  };
+}
+
+export function summarizeTrainingJobPromptIdentitySplitPlan(
+  plan: TrainingJobPromptIdentitySplitPlanV1,
+): TrainingJobPromptIdentitySplitSummaryV1 {
+  return {
+    schemaVersion: 1,
+    jobId: plan.jobId,
+    profileId: plan.profileId,
+    enrollmentRevisionSha256: plan.enrollmentRevisionSha256,
+    split: summarizePromptIdentitySplitPlan(plan.split),
+    privacy: {
+      aggregateOnly: true,
+      localOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      exposesRawPromptIds: false,
+      networkUpload: false,
+      telemetry: false,
+    },
+  };
+}
+
 async function buildTrainingJobEnrollmentRevision(
   summary: EnrollmentProfileSummaryV1,
   digest: (bytes: ArrayBuffer) => Promise<string>,
@@ -1207,7 +1326,7 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, frozen training-job revisions, readiness reporting, import/export, rollback, and deletion.',
+    'Private profile storage, frozen training-job revisions, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
 };
 
 async function writeJsonAtomically(

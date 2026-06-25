@@ -5,6 +5,7 @@ import type {
   EnrollmentProfileSummaryV1,
   EnrollmentUtteranceV1,
   ProfileStorageBackendKind,
+  TrainingJobPromptIdentitySplitSummaryV1,
   TrainingJobRevisionSummaryV1,
   TrainingJobRevisionVerificationResultV1,
 } from '@speech/profile-manager';
@@ -12,6 +13,7 @@ import type {
   EnrollmentQualityReportV1,
   EnrollmentSentenceLanguage,
   EnrollmentVoiceCondition,
+  PromptIdentitySplitConfigV1,
 } from '@speech/enrollment';
 import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
 import profileStoreWorkerUrl from './profile-store.worker.ts?worker&url';
@@ -54,6 +56,10 @@ export interface ProfileStoreTrainingJobVerificationResult extends ProfileStoreA
   readonly verification: TrainingJobRevisionVerificationResultV1;
 }
 
+export interface ProfileStoreTrainingJobPromptSplitResult extends ProfileStoreActiveResult {
+  readonly split: TrainingJobPromptIdentitySplitSummaryV1;
+}
+
 export interface SaveAcceptedEnrollmentTakeOptions {
   readonly profileId: string;
   readonly profileDisplayName: string;
@@ -89,6 +95,12 @@ export interface FreezeTrainingJobRevisionOptions {
 export interface VerifyTrainingJobRevisionOptions {
   readonly jobId: string;
   readonly vocabularyStore?: VocabularyStoreSnapshotV1;
+  readonly timeoutMs?: number;
+}
+
+export interface BuildTrainingJobPromptSplitOptions {
+  readonly jobId: string;
+  readonly config?: PromptIdentitySplitConfigV1;
   readonly timeoutMs?: number;
 }
 
@@ -298,6 +310,30 @@ export function verifyTrainingJobRevision(
       persistentStorageGranted: response.persistentStorageGranted,
       activeState: response.activeState,
       verification: response.verification,
+    };
+  });
+}
+
+export function buildTrainingJobPromptSplit(
+  options: BuildTrainingJobPromptSplitOptions,
+): Promise<ProfileStoreTrainingJobPromptSplitResult> {
+  return requestProfileStore(
+    {
+      type: 'BUILD_TRAINING_JOB_PROMPT_SPLIT',
+      requestId: createRequestId('training-job-prompt-split'),
+      jobId: options.jobId,
+      ...(options.config === undefined ? {} : { config: options.config }),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_TRAINING_JOB_PROMPT_SPLIT_READY') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      split: response.split,
     };
   });
 }

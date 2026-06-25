@@ -7,6 +7,7 @@ from .dataset import (
     ProfilePromptSplit,
     build_profile_dataset,
     load_profile_dataset,
+    split_prompt_identities,
     split_prompt_ids,
 )
 from .evaluation import (
@@ -78,6 +79,7 @@ __all__ = [
     "parse_activation_gate_config",
     "parse_evaluation_case",
     "parse_training_config",
+    "split_prompt_identities",
     "split_prompt_ids",
     "train_frozen_base_adapter",
     "train_frozen_base_adapter_from_files",
