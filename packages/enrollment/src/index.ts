@@ -1,5 +1,6 @@
 export * from './calibration';
 export * from './coverage';
+export * from './ctc-forced-alignment';
 export * from './custom-vocabulary-prompts';
 export * from './prompt-split';
 export * from './quality';
@@ -16,5 +17,5 @@ export const packageInfo: EnrollmentPackageInfo = {
   name: '@speech/enrollment',
   status: 'active',
   description:
-    'Guided enrollment scheduling, custom-vocabulary prompts, quality reporting, readiness policy, prompt-identity splitting, and coverage accounting.',
+    'Guided enrollment scheduling, CTC forced alignment, custom-vocabulary prompts, quality reporting, readiness policy, prompt-identity splitting, and coverage accounting.',
 };

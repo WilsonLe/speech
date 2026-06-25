@@ -2,7 +2,7 @@
   "name": "@speech/profile-manager",
   "version": "0.1.0",
   "private": true,
-  "description": "Private profile storage, frozen training-job revisions, feature shards, prompt split planning, import/export, rollback, and deletion.",
+  "description": "Private profile storage, frozen training-job revisions, feature shards, frame-label alignment sets, prompt split planning, import/export, rollback, and deletion.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {

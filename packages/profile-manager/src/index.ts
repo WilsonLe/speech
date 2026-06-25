@@ -1,8 +1,11 @@
 import { validateVocabularyStoreSnapshot } from '@speech/context-bias';
 import {
+  buildCtcForcedAlignment,
   buildPromptIdentitySplitPlan,
   buildTrainingReadinessCoverageReport,
   summarizePromptIdentitySplitPlan,
+  type CtcForcedAlignmentOptionsV1,
+  type CtcForcedAlignmentResultV1,
   type EnrollmentQualityReportV1,
   type EnrollmentSentenceLanguage,
   type EnrollmentVoiceCondition,
@@ -454,6 +457,154 @@ export interface TrainingJobFeatureShardVerificationResultV1 {
   }[];
   readonly errors: readonly string[];
   readonly privacy: TrainingJobFeaturePreparationSummaryV1['privacy'];
+}
+
+export interface TrainingJobCtcAlignmentInputV1 {
+  readonly utteranceId: string;
+  readonly targetTokenIds: readonly number[];
+  readonly frameLogits: Float32Array | readonly number[];
+  readonly frameCount: number;
+  readonly vocabularySize: number;
+  readonly blankId: number;
+}
+
+export interface PrepareTrainingJobFrameLabelsInput {
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId?: string;
+  readonly alignments: readonly TrainingJobCtcAlignmentInputV1[];
+  readonly options?: CtcForcedAlignmentOptionsV1;
+}
+
+export interface TrainingJobFrameLabelsUtteranceV1 {
+  readonly utteranceId: string;
+  readonly promptId: string;
+  readonly split: 'train' | 'validation' | 'test';
+  readonly featureShardId: string;
+  readonly frameOffset: number;
+  readonly frameCount: number;
+  readonly status: CtcForcedAlignmentResultV1['summary']['status'];
+  readonly usableFrameCount: number;
+  readonly excludedFrameCount: number;
+  readonly blankFrameCount: number;
+  readonly lowConfidenceFrameCount: number;
+  readonly meanFrameConfidence: number;
+  readonly meanTokenConfidence: number | null;
+}
+
+export interface TrainingJobFrameLabelsSplitTotalsV1 {
+  readonly utterances: number;
+  readonly alignedUtterances: number;
+  readonly lowConfidenceExcludedUtterances: number;
+  readonly frames: number;
+  readonly usableFrames: number;
+  readonly excludedFrames: number;
+}
+
+export interface TrainingJobFrameLabelsManifestV1 {
+  readonly schemaVersion: 1;
+  readonly manifestType: 'training-job-frame-labels';
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId: string;
+  readonly createdAt: string;
+  readonly enrollmentRevisionSha256: string;
+  readonly featureManifestSha256: string;
+  readonly alignment: {
+    readonly algorithmId: 'ctc-viterbi-forced-alignment-v1';
+    readonly blankId: number;
+    readonly vocabularySize: number;
+    readonly options: Required<CtcForcedAlignmentOptionsV1>;
+  };
+  readonly labelFile: {
+    readonly path: string;
+    readonly mediaType: 'application/json';
+    readonly sizeBytes: number;
+    readonly sha256: string;
+  };
+  readonly totals: {
+    readonly utterances: number;
+    readonly alignedUtterances: number;
+    readonly lowConfidenceExcludedUtterances: number;
+    readonly frames: number;
+    readonly usableFrames: number;
+    readonly excludedFrames: number;
+    readonly splits: Readonly<
+      Record<'train' | 'validation' | 'test', TrainingJobFrameLabelsSplitTotalsV1>
+    >;
+  };
+  readonly utterances: readonly TrainingJobFrameLabelsUtteranceV1[];
+  readonly manifestSha256: string;
+  readonly privacy: {
+    readonly localOnly: true;
+    readonly defaultExportIncludesFrameLabels: false;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsFrameLabels: true;
+    readonly containsTokenIds: true;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawPromptIds: true;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+  };
+}
+
+export interface TrainingJobFrameLabelsSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly manifestType: 'training-job-frame-labels';
+  readonly jobId: string;
+  readonly profileId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId: string;
+  readonly createdAt: string;
+  readonly enrollmentRevisionSha256: string;
+  readonly featureManifestSha256: string;
+  readonly manifestSha256: string;
+  readonly totals: TrainingJobFrameLabelsManifestV1['totals'];
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly localOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsFrameLabels: false;
+    readonly containsTokenIds: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawPromptIds: false;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+  };
+}
+
+export interface VerifyTrainingJobFrameLabelsInput {
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId: string;
+}
+
+export type DeleteTrainingJobFrameLabelsInput = VerifyTrainingJobFrameLabelsInput;
+
+export interface TrainingJobFrameLabelsVerificationResultV1 {
+  readonly schemaVersion: 1;
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId: string;
+  readonly checkedAt: string;
+  readonly ok: boolean;
+  readonly manifestStatus: 'match' | 'changed';
+  readonly expectedManifestSha256: string;
+  readonly actualManifestSha256: string;
+  readonly labelFile: {
+    readonly status: 'match' | 'changed' | 'missing';
+    readonly expectedSha256: string;
+    readonly actualSha256?: string;
+  };
+  readonly errors: readonly string[];
+  readonly privacy: TrainingJobFrameLabelsSummaryV1['privacy'];
 }
 
 export interface SaveEnrollmentUtteranceInput {
@@ -1252,6 +1403,145 @@ export class EnrollmentProfileStore {
     await this.backend.deleteDirectory(trainingJobFeatureSetPath(input.jobId, input.featureSetId));
   }
 
+  async prepareTrainingJobFrameLabels(
+    input: PrepareTrainingJobFrameLabelsInput,
+  ): Promise<TrainingJobFrameLabelsManifestV1> {
+    const jobId = normalizeSegment(input.jobId, 'trainingJobId');
+    const featureSetId = normalizeSegment(input.featureSetId, 'featureSetId');
+    const alignmentSetId = normalizeSegment(
+      input.alignmentSetId ?? this.createFrameLabelSetId(),
+      'alignmentSetId',
+    );
+    const manifestPath = trainingJobFrameLabelsManifestPath(jobId, featureSetId, alignmentSetId);
+    if ((await this.backend.getFile(manifestPath)) !== undefined) {
+      throw new Error(
+        `Training job frame-label set ${alignmentSetId} already exists for ${jobId}/${featureSetId}.`,
+      );
+    }
+    const featureManifest = await this.getTrainingJobFeaturePreparationManifest({
+      jobId,
+      featureSetId,
+    });
+    if (featureManifest === undefined) {
+      throw new Error(`Training job feature set ${featureSetId} was not found for ${jobId}.`);
+    }
+    const actualFeatureManifestSha256 = await calculateFeaturePreparationManifestSha256(
+      featureManifest,
+      (bytes) => this.digest(bytes),
+    );
+    if (actualFeatureManifestSha256 !== featureManifest.manifestSha256) {
+      throw new Error('Feature preparation manifest checksum changed before frame labeling.');
+    }
+    const featureVerification = await this.verifyTrainingJobFeatureShards({ jobId, featureSetId });
+    if (!featureVerification.ok) {
+      throw new Error('Feature shards must verify before frame labeling.');
+    }
+
+    try {
+      const prepared = await prepareFrameLabelFiles({
+        featureManifest,
+        alignmentSetId,
+        alignments: input.alignments,
+        ...(input.options === undefined ? {} : { options: input.options }),
+        digest: (bytes) => this.digest(bytes),
+        now: this.options.now?.() ?? new Date().toISOString(),
+      });
+      await writeCheckedFileAtomically(
+        this.backend,
+        portablePathToSegments(prepared.labelFile.path),
+        prepared.labelFile.bytes,
+        prepared.labelFile.sha256,
+        (bytes) => this.digest(bytes),
+      );
+      await writeJsonAtomically(this.backend, manifestPath, prepared.manifest);
+      return prepared.manifest;
+    } catch (error) {
+      await this.backend.deleteDirectory(
+        trainingJobFrameLabelsSetPath(jobId, featureSetId, alignmentSetId),
+      );
+      throw error;
+    }
+  }
+
+  async getTrainingJobFrameLabelsManifest(
+    input: VerifyTrainingJobFrameLabelsInput,
+  ): Promise<TrainingJobFrameLabelsManifestV1 | undefined> {
+    const bytes = await this.backend.getFile(
+      trainingJobFrameLabelsManifestPath(input.jobId, input.featureSetId, input.alignmentSetId),
+    );
+    return bytes === undefined ? undefined : parseJson<TrainingJobFrameLabelsManifestV1>(bytes);
+  }
+
+  async verifyTrainingJobFrameLabels(
+    input: VerifyTrainingJobFrameLabelsInput,
+  ): Promise<TrainingJobFrameLabelsVerificationResultV1> {
+    const jobId = normalizeSegment(input.jobId, 'trainingJobId');
+    const featureSetId = normalizeSegment(input.featureSetId, 'featureSetId');
+    const alignmentSetId = normalizeSegment(input.alignmentSetId, 'alignmentSetId');
+    const manifest = await this.getTrainingJobFrameLabelsManifest({
+      jobId,
+      featureSetId,
+      alignmentSetId,
+    });
+    if (manifest === undefined) {
+      throw new Error(
+        `Training job frame-label set ${alignmentSetId} was not found for ${jobId}/${featureSetId}.`,
+      );
+    }
+    const errors: string[] = [];
+    const actualManifestSha256 = await calculateFrameLabelsManifestSha256(manifest, (bytes) =>
+      this.digest(bytes),
+    );
+    const manifestStatus = actualManifestSha256 === manifest.manifestSha256 ? 'match' : 'changed';
+    if (manifestStatus !== 'match') {
+      errors.push('Frame-label manifest checksum changed.');
+    }
+    const bytes = await this.backend.getFile(portablePathToSegments(manifest.labelFile.path));
+    let labelFile: TrainingJobFrameLabelsVerificationResultV1['labelFile'];
+    if (bytes === undefined) {
+      errors.push('Frame-label file is missing.');
+      labelFile = {
+        status: 'missing',
+        expectedSha256: manifest.labelFile.sha256,
+      };
+    } else {
+      const actualSha256 = await this.digest(bytes);
+      const status =
+        actualSha256 === manifest.labelFile.sha256 &&
+        bytes.byteLength === manifest.labelFile.sizeBytes
+          ? 'match'
+          : 'changed';
+      if (status !== 'match') {
+        errors.push('Frame-label file checksum or size changed.');
+      }
+      labelFile = {
+        status,
+        expectedSha256: manifest.labelFile.sha256,
+        actualSha256,
+      };
+    }
+    return {
+      schemaVersion: 1,
+      jobId,
+      featureSetId,
+      alignmentSetId,
+      checkedAt: this.options.now?.() ?? new Date().toISOString(),
+      ok: errors.length === 0,
+      manifestStatus,
+      expectedManifestSha256: manifest.manifestSha256,
+      actualManifestSha256,
+      labelFile,
+      errors,
+      privacy: createFrameLabelsSummaryPrivacy(),
+    };
+  }
+
+  async deleteTrainingJobFrameLabels(input: DeleteTrainingJobFrameLabelsInput): Promise<void> {
+    await this.backend.deleteDirectory(
+      trainingJobFrameLabelsSetPath(input.jobId, input.featureSetId, input.alignmentSetId),
+    );
+  }
+
   async deleteProfile(profileId: string): Promise<void> {
     const normalizedProfileId = normalizeSegment(profileId, 'profileId');
     await this.deleteTrainingJobDataForProfile(normalizedProfileId);
@@ -1384,6 +1674,13 @@ export class EnrollmentProfileStore {
     return (
       this.options.randomId?.() ??
       `features-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    );
+  }
+
+  private createFrameLabelSetId(): string {
+    return (
+      this.options.randomId?.() ??
+      `alignments-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
     );
   }
 }
@@ -1547,6 +1844,25 @@ export function summarizeTrainingJobFeaturePreparationManifest(
   };
 }
 
+export function summarizeTrainingJobFrameLabelsManifest(
+  manifest: TrainingJobFrameLabelsManifestV1,
+): TrainingJobFrameLabelsSummaryV1 {
+  return {
+    schemaVersion: 1,
+    manifestType: manifest.manifestType,
+    jobId: manifest.jobId,
+    profileId: manifest.profileId,
+    featureSetId: manifest.featureSetId,
+    alignmentSetId: manifest.alignmentSetId,
+    createdAt: manifest.createdAt,
+    enrollmentRevisionSha256: manifest.enrollmentRevisionSha256,
+    featureManifestSha256: manifest.featureManifestSha256,
+    manifestSha256: manifest.manifestSha256,
+    totals: manifest.totals,
+    privacy: createFrameLabelsSummaryPrivacy(),
+  };
+}
+
 interface PreparedFeatureShardRecord extends Omit<TrainingJobFeatureShardV1, 'path'> {
   readonly stagedPath: string;
   readonly finalPath: string;
@@ -1665,6 +1981,206 @@ async function calculateFeaturePreparationManifestSha256(
   return digest(stableJsonBytes(unsigned));
 }
 
+interface PrepareFrameLabelFilesInput {
+  readonly featureManifest: TrainingJobFeaturePreparationManifestV1;
+  readonly alignmentSetId: string;
+  readonly alignments: readonly TrainingJobCtcAlignmentInputV1[];
+  readonly options?: CtcForcedAlignmentOptionsV1;
+  readonly digest: (bytes: ArrayBuffer) => Promise<string>;
+  readonly now: string;
+}
+
+interface PreparedFrameLabelFiles {
+  readonly manifest: TrainingJobFrameLabelsManifestV1;
+  readonly labelFile: {
+    readonly path: string;
+    readonly bytes: ArrayBuffer;
+    readonly sha256: string;
+  };
+}
+
+interface TrainingJobFrameLabelsFileV1 {
+  readonly schemaVersion: 1;
+  readonly fileType: 'training-job-frame-labels';
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId: string;
+  readonly utterances: readonly {
+    readonly utteranceId: string;
+    readonly split: 'train' | 'validation' | 'test';
+    readonly frameCount: number;
+    readonly targetTokenCount: number;
+    readonly status: CtcForcedAlignmentResultV1['summary']['status'];
+    readonly frames: readonly {
+      readonly tokenId: number;
+      readonly targetTokenIndex?: number;
+      readonly confidence: number;
+      readonly weight: number;
+      readonly trainingMask: 0 | 1;
+    }[];
+  }[];
+  readonly privacy: TrainingJobFrameLabelsManifestV1['privacy'];
+}
+
+async function prepareFrameLabelFiles(
+  input: PrepareFrameLabelFilesInput,
+): Promise<PreparedFrameLabelFiles> {
+  if (input.alignments.length === 0) {
+    throw new Error('At least one utterance alignment is required.');
+  }
+  const featureUtterances = flattenFeatureManifestUtterances(input.featureManifest);
+  const alignmentByUtterance = new Map<string, TrainingJobCtcAlignmentInputV1>();
+  for (const alignment of input.alignments) {
+    const utteranceId = normalizeSegment(alignment.utteranceId, 'utteranceId');
+    if (alignmentByUtterance.has(utteranceId)) {
+      throw new Error(`Duplicate CTC alignment input for utterance ${utteranceId}.`);
+    }
+    alignmentByUtterance.set(utteranceId, alignment);
+  }
+  const extraUtteranceIds = [...alignmentByUtterance.keys()].filter(
+    (utteranceId) => !featureUtterances.some((utterance) => utterance.utteranceId === utteranceId),
+  );
+  if (extraUtteranceIds.length > 0) {
+    throw new Error(`CTC alignment input references unknown utterance ${extraUtteranceIds[0]}.`);
+  }
+  const utterances: TrainingJobFrameLabelsUtteranceV1[] = [];
+  const labelFileUtterances: Array<TrainingJobFrameLabelsFileV1['utterances'][number]> = [];
+  let expectedBlankId: number | undefined;
+  let expectedVocabularySize: number | undefined;
+  let expectedOptions: Required<CtcForcedAlignmentOptionsV1> | undefined;
+
+  for (const featureUtterance of featureUtterances) {
+    const alignmentInput = alignmentByUtterance.get(featureUtterance.utteranceId);
+    if (alignmentInput === undefined) {
+      throw new Error(`Missing CTC alignment input for utterance ${featureUtterance.utteranceId}.`);
+    }
+    if (alignmentInput.frameCount !== featureUtterance.frameCount) {
+      throw new Error(
+        `CTC alignment frame count for utterance ${featureUtterance.utteranceId} must match prepared features.`,
+      );
+    }
+    const alignment = buildCtcForcedAlignment({
+      utteranceId: featureUtterance.utteranceId,
+      targetTokenIds: alignmentInput.targetTokenIds,
+      frameLogits: alignmentInput.frameLogits,
+      frameCount: alignmentInput.frameCount,
+      vocabularySize: alignmentInput.vocabularySize,
+      blankId: alignmentInput.blankId,
+      ...(input.options === undefined ? {} : { options: input.options }),
+    });
+    expectedBlankId ??= alignment.blankId;
+    expectedVocabularySize ??= alignment.vocabularySize;
+    expectedOptions ??= alignment.options;
+    if (
+      alignment.blankId !== expectedBlankId ||
+      alignment.vocabularySize !== expectedVocabularySize
+    ) {
+      throw new Error(
+        'All CTC alignments in one frame-label set must share blankId and vocabularySize.',
+      );
+    }
+    utterances.push({
+      utteranceId: featureUtterance.utteranceId,
+      promptId: featureUtterance.promptId,
+      split: featureUtterance.split,
+      featureShardId: featureUtterance.shardId,
+      frameOffset: featureUtterance.frameOffset,
+      frameCount: featureUtterance.frameCount,
+      status: alignment.summary.status,
+      usableFrameCount: alignment.summary.usableFrameCount,
+      excludedFrameCount: alignment.summary.excludedFrameCount,
+      blankFrameCount: alignment.summary.blankFrameCount,
+      lowConfidenceFrameCount: alignment.summary.lowConfidenceFrameCount,
+      meanFrameConfidence: alignment.summary.meanFrameConfidence,
+      meanTokenConfidence: alignment.summary.meanTokenConfidence,
+    });
+    labelFileUtterances.push({
+      utteranceId: featureUtterance.utteranceId,
+      split: featureUtterance.split,
+      frameCount: featureUtterance.frameCount,
+      targetTokenCount: alignment.targetTokenCount,
+      status: alignment.summary.status,
+      frames: alignment.frames.map((frame) => ({
+        tokenId: frame.tokenId,
+        ...(frame.targetTokenIndex === undefined
+          ? {}
+          : { targetTokenIndex: frame.targetTokenIndex }),
+        confidence: frame.confidence,
+        weight: frame.weight,
+        trainingMask: frame.trainingMask,
+      })),
+    });
+  }
+  if (
+    expectedBlankId === undefined ||
+    expectedVocabularySize === undefined ||
+    expectedOptions === undefined
+  ) {
+    throw new Error('At least one CTC alignment is required.');
+  }
+  const labelPath = pathToPortableString([
+    ...trainingJobFrameLabelsSetPath(
+      input.featureManifest.jobId,
+      input.featureManifest.featureSetId,
+      input.alignmentSetId,
+    ),
+    'labels.json',
+  ]);
+  const privacy = createFrameLabelsManifestPrivacy();
+  const labelFileValue: TrainingJobFrameLabelsFileV1 = {
+    schemaVersion: 1,
+    fileType: 'training-job-frame-labels',
+    jobId: input.featureManifest.jobId,
+    featureSetId: input.featureManifest.featureSetId,
+    alignmentSetId: input.alignmentSetId,
+    utterances: labelFileUtterances,
+    privacy,
+  };
+  const labelBytes = stableJsonBytes(labelFileValue);
+  const labelSha256 = await input.digest(labelBytes);
+  const unsignedManifest: Omit<TrainingJobFrameLabelsManifestV1, 'manifestSha256'> = {
+    schemaVersion: 1,
+    manifestType: 'training-job-frame-labels',
+    jobId: input.featureManifest.jobId,
+    profileId: input.featureManifest.profileId,
+    featureSetId: input.featureManifest.featureSetId,
+    alignmentSetId: input.alignmentSetId,
+    createdAt: input.now,
+    enrollmentRevisionSha256: input.featureManifest.enrollmentRevisionSha256,
+    featureManifestSha256: input.featureManifest.manifestSha256,
+    alignment: {
+      algorithmId: 'ctc-viterbi-forced-alignment-v1',
+      blankId: expectedBlankId,
+      vocabularySize: expectedVocabularySize,
+      options: expectedOptions,
+    },
+    labelFile: {
+      path: labelPath,
+      mediaType: 'application/json',
+      sizeBytes: labelBytes.byteLength,
+      sha256: labelSha256,
+    },
+    totals: summarizeFrameLabelTotals(utterances),
+    utterances,
+    privacy,
+  };
+  return {
+    manifest: {
+      ...unsignedManifest,
+      manifestSha256: await input.digest(stableJsonBytes(unsignedManifest)),
+    },
+    labelFile: { path: labelPath, bytes: labelBytes, sha256: labelSha256 },
+  };
+}
+
+async function calculateFrameLabelsManifestSha256(
+  manifest: TrainingJobFrameLabelsManifestV1,
+  digest: (bytes: ArrayBuffer) => Promise<string>,
+): Promise<string> {
+  const { manifestSha256: _manifestSha256, ...unsigned } = manifest;
+  return digest(stableJsonBytes(unsigned));
+}
+
 function toCommittedFeatureShard(shard: PreparedFeatureShardRecord): TrainingJobFeatureShardV1 {
   return {
     schemaVersion: shard.schemaVersion,
@@ -1678,6 +2194,75 @@ function toCommittedFeatureShard(shard: PreparedFeatureShardRecord): TrainingJob
     sizeBytes: shard.sizeBytes,
     sha256: shard.sha256,
     utterances: shard.utterances,
+  };
+}
+
+function flattenFeatureManifestUtterances(
+  manifest: TrainingJobFeaturePreparationManifestV1,
+): Array<TrainingJobFeatureShardUtteranceV1 & { readonly shardId: string }> {
+  return manifest.shards.flatMap((shard) =>
+    shard.utterances.map((utterance) => ({ ...utterance, shardId: shard.shardId })),
+  );
+}
+
+interface MutableFrameLabelSplitTotals {
+  utterances: number;
+  alignedUtterances: number;
+  lowConfidenceExcludedUtterances: number;
+  frames: number;
+  usableFrames: number;
+  excludedFrames: number;
+}
+
+function summarizeFrameLabelTotals(
+  utterances: readonly TrainingJobFrameLabelsUtteranceV1[],
+): TrainingJobFrameLabelsManifestV1['totals'] {
+  const splits: Record<(typeof featureSplitNames)[number], MutableFrameLabelSplitTotals> = {
+    train: createEmptyFrameLabelSplitTotals(),
+    validation: createEmptyFrameLabelSplitTotals(),
+    test: createEmptyFrameLabelSplitTotals(),
+  };
+  let alignedUtterances = 0;
+  let lowConfidenceExcludedUtterances = 0;
+  let frames = 0;
+  let usableFrames = 0;
+  let excludedFrames = 0;
+  for (const utterance of utterances) {
+    const split = splits[utterance.split];
+    split.utterances += 1;
+    split.frames += utterance.frameCount;
+    split.usableFrames += utterance.usableFrameCount;
+    split.excludedFrames += utterance.excludedFrameCount;
+    frames += utterance.frameCount;
+    usableFrames += utterance.usableFrameCount;
+    excludedFrames += utterance.excludedFrameCount;
+    if (utterance.status === 'aligned') {
+      alignedUtterances += 1;
+      split.alignedUtterances += 1;
+    } else {
+      lowConfidenceExcludedUtterances += 1;
+      split.lowConfidenceExcludedUtterances += 1;
+    }
+  }
+  return {
+    utterances: utterances.length,
+    alignedUtterances,
+    lowConfidenceExcludedUtterances,
+    frames,
+    usableFrames,
+    excludedFrames,
+    splits,
+  };
+}
+
+function createEmptyFrameLabelSplitTotals(): MutableFrameLabelSplitTotals {
+  return {
+    utterances: 0,
+    alignedUtterances: 0,
+    lowConfidenceExcludedUtterances: 0,
+    frames: 0,
+    usableFrames: 0,
+    excludedFrames: 0,
   };
 }
 
@@ -1926,6 +2511,40 @@ function createFeatureSummaryPrivacy(): TrainingJobFeaturePreparationSummaryV1['
   };
 }
 
+function createFrameLabelsManifestPrivacy(): TrainingJobFrameLabelsManifestV1['privacy'] {
+  return {
+    localOnly: true,
+    defaultExportIncludesFrameLabels: false,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsFeatureTensors: false,
+    containsFrameLabels: true,
+    containsTokenIds: true,
+    containsCheckpoints: false,
+    containsAdapterWeights: false,
+    exposesRawPromptIds: true,
+    networkUpload: false,
+    telemetry: false,
+  };
+}
+
+function createFrameLabelsSummaryPrivacy(): TrainingJobFrameLabelsSummaryV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    localOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsFeatureTensors: false,
+    containsFrameLabels: false,
+    containsTokenIds: false,
+    containsCheckpoints: false,
+    containsAdapterWeights: false,
+    exposesRawPromptIds: false,
+    networkUpload: false,
+    telemetry: false,
+  };
+}
+
 async function buildTrainingJobEnrollmentRevision(
   summary: EnrollmentProfileSummaryV1,
   digest: (bytes: ArrayBuffer) => Promise<string>,
@@ -2037,7 +2656,7 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, frozen training-job revisions, FP16 feature shards, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
+    'Private profile storage, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
 };
 
 async function writeJsonAtomically(
@@ -2186,6 +2805,26 @@ function trainingJobFeatureTempPath(jobId: string, tempId: string): string[] {
     'feature-staging',
     normalizeSegment(tempId, 'featureTempId'),
   ];
+}
+
+function trainingJobFrameLabelsSetPath(
+  jobId: string,
+  featureSetId: string,
+  alignmentSetId: string,
+): string[] {
+  return [
+    ...trainingJobFeatureSetPath(jobId, featureSetId),
+    'frame-labels',
+    normalizeSegment(alignmentSetId, 'alignmentSetId'),
+  ];
+}
+
+function trainingJobFrameLabelsManifestPath(
+  jobId: string,
+  featureSetId: string,
+  alignmentSetId: string,
+): string[] {
+  return [...trainingJobFrameLabelsSetPath(jobId, featureSetId, alignmentSetId), 'manifest.json'];
 }
 
 function stableJsonBytes(value: unknown): ArrayBuffer {

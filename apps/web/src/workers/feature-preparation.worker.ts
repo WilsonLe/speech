@@ -7,10 +7,14 @@ import {
   createDefaultProfileStorageBackend,
   requestPersistentProfileStorage,
   summarizeTrainingJobFeaturePreparationManifest,
+  summarizeTrainingJobFrameLabelsManifest,
+  type PrepareTrainingJobFrameLabelsInput,
   type ProfileStorageBackend,
   type ProfileStorageBackendKind,
   type TrainingJobFeaturePreparationSummaryV1,
   type TrainingJobFeatureShardVerificationResultV1,
+  type TrainingJobFrameLabelsSummaryV1,
+  type TrainingJobFrameLabelsVerificationResultV1,
 } from '@speech/profile-manager';
 
 export type FeaturePreparationWorkerRequest =
@@ -34,6 +38,29 @@ export type FeaturePreparationWorkerRequest =
       readonly requestId: string;
       readonly jobId: string;
       readonly featureSetId: string;
+    }
+  | {
+      readonly type: 'PREPARE_TRAINING_JOB_FRAME_LABELS';
+      readonly requestId: string;
+      readonly jobId: string;
+      readonly featureSetId: string;
+      readonly alignmentSetId?: string;
+      readonly alignments: PrepareTrainingJobFrameLabelsInput['alignments'];
+      readonly options?: PrepareTrainingJobFrameLabelsInput['options'];
+    }
+  | {
+      readonly type: 'VERIFY_TRAINING_JOB_FRAME_LABELS';
+      readonly requestId: string;
+      readonly jobId: string;
+      readonly featureSetId: string;
+      readonly alignmentSetId: string;
+    }
+  | {
+      readonly type: 'DELETE_TRAINING_JOB_FRAME_LABELS';
+      readonly requestId: string;
+      readonly jobId: string;
+      readonly featureSetId: string;
+      readonly alignmentSetId: string;
     };
 
 export type FeaturePreparationWorkerResponse =
@@ -58,6 +85,29 @@ export type FeaturePreparationWorkerResponse =
       readonly persistentStorageGranted: boolean;
       readonly jobId: string;
       readonly featureSetId: string;
+    }
+  | {
+      readonly type: 'FRAME_LABELS_READY';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly summary: TrainingJobFrameLabelsSummaryV1;
+    }
+  | {
+      readonly type: 'FRAME_LABELS_VERIFIED';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly verification: TrainingJobFrameLabelsVerificationResultV1;
+    }
+  | {
+      readonly type: 'FRAME_LABELS_DELETED';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly jobId: string;
+      readonly featureSetId: string;
+      readonly alignmentSetId: string;
     }
   | {
       readonly type: 'FEATURE_PREPARATION_ERROR';
@@ -108,17 +158,65 @@ async function handleRequest(message: FeaturePreparationWorkerRequest): Promise<
       });
       return;
     }
-    await store.deleteTrainingJobFeatureShards({
+    if (message.type === 'DELETE_TRAINING_JOB_FEATURE_SHARDS') {
+      await store.deleteTrainingJobFeatureShards({
+        jobId: message.jobId,
+        featureSetId: message.featureSetId,
+      });
+      post({
+        type: 'FEATURE_PREPARATION_DELETED',
+        requestId: message.requestId,
+        backendKind,
+        persistentStorageGranted,
+        jobId: message.jobId,
+        featureSetId: message.featureSetId,
+      });
+      return;
+    }
+    if (message.type === 'PREPARE_TRAINING_JOB_FRAME_LABELS') {
+      const manifest = await store.prepareTrainingJobFrameLabels({
+        jobId: message.jobId,
+        featureSetId: message.featureSetId,
+        alignments: message.alignments,
+        ...(message.alignmentSetId === undefined ? {} : { alignmentSetId: message.alignmentSetId }),
+        ...(message.options === undefined ? {} : { options: message.options }),
+      });
+      post({
+        type: 'FRAME_LABELS_READY',
+        requestId: message.requestId,
+        backendKind,
+        persistentStorageGranted,
+        summary: summarizeTrainingJobFrameLabelsManifest(manifest),
+      });
+      return;
+    }
+    if (message.type === 'VERIFY_TRAINING_JOB_FRAME_LABELS') {
+      post({
+        type: 'FRAME_LABELS_VERIFIED',
+        requestId: message.requestId,
+        backendKind,
+        persistentStorageGranted,
+        verification: await store.verifyTrainingJobFrameLabels({
+          jobId: message.jobId,
+          featureSetId: message.featureSetId,
+          alignmentSetId: message.alignmentSetId,
+        }),
+      });
+      return;
+    }
+    await store.deleteTrainingJobFrameLabels({
       jobId: message.jobId,
       featureSetId: message.featureSetId,
+      alignmentSetId: message.alignmentSetId,
     });
     post({
-      type: 'FEATURE_PREPARATION_DELETED',
+      type: 'FRAME_LABELS_DELETED',
       requestId: message.requestId,
       backendKind,
       persistentStorageGranted,
       jobId: message.jobId,
       featureSetId: message.featureSetId,
+      alignmentSetId: message.alignmentSetId,
     });
   } catch (error) {
     post({

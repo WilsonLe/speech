@@ -1,9 +1,12 @@
 import type { PromptIdentitySplitConfigV1 } from '@speech/enrollment';
 import type { LogMelFeatureConfig } from '@speech/features';
 import type {
+  PrepareTrainingJobFrameLabelsInput,
   ProfileStorageBackendKind,
   TrainingJobFeaturePreparationSummaryV1,
   TrainingJobFeatureShardVerificationResultV1,
+  TrainingJobFrameLabelsSummaryV1,
+  TrainingJobFrameLabelsVerificationResultV1,
 } from '@speech/profile-manager';
 import featurePreparationWorkerUrl from './feature-preparation.worker.ts?worker&url';
 import type {
@@ -29,6 +32,20 @@ export interface TrainingJobFeatureDeleteResult extends FeaturePreparationBaseRe
   readonly featureSetId: string;
 }
 
+export interface TrainingJobFrameLabelsPreparationResult extends FeaturePreparationBaseResult {
+  readonly summary: TrainingJobFrameLabelsSummaryV1;
+}
+
+export interface TrainingJobFrameLabelsVerificationResult extends FeaturePreparationBaseResult {
+  readonly verification: TrainingJobFrameLabelsVerificationResultV1;
+}
+
+export interface TrainingJobFrameLabelsDeleteResult extends FeaturePreparationBaseResult {
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId: string;
+}
+
 export interface PrepareTrainingJobFeatureShardsOptions {
   readonly jobId: string;
   readonly featureSetId?: string;
@@ -45,6 +62,24 @@ export interface VerifyTrainingJobFeatureShardsOptions {
 }
 
 export type DeleteTrainingJobFeatureShardsOptions = VerifyTrainingJobFeatureShardsOptions;
+
+export interface PrepareTrainingJobFrameLabelsOptions {
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId?: string;
+  readonly alignments: PrepareTrainingJobFrameLabelsInput['alignments'];
+  readonly options?: PrepareTrainingJobFrameLabelsInput['options'];
+  readonly timeoutMs?: number;
+}
+
+export interface VerifyTrainingJobFrameLabelsOptions {
+  readonly jobId: string;
+  readonly featureSetId: string;
+  readonly alignmentSetId: string;
+  readonly timeoutMs?: number;
+}
+
+export type DeleteTrainingJobFrameLabelsOptions = VerifyTrainingJobFrameLabelsOptions;
 
 let activeFeaturePreparationWorker: Worker | null = null;
 
@@ -138,6 +173,82 @@ export function deleteTrainingJobFeatureShards(
       persistentStorageGranted: response.persistentStorageGranted,
       jobId: response.jobId,
       featureSetId: response.featureSetId,
+    };
+  });
+}
+
+export function prepareTrainingJobFrameLabels(
+  options: PrepareTrainingJobFrameLabelsOptions,
+): Promise<TrainingJobFrameLabelsPreparationResult> {
+  return requestFeaturePreparation(
+    {
+      type: 'PREPARE_TRAINING_JOB_FRAME_LABELS',
+      requestId: createRequestId('align'),
+      jobId: options.jobId,
+      featureSetId: options.featureSetId,
+      alignments: options.alignments,
+      ...(options.alignmentSetId === undefined ? {} : { alignmentSetId: options.alignmentSetId }),
+      ...(options.options === undefined ? {} : { options: options.options }),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'FRAME_LABELS_READY') {
+      throw new Error(`Unexpected feature-preparation response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      summary: response.summary,
+    };
+  });
+}
+
+export function verifyTrainingJobFrameLabels(
+  options: VerifyTrainingJobFrameLabelsOptions,
+): Promise<TrainingJobFrameLabelsVerificationResult> {
+  return requestFeaturePreparation(
+    {
+      type: 'VERIFY_TRAINING_JOB_FRAME_LABELS',
+      requestId: createRequestId('verify-labels'),
+      jobId: options.jobId,
+      featureSetId: options.featureSetId,
+      alignmentSetId: options.alignmentSetId,
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'FRAME_LABELS_VERIFIED') {
+      throw new Error(`Unexpected feature-preparation response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      verification: response.verification,
+    };
+  });
+}
+
+export function deleteTrainingJobFrameLabels(
+  options: DeleteTrainingJobFrameLabelsOptions,
+): Promise<TrainingJobFrameLabelsDeleteResult> {
+  return requestFeaturePreparation(
+    {
+      type: 'DELETE_TRAINING_JOB_FRAME_LABELS',
+      requestId: createRequestId('delete-labels'),
+      jobId: options.jobId,
+      featureSetId: options.featureSetId,
+      alignmentSetId: options.alignmentSetId,
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'FRAME_LABELS_DELETED') {
+      throw new Error(`Unexpected feature-preparation response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      jobId: response.jobId,
+      featureSetId: response.featureSetId,
+      alignmentSetId: response.alignmentSetId,
     };
   });
 }
