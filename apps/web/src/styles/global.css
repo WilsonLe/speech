@@ -318,6 +318,26 @@ h2 {
   text-align: right;
 }
 
+.readiness-lines {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 640px) {
+  .microphone-settings div.readiness-row {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .microphone-settings div.readiness-row dd,
+  .readiness-lines {
+    text-align: left;
+  }
+}
+
 .enrollment-calibration,
 .enrollment-recorder,
 .profile-store-status,

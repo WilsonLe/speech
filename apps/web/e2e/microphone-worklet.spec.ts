@@ -47,6 +47,10 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await expect
     .poll(async () => readMetric(profileStore, 'Stored accepted takes'), { timeout: 10_000 })
     .toBeGreaterThan(0);
+  const readiness = page.getByLabel('Training readiness report');
+  await expect(readiness).toContainText('Training readiness report');
+  await expect(readiness).toContainText('needs-more-data');
+  await expect(readiness).toContainText('Aggregate counts only');
   await profileStore.getByRole('button', { name: /enable local profile/i }).click();
   await expect(profileStore).toContainText(/Profile enabled locally/i, { timeout: 10_000 });
   await expect(profileStore).toContainText('local-enrollment-profile');
