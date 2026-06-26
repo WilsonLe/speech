@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PORTABLE_SPEECH_MODEL_MAGIC,
   PORTABLE_SPEECH_MODEL_MAX_FILE_COUNT,
@@ -6,12 +6,22 @@ import {
   PORTABLE_SPEECH_MODEL_MIN_PBKDF2_ITERATIONS,
   PORTABLE_SPEECH_MODEL_HARD_MAX_BYTES,
   buildPortableSpeechModelEnvelopePrefix,
+  buildUnencryptedPortableSpeechModelEnvelope,
+  decryptPortableSpeechModelEnvelope,
+  encryptPortableSpeechModelEnvelope,
   isSafePortableModelPath,
   normalizePortableModelPath,
   parsePortableSpeechModelEnvelopePrefix,
   portableModelPathsCollide,
   type PortableSpeechModelEnvelopeHeaderV1,
 } from './envelope';
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const validEncryption = {
   kdf: 'pbkdf2-hmac-sha-256' as const,
@@ -116,6 +126,154 @@ describe('portable speech model envelope prefix', () => {
     );
   });
 });
+
+describe('portable speech model encrypted envelopes', () => {
+  it('decrypts unencrypted envelopes without a passphrase for explicit unencrypted export flows', async () => {
+    const body = textEncoder.encode('deterministic-inner-bundle-body');
+    const envelope = buildUnencryptedPortableSpeechModelEnvelope(body);
+
+    const parsed = parsePortableSpeechModelEnvelopePrefix(envelope.bytes);
+    const decrypted = await decryptPortableSpeechModelEnvelope(envelope.bytes);
+
+    expect(parsed.header).toEqual({ formatVersion: 1, mode: 'unencrypted' });
+    expect(Array.from(decrypted)).toEqual(Array.from(body));
+  });
+
+  it('encrypts and decrypts with AES-256-GCM and PBKDF2-HMAC-SHA-256 parameters', async () => {
+    const body = textEncoder.encode('SECRET_ADAPTER_WEIGHTS_AND_TEST_VECTOR_BYTES');
+    const salt = new Uint8Array(Array.from({ length: 16 }, (_value, index) => index + 1));
+    const iv = new Uint8Array(Array.from({ length: 12 }, (_value, index) => 0xa0 + index));
+    const envelope = await encryptPortableSpeechModelEnvelope({
+      body,
+      passphrase: 'correct horse battery staple',
+      randomBytes: deterministicRandomBytes(salt, iv),
+    });
+
+    const parsed = parsePortableSpeechModelEnvelopePrefix(envelope.bytes);
+    const decrypted = await decryptPortableSpeechModelEnvelope(envelope.bytes, {
+      passphrase: 'correct horse battery staple',
+    });
+    const decodedEnvelope = textDecoder.decode(envelope.bytes);
+
+    expect(parsed.header.mode).toBe('encrypted');
+    expect(parsed.header.encryption).toEqual({
+      kdf: 'pbkdf2-hmac-sha-256',
+      iterations: PORTABLE_SPEECH_MODEL_MIN_PBKDF2_ITERATIONS,
+      saltBase64: 'AQIDBAUGBwgJCgsMDQ4PEA==',
+      ivBase64: 'oKGio6Slpqeoqaqr',
+      ciphertextLength: envelope.bytes.byteLength - parsed.bodyOffset,
+    });
+    expect(Array.from(decrypted)).toEqual(Array.from(body));
+    expect(decodedEnvelope).not.toContain('SECRET_ADAPTER_WEIGHTS');
+    expect(decodedEnvelope).not.toContain('TEST_VECTOR_BYTES');
+  });
+
+  it('rejects wrong passphrases, tampered ciphertext, and missing passphrases', async () => {
+    const envelope = await encryptPortableSpeechModelEnvelope({
+      body: textEncoder.encode('private portable payload'),
+      passphrase: 'export passphrase',
+      randomBytes: deterministicRandomBytes(new Uint8Array(16).fill(7), new Uint8Array(12).fill(8)),
+    });
+
+    await expect(
+      decryptPortableSpeechModelEnvelope(envelope.bytes, { passphrase: 'wrong passphrase' }),
+    ).rejects.toThrow('could not be decrypted');
+    await expect(decryptPortableSpeechModelEnvelope(envelope.bytes)).rejects.toThrow(
+      'requires a passphrase',
+    );
+
+    const tampered = new Uint8Array(envelope.bytes);
+    const finalIndex = tampered.byteLength - 1;
+    const finalByte = tampered[finalIndex];
+    if (finalByte === undefined) throw new Error('Expected encrypted envelope bytes');
+    tampered[finalIndex] = finalByte ^ 0xff;
+    await expect(
+      decryptPortableSpeechModelEnvelope(tampered, { passphrase: 'export passphrase' }),
+    ).rejects.toThrow('could not be decrypted');
+  });
+
+  it('rejects weak iteration counts and supports cancellation checks', async () => {
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await expect(
+      encryptPortableSpeechModelEnvelope({
+        body: textEncoder.encode('payload'),
+        passphrase: 'export passphrase',
+        iterations: 1_000,
+      }),
+    ).rejects.toThrow('iterations must be at least');
+    await expect(
+      encryptPortableSpeechModelEnvelope({
+        body: textEncoder.encode('payload'),
+        passphrase: 'export passphrase',
+        signal: aborted.signal,
+      }),
+    ).rejects.toThrow('was aborted');
+    await expect(
+      decryptPortableSpeechModelEnvelope(
+        buildUnencryptedPortableSpeechModelEnvelope(textEncoder.encode('x')).bytes,
+        {
+          signal: aborted.signal,
+        },
+      ),
+    ).rejects.toThrow('was aborted');
+  });
+
+  it('reports controlled errors when Web Crypto or base64 helpers are unavailable', async () => {
+    const body = textEncoder.encode('payload');
+
+    vi.stubGlobal('crypto', undefined);
+    await expect(
+      encryptPortableSpeechModelEnvelope({
+        body,
+        passphrase: 'export passphrase',
+        randomBytes: deterministicRandomBytes(
+          new Uint8Array(16).fill(1),
+          new Uint8Array(12).fill(2),
+        ),
+      }),
+    ).rejects.toThrow('SubtleCrypto is unavailable');
+    vi.unstubAllGlobals();
+
+    vi.stubGlobal('btoa', undefined);
+    await expect(
+      encryptPortableSpeechModelEnvelope({
+        body,
+        passphrase: 'export passphrase',
+        randomBytes: deterministicRandomBytes(
+          new Uint8Array(16).fill(1),
+          new Uint8Array(12).fill(2),
+        ),
+      }),
+    ).rejects.toThrow('Base64 encoding is unavailable');
+    vi.unstubAllGlobals();
+
+    const envelope = await encryptPortableSpeechModelEnvelope({
+      body,
+      passphrase: 'export passphrase',
+      randomBytes: deterministicRandomBytes(new Uint8Array(16).fill(1), new Uint8Array(12).fill(2)),
+    });
+    vi.stubGlobal('atob', undefined);
+    await expect(
+      decryptPortableSpeechModelEnvelope(envelope.bytes, { passphrase: 'export passphrase' }),
+    ).rejects.toThrow('salt is not valid base64');
+  });
+});
+
+function deterministicRandomBytes(
+  ...chunks: readonly Uint8Array[]
+): (length: number) => Uint8Array {
+  let index = 0;
+  return (length) => {
+    const chunk = chunks[index];
+    index += 1;
+    if (chunk === undefined || chunk.byteLength !== length) {
+      throw new Error(`Expected deterministic random chunk of ${length.toString()} bytes`);
+    }
+    return new Uint8Array(chunk);
+  };
+}
 
 describe('portable model path safety', () => {
   it('accepts clean relative paths', () => {
