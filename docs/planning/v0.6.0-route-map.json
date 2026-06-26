@@ -1,0 +1,513 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.6.0",
+  "purpose": "Target route map, legacy v0.5 redirect table, and safe navigation requirements for the minimal task-first UI/UX release.",
+  "privacy": {
+    "containsPrivateData": false,
+    "containsUserGeneratedContent": false,
+    "notes": "This artifact defines public route patterns and redirect rules only. It contains no audio, transcript, vocabulary terms, profile data, storage paths, telemetry, screenshots, or participant evidence. Parameter names such as profileId, setId, and jobId are placeholders, not real identifiers."
+  },
+  "primaryDestinations": [
+    {
+      "id": "dictate",
+      "label": "Dictate",
+      "route": "/",
+      "persistentNavigation": true,
+      "defaultRoute": true
+    },
+    {
+      "id": "vocabulary",
+      "label": "Vocabulary",
+      "route": "/vocabulary",
+      "persistentNavigation": true,
+      "defaultRoute": false
+    },
+    {
+      "id": "models",
+      "label": "Models",
+      "route": "/models",
+      "persistentNavigation": true,
+      "defaultRoute": false
+    }
+  ],
+  "applicationMenuDestinations": [
+    {
+      "id": "settings",
+      "label": "Settings",
+      "route": "/settings"
+    },
+    {
+      "id": "audio-settings",
+      "label": "Audio",
+      "route": "/settings/audio"
+    },
+    {
+      "id": "storage",
+      "label": "Storage",
+      "route": "/settings/storage"
+    },
+    {
+      "id": "privacy",
+      "label": "Privacy",
+      "route": "/settings/privacy"
+    },
+    {
+      "id": "shortcuts",
+      "label": "Keyboard shortcuts",
+      "route": "/settings/shortcuts"
+    },
+    {
+      "id": "diagnostics",
+      "label": "Diagnostics",
+      "route": "/settings/diagnostics"
+    },
+    {
+      "id": "about",
+      "label": "About",
+      "route": "/about"
+    },
+    {
+      "id": "setup-model",
+      "label": "Install model",
+      "route": "/setup/model",
+      "visibleWhen": "required-base-model-missing-or-update-action-applicable"
+    }
+  ],
+  "targetRoutes": [
+    {
+      "id": "dictate",
+      "path": "/",
+      "destination": "Dictate",
+      "screenKind": "primary",
+      "title": "Dictate",
+      "ownsState": [
+        "transcript",
+        "recording",
+        "languageMode",
+        "activeModel",
+        "activeVocabularySets"
+      ],
+      "routeParams": [],
+      "queryParams": ["language", "model", "vocabulary"],
+      "focusTarget": "screen-heading-or-record-control",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "UI observes transcription controller only; ASR worker remains worker-owned."
+    },
+    {
+      "id": "vocabulary-list",
+      "path": "/vocabulary",
+      "destination": "Vocabulary",
+      "screenKind": "primary",
+      "title": "Vocabulary",
+      "ownsState": ["vocabularySetList", "enabledVocabularySets", "pendingRevisionStatus"],
+      "routeParams": [],
+      "queryParams": ["search", "returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "UI calls vocabulary manager/controller; decoding automata remain package/worker-owned."
+    },
+    {
+      "id": "vocabulary-new",
+      "path": "/vocabulary/new",
+      "destination": "Vocabulary",
+      "screenKind": "task",
+      "title": "New vocabulary set",
+      "ownsState": ["draftVocabularySet"],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "first-required-field",
+      "scrollRestoration": "reset-on-new-task",
+      "workerBoundary": "No decoder automata work runs on the UI thread."
+    },
+    {
+      "id": "vocabulary-detail",
+      "path": "/vocabulary/:setId",
+      "destination": "Vocabulary",
+      "screenKind": "detail",
+      "title": "Vocabulary set",
+      "ownsState": ["vocabularySet", "draftVocabularyEdits", "revisionActivationState"],
+      "routeParams": ["setId"],
+      "queryParams": ["search", "returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-and-setId",
+      "workerBoundary": "UI edits typed vocabulary records; validation/scoring remains package-owned."
+    },
+    {
+      "id": "models-list",
+      "path": "/models",
+      "destination": "Models",
+      "screenKind": "primary",
+      "title": "Voice models",
+      "ownsState": ["profileList", "activeProfile", "draftCandidates", "trainingJobs"],
+      "routeParams": [],
+      "queryParams": ["status", "returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "UI renders aggregate profile state; profile storage/import/export/training remain worker/package-owned."
+    },
+    {
+      "id": "models-new",
+      "path": "/models/new",
+      "destination": "Models",
+      "screenKind": "wizard",
+      "title": "New voice model",
+      "ownsState": ["draftProfileWizard"],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "current-wizard-heading-or-first-required-field",
+      "scrollRestoration": "reset-on-new-task",
+      "workerBoundary": "No audio analysis or training runs on the UI thread."
+    },
+    {
+      "id": "models-import",
+      "path": "/models/import",
+      "destination": "Models",
+      "screenKind": "wizard",
+      "title": "Import voice model",
+      "ownsState": ["portableImportWizard", "stagedImportReview"],
+      "routeParams": [],
+      "queryParams": ["returnTo", "replaceProfileId"],
+      "focusTarget": "current-wizard-heading-or-file-input",
+      "scrollRestoration": "reset-on-new-task",
+      "workerBoundary": "Archive parsing, decryption, validation, smoke tests, hashing, and staging stay worker/package-owned."
+    },
+    {
+      "id": "model-detail",
+      "path": "/models/:profileId",
+      "destination": "Models",
+      "screenKind": "detail",
+      "title": "Voice model detail",
+      "ownsState": [
+        "profileSummary",
+        "activationState",
+        "recordingCoverage",
+        "qualityResults",
+        "storageSummary"
+      ],
+      "routeParams": ["profileId"],
+      "queryParams": ["returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-and-profileId",
+      "workerBoundary": "UI receives aggregate model/profile summaries only; heavy profile reads remain worker-owned."
+    },
+    {
+      "id": "model-enroll",
+      "path": "/models/:profileId/enroll",
+      "destination": "Models",
+      "screenKind": "wizard",
+      "title": "Record voice model",
+      "ownsState": ["enrollmentProgress", "currentPrompt", "qualityFeedback", "acceptedTakes"],
+      "routeParams": ["profileId"],
+      "queryParams": ["promptId", "condition", "returnTo"],
+      "focusTarget": "current-prompt-heading-or-record-control",
+      "scrollRestoration": "restore-current-prompt",
+      "workerBoundary": "Recording analysis, sentence coverage, profile storage, and alignment remain worker/package-owned."
+    },
+    {
+      "id": "model-train",
+      "path": "/models/:profileId/train",
+      "destination": "Models",
+      "screenKind": "wizard",
+      "title": "Train voice model",
+      "ownsState": ["trainingReadiness", "trainingProgress", "checkpointRecovery"],
+      "routeParams": ["profileId"],
+      "queryParams": ["jobId", "returnTo"],
+      "focusTarget": "current-stage-heading-or-primary-action",
+      "scrollRestoration": "restore-current-stage",
+      "workerBoundary": "Feature preparation, training, evaluation, checkpointing, hashing, and storage remain worker/package-owned."
+    },
+    {
+      "id": "model-results",
+      "path": "/models/:profileId/results",
+      "destination": "Models",
+      "screenKind": "detail",
+      "title": "Training results",
+      "ownsState": ["candidateComparison", "activationDecision", "rollbackState"],
+      "routeParams": ["profileId"],
+      "queryParams": ["candidateId", "returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-and-profileId",
+      "workerBoundary": "UI renders aggregate gate/comparison data; activation and rollback stay worker/profile-store-owned."
+    },
+    {
+      "id": "model-export",
+      "path": "/models/:profileId/export",
+      "destination": "Models",
+      "screenKind": "wizard",
+      "title": "Export voice model",
+      "ownsState": ["portableExportWizard"],
+      "routeParams": ["profileId"],
+      "queryParams": ["returnTo"],
+      "focusTarget": "current-wizard-heading-or-primary-action",
+      "scrollRestoration": "reset-on-new-task",
+      "workerBoundary": "Bundle assembly, encryption, hashing, and byte writing remain worker/package-owned."
+    },
+    {
+      "id": "settings-index",
+      "path": "/settings",
+      "destination": "Settings",
+      "screenKind": "menu-screen",
+      "title": "Settings",
+      "ownsState": ["settingsNavigation"],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "Settings route owns UI preferences only; domain data remains in domain stores."
+    },
+    {
+      "id": "settings-audio",
+      "path": "/settings/audio",
+      "destination": "Settings",
+      "screenKind": "settings",
+      "title": "Audio",
+      "ownsState": ["microphoneChoice", "recordingMode", "inputTest"],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "AudioWorklet and input diagnostics remain off the UI thread where applicable."
+    },
+    {
+      "id": "settings-storage",
+      "path": "/settings/storage",
+      "destination": "Settings",
+      "screenKind": "settings",
+      "title": "Storage",
+      "ownsState": ["storageSummary", "deleteDataFlows"],
+      "routeParams": [],
+      "queryParams": ["returnTo", "focus"],
+      "focusTarget": "screen-heading-or-blocker",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "Quota checks, OPFS cleanup, model/profile deletion, and byte accounting remain worker/package-owned."
+    },
+    {
+      "id": "settings-privacy",
+      "path": "/settings/privacy",
+      "destination": "Settings",
+      "screenKind": "settings",
+      "title": "Privacy",
+      "ownsState": ["privacySummary", "networkIsolationCheck", "localDataControls"],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "Privacy route summarizes local state; it does not export private data without explicit user action."
+    },
+    {
+      "id": "settings-shortcuts",
+      "path": "/settings/shortcuts",
+      "destination": "Settings",
+      "screenKind": "settings",
+      "title": "Keyboard shortcuts",
+      "ownsState": ["shortcutReference"],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "Shortcut documentation is UI-only and must not mutate domain state."
+    },
+    {
+      "id": "settings-diagnostics",
+      "path": "/settings/diagnostics",
+      "destination": "Settings",
+      "screenKind": "diagnostics",
+      "title": "Diagnostics",
+      "ownsState": [
+        "capabilityReport",
+        "runtimeDiagnostics",
+        "benchmarkDiagnostics",
+        "supportBundle"
+      ],
+      "routeParams": [],
+      "queryParams": ["section", "returnTo"],
+      "focusTarget": "screen-heading-or-requested-section",
+      "scrollRestoration": "restore-per-route-and-section",
+      "workerBoundary": "Benchmarking, runtime inspection, support-bundle generation, and redaction remain worker/package-owned."
+    },
+    {
+      "id": "about",
+      "path": "/about",
+      "destination": "About",
+      "screenKind": "info",
+      "title": "About",
+      "ownsState": ["version", "licenses", "sourceRepository", "updateState"],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "screen-heading",
+      "scrollRestoration": "restore-per-route-when-returning",
+      "workerBoundary": "About route displays static metadata and update state only."
+    },
+    {
+      "id": "setup-model",
+      "path": "/setup/model",
+      "destination": "SetupModel",
+      "screenKind": "setup",
+      "title": "Install speech model",
+      "ownsState": [
+        "baseModelInstall",
+        "modelDownloadProgress",
+        "verificationState",
+        "activationState"
+      ],
+      "routeParams": [],
+      "queryParams": ["returnTo"],
+      "focusTarget": "screen-heading-or-blocker",
+      "scrollRestoration": "reset-on-required-setup",
+      "workerBoundary": "Downloads, checksum verification, atomic activation, and cleanup remain model-lifecycle worker/model-manager-owned."
+    }
+  ],
+  "legacyRedirects": [
+    {
+      "legacyPath": "/",
+      "legacyHash": null,
+      "targetRoute": "/",
+      "redirectType": "canonical",
+      "preserveQueryKeys": ["language", "model", "vocabulary"],
+      "preserveHash": false,
+      "stateRestoration": "transcript and recording state restore from domain/UI state, not URL-only state.",
+      "focusAfterRedirect": "Dictate heading or record control"
+    },
+    {
+      "legacyPath": "/",
+      "legacyHash": "offline-model-title",
+      "targetRoute": "/setup/model",
+      "alternateTargetRoute": "/settings/storage",
+      "redirectType": "state-dependent",
+      "preserveQueryKeys": ["returnTo"],
+      "preserveHash": false,
+      "stateRestoration": "Use model-lifecycle state to choose setup when a required base model is missing; otherwise Storage owns installed model management.",
+      "focusAfterRedirect": "setup or storage blocker/action"
+    },
+    {
+      "legacyPath": "/",
+      "legacyHash": "diagnostics",
+      "targetRoute": "/settings/diagnostics",
+      "redirectType": "static",
+      "preserveQueryKeys": ["section", "returnTo"],
+      "preserveHash": false,
+      "stateRestoration": "Capability diagnostics restore from diagnostics provider state.",
+      "focusAfterRedirect": "Diagnostics heading"
+    },
+    {
+      "legacyPath": "/",
+      "legacyHash": "benchmark",
+      "targetRoute": "/settings/diagnostics",
+      "redirectType": "static",
+      "preserveQueryKeys": ["returnTo"],
+      "appendQuery": { "section": "benchmark" },
+      "preserveHash": false,
+      "stateRestoration": "Benchmark diagnostics restore from benchmark worker/provider state.",
+      "focusAfterRedirect": "Benchmark diagnostics section"
+    },
+    {
+      "legacyPath": "/",
+      "legacyHash": "personal-models-title",
+      "targetRoute": "/models",
+      "redirectType": "static",
+      "preserveQueryKeys": ["profileId", "returnTo"],
+      "preserveHash": false,
+      "stateRestoration": "Model list and active profile restore from profile store.",
+      "focusAfterRedirect": "Models heading or matching profile row"
+    },
+    {
+      "legacyPath": "/",
+      "legacyHash": "vocabulary-title",
+      "targetRoute": "/vocabulary",
+      "redirectType": "static",
+      "preserveQueryKeys": ["setId", "returnTo"],
+      "preserveHash": false,
+      "stateRestoration": "Vocabulary set selection restores from query setId when safe, then vocabulary store.",
+      "focusAfterRedirect": "Vocabulary heading or matching set row"
+    },
+    {
+      "legacyPath": "/",
+      "legacyHash": "microphone-title",
+      "targetRoute": "/models/:profileId/enroll",
+      "alternateTargetRoute": "/settings/audio",
+      "redirectType": "state-dependent",
+      "preserveQueryKeys": ["profileId", "promptId", "condition", "returnTo"],
+      "preserveHash": false,
+      "stateRestoration": "If a profile/enrollment context exists, restore enrollment from profile store; otherwise Audio settings owns microphone setup.",
+      "focusAfterRedirect": "current prompt, enrollment action, or Audio heading"
+    },
+    {
+      "legacyPath": "/",
+      "legacyHash": "runtime-title",
+      "targetRoute": "/models/:profileId/train",
+      "alternateTargetRoute": "/settings/diagnostics",
+      "redirectType": "state-dependent",
+      "preserveQueryKeys": ["profileId", "jobId", "returnTo"],
+      "preserveHash": false,
+      "stateRestoration": "If a profile/training job context exists, restore training from worker/profile storage; otherwise Diagnostics owns runtime inspection.",
+      "focusAfterRedirect": "training stage heading or Diagnostics heading"
+    }
+  ],
+  "safeQueryState": {
+    "allowedKeys": [
+      "candidateId",
+      "condition",
+      "focus",
+      "jobId",
+      "language",
+      "model",
+      "profileId",
+      "promptId",
+      "replaceProfileId",
+      "returnTo",
+      "search",
+      "section",
+      "setId",
+      "status",
+      "vocabulary"
+    ],
+    "idKeys": [
+      "candidateId",
+      "jobId",
+      "model",
+      "profileId",
+      "promptId",
+      "replaceProfileId",
+      "setId",
+      "vocabulary"
+    ],
+    "idValuePattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+    "searchValueMaxLength": 120,
+    "preserveUnknownKeys": false,
+    "dropUnsafeValues": true,
+    "notes": "Query state may select local objects or requested sections only. Domain stores remain authoritative and must reject missing, incompatible, or unauthorized object IDs."
+  },
+  "safeReturnTargets": {
+    "queryParam": "returnTo",
+    "allowedRootRoute": "/",
+    "allowedInternalPrefixes": ["/vocabulary", "/models", "/settings", "/about", "/setup/model"],
+    "rejectedExamples": [
+      "https://example.com",
+      "//example.com/path",
+      "javascript:alert(1)",
+      "data:text/html,private",
+      "../settings",
+      "/\\evil",
+      "/%2f%2fevil.example",
+      "/models/%2e%2e/settings"
+    ],
+    "rules": [
+      "Accept only the root route or same-origin relative paths under an allowed internal prefix.",
+      "Reject absolute URLs, protocol-relative URLs, backslashes, encoded slash/backslash traversal, encoded or literal dot-dot segments, JavaScript/data/blob/file schemes, and NUL/control characters.",
+      "Normalize and validate the target route against targetRoutes before using it.",
+      "If validation fails, drop returnTo and route to the destination's safe default."
+    ]
+  },
+  "statePreservation": {
+    "profileIds": "Preserve profileId path/query params for model detail, enrollment, training, results, export, import replacement, and legacy Personal Models/runtime/microphone redirects.",
+    "vocabularySetIds": "Preserve setId path/query params for vocabulary detail and legacy vocabulary redirects.",
+    "jobIds": "Preserve jobId only for training recovery and only after profile-store/worker validation.",
+    "safeQueryState": "Preserve only keys in safeQueryState.allowedKeys; drop unknown or unsafe values.",
+    "focusAndScroll": "Route changes move focus to the screen heading, current wizard prompt, blocker, or primary action; back/return restores per-route scroll and logical focus when the target still exists.",
+    "activeWorkGuards": "Recording, enrollment capture, training, import, export, and model updates continue under their existing lifecycle contracts; navigation asks for confirmation only when it would discard unsaved local UI edits or disrupt active capture."
+  },
+  "legacyRouteRemoval": {
+    "earliestRemovalRelease": "v0.8.0",
+    "rule": "Keep v0.5 hash-anchor aliases until at least v0.8.0 and until documentation plus route tests prove they are no longer needed."
+  }
+}
