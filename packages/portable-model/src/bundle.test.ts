@@ -5,10 +5,15 @@ import {
   buildPortableSpeechModelInnerBundle,
   createPortableSpeechModelFileRef,
   getPortableSpeechModelInnerBundleFileBytes,
+  importPortableSpeechModelArchive,
   parseAndVerifyPortableSpeechModelInnerBundle,
   stablePortableModelJson,
   type PortableSpeechModelBundleFileInputV1,
 } from './bundle';
+import {
+  buildUnencryptedPortableSpeechModelEnvelope,
+  encryptPortableSpeechModelEnvelope,
+} from './envelope';
 import type { PortableSpeechModelManifestV1 } from './manifest';
 
 const textEncoder = new TextEncoder();
@@ -192,6 +197,39 @@ function ref(refs: Readonly<Record<string, ProfileFileRef>>, path: string): Prof
   return value;
 }
 
+async function withExtraTestVector(
+  input: Awaited<ReturnType<typeof samplePortableBundleInput>>,
+  extra: PortableSpeechModelBundleFileInputV1,
+): Promise<Awaited<ReturnType<typeof samplePortableBundleInput>>> {
+  const extraRef = await createPortableSpeechModelFileRef(extra);
+  const manifest: PortableSpeechModelManifestV1 = {
+    ...input.manifest,
+    testVectors: [...input.manifest.testVectors, extraRef],
+    files: [...input.manifest.files, extraRef].sort((left, right) =>
+      left.path.localeCompare(right.path),
+    ),
+  };
+  return {
+    manifest,
+    files: [...input.files, extra],
+    refs: { ...input.refs, [extra.path]: extraRef },
+  };
+}
+
+function deterministicRandomBytes(
+  ...chunks: readonly Uint8Array[]
+): (length: number) => Uint8Array {
+  let index = 0;
+  return (length) => {
+    const chunk = chunks[index];
+    index += 1;
+    if (chunk === undefined || chunk.byteLength !== length) {
+      throw new Error(`Expected deterministic random chunk of ${length.toString()} bytes`);
+    }
+    return new Uint8Array(chunk);
+  };
+}
+
 describe('portable speech model inner bundle', () => {
   it('builds deterministic archive bytes with manifest, adapter, notices, checksums, and test vectors', async () => {
     const input = await samplePortableBundleInput();
@@ -325,6 +363,116 @@ describe('portable speech model inner bundle', () => {
     await expect(parseAndVerifyPortableSpeechModelInnerBundle(trailing)).rejects.toThrow(
       'trailing bytes',
     );
+  });
+
+  it('imports encrypted and unencrypted archives through the constrained importer', async () => {
+    const input = await samplePortableBundleInput();
+    const bundle = await buildPortableSpeechModelInnerBundle(input);
+    const encrypted = await encryptPortableSpeechModelEnvelope({
+      body: bundle.bytes,
+      passphrase: 'portable import passphrase',
+      randomBytes: deterministicRandomBytes(
+        new Uint8Array(16).fill(0x11),
+        new Uint8Array(12).fill(0x22),
+      ),
+    });
+
+    const encryptedImport = await importPortableSpeechModelArchive(encrypted.bytes, {
+      passphrase: 'portable import passphrase',
+    });
+    expect(encryptedImport.summary).toEqual({
+      encrypted: true,
+      fileCount: bundle.index.files.length,
+      expandedBytes: bundle.index.files.reduce((total, entry) => total + entry.sizeBytes, 0),
+      containsVoiceDerivedWeights: true,
+    });
+    expect(encryptedImport.manifest).toEqual(input.manifest);
+    expect(encryptedImport.files.map((entry) => entry.path)).toEqual(
+      bundle.index.files.map((entry) => entry.path),
+    );
+
+    const unencrypted = buildUnencryptedPortableSpeechModelEnvelope(bundle.bytes);
+    const unencryptedImport = await importPortableSpeechModelArchive(unencrypted.bytes);
+    expect(unencryptedImport.summary.encrypted).toBe(false);
+    expect(unencryptedImport.manifest.bundleId).toBe(input.manifest.bundleId);
+  });
+
+  it('rejects wrong import passphrases and aborted imports', async () => {
+    const input = await samplePortableBundleInput();
+    const bundle = await buildPortableSpeechModelInnerBundle(input);
+    const encrypted = await encryptPortableSpeechModelEnvelope({
+      body: bundle.bytes,
+      passphrase: 'portable import passphrase',
+      randomBytes: deterministicRandomBytes(
+        new Uint8Array(16).fill(0x11),
+        new Uint8Array(12).fill(0x22),
+      ),
+    });
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await expect(
+      importPortableSpeechModelArchive(encrypted.bytes, { passphrase: 'wrong passphrase' }),
+    ).rejects.toThrow('could not be decrypted');
+    await expect(
+      importPortableSpeechModelArchive(encrypted.bytes, {
+        passphrase: 'portable import passphrase',
+        signal: aborted.signal,
+      }),
+    ).rejects.toThrow('was aborted');
+  });
+
+  it('rejects hostile imported media types for operator or external-data payloads', async () => {
+    const input = await samplePortableBundleInput();
+    await expect(
+      createPortableSpeechModelFileRef(
+        file('base-model/model.onnx', 'application/octet-stream', binaryBytes([1, 2, 3])),
+      ),
+    ).rejects.toThrow('base-model graphs');
+
+    const onnxMedia = await withExtraTestVector(
+      input,
+      file('test-vectors/operator-probe.json', 'application/x-onnx', jsonBytes({ ok: true })),
+    );
+    const onnxMediaBundle = await buildPortableSpeechModelInnerBundle(onnxMedia);
+    await expect(
+      importPortableSpeechModelArchive(
+        buildUnencryptedPortableSpeechModelEnvelope(onnxMediaBundle.bytes).bytes,
+      ),
+    ).rejects.toThrow('operator, checkpoint, or external-data media types');
+  });
+
+  it('rejects hostile imported JSON with raw privacy, operator, or external-data declarations', async () => {
+    const input = await samplePortableBundleInput();
+    const rawPrivacy = await withExtraTestVector(
+      input,
+      file(
+        'test-vectors/raw-privacy.json',
+        'application/json',
+        jsonBytes({ privacy: { containsRawAudio: true } }),
+      ),
+    );
+    const rawPrivacyBundle = await buildPortableSpeechModelInnerBundle(rawPrivacy);
+    await expect(
+      importPortableSpeechModelArchive(
+        buildUnencryptedPortableSpeechModelEnvelope(rawPrivacyBundle.bytes).bytes,
+      ),
+    ).rejects.toThrow('forbidden privacy data');
+
+    const externalData = await withExtraTestVector(
+      input,
+      file(
+        'test-vectors/operator-metadata.json',
+        'application/json',
+        jsonBytes({ operatorSetImports: [{ domain: 'ai.onnx' }], externalData: 'weights.bin' }),
+      ),
+    );
+    const externalDataBundle = await buildPortableSpeechModelInnerBundle(externalData);
+    await expect(
+      importPortableSpeechModelArchive(
+        buildUnencryptedPortableSpeechModelEnvelope(externalDataBundle.bytes).bytes,
+      ),
+    ).rejects.toThrow('forbidden tensor/operator/external-data key');
   });
 
   it('rejects unsupported stable JSON values for deterministic manifests', () => {
