@@ -6,6 +6,7 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**,MODEL_LICENSES
 # Privacy and data rules
 
 - Audio and transcripts remain local unless the user explicitly exports them.
+- v0.6 progressive-disclosure work must keep privacy consequences visible at the point the user records, trains, imports, exports, downloads diagnostics/support data, deletes local data, activates, or rolls back; hashes, schema versions, encryption parameters, and compatibility details may move behind details, but the privacy consequence and safe next action must not be hidden only in a tooltip, toast, or collapsed panel.
 - No telemetry, remote logging, analytics, or crash uploads are enabled by default.
 - During active transcription, do not fetch remote services; model downloads and app updates must be explicit lifecycle events outside active dictation.
 - Enrollment recordings, speaker embeddings, adapters, and exported profiles are sensitive voice-biometric-like personal data; follow `docs/instructions/voice-profile-threat-model.instructions.md` for threat-model reviews and release gates.
