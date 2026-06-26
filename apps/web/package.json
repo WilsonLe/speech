@@ -11,7 +11,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "chromium-smoke": "playwright test"
+    "chromium-smoke": "playwright test",
+    "cross-browser-smoke": "playwright test --project=chromium && if [ \"${SPEECH_E2E_EDGE:-0}\" = \"1\" ]; then playwright test --project=edge; else echo 'Skipping Edge project; set SPEECH_E2E_EDGE=1 on hosts with Microsoft Edge installed.'; fi"
   },
   "dependencies": {
     "@speech/audio": "workspace:*",
