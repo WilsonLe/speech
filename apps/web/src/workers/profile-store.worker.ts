@@ -3,12 +3,15 @@ import {
   createDefaultProfileStorageBackend,
   encodePcm16Wav,
   requestPersistentProfileStorage,
+  redactEnrollmentProfileImportResult,
   summarizeTrainingJobPromptIdentitySplitPlan,
   summarizeTrainingJobRevision,
   type ActiveEnrollmentProfileStateV1,
   type EnrollmentCaptureMetadataV1,
   type EnrollmentProfileActivationReviewV1,
   type EnrollmentProfileExportPackageV1,
+  type EnrollmentProfileImportMode,
+  type EnrollmentProfileImportResultV1,
   type EnrollmentProfileSummaryV1,
   type EnrollmentUtteranceV1,
   type ProfileStorageBackend,
@@ -31,6 +34,13 @@ import type {
 
 export type ProfileStoreWorkerRequest =
   | { readonly type: 'LOAD_PROFILE'; readonly requestId: string; readonly profileId: string }
+  | { readonly type: 'LIST_PROFILES'; readonly requestId: string }
+  | {
+      readonly type: 'RENAME_PROFILE';
+      readonly requestId: string;
+      readonly profileId: string;
+      readonly displayName: string;
+    }
   | {
       readonly type: 'ENABLE_PROFILE';
       readonly requestId: string;
@@ -44,6 +54,9 @@ export type ProfileStoreWorkerRequest =
       readonly requestId: string;
       readonly profilePackage: EnrollmentProfileExportPackageV1;
       readonly overwriteExisting: boolean;
+      readonly mode?: EnrollmentProfileImportMode;
+      readonly targetProfileId?: string;
+      readonly targetDisplayName?: string;
     }
   | {
       readonly type: 'IMPORT_PORTABLE_SPEECH_MODEL';
@@ -104,6 +117,14 @@ export type ProfileStoreWorkerResponse =
       readonly summary?: EnrollmentProfileSummaryV1;
     }
   | {
+      readonly type: 'PROFILE_STORE_LIST_READY';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly summaries: readonly EnrollmentProfileSummaryV1[];
+    }
+  | {
       readonly type: 'PROFILE_STORE_SAVE_COMPLETE';
       readonly requestId: string;
       readonly backendKind: ProfileStorageBackendKind;
@@ -136,12 +157,21 @@ export type ProfileStoreWorkerResponse =
       readonly profilePackage: EnrollmentProfileExportPackageV1;
     }
   | {
+      readonly type: 'PROFILE_STORE_RENAME_COMPLETE';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly summary: EnrollmentProfileSummaryV1;
+    }
+  | {
       readonly type: 'PROFILE_STORE_IMPORT_COMPLETE';
       readonly requestId: string;
       readonly backendKind: ProfileStorageBackendKind;
       readonly persistentStorageGranted: boolean;
       readonly activeState: ActiveEnrollmentProfileStateV1;
       readonly summary: EnrollmentProfileSummaryV1;
+      readonly importResult: EnrollmentProfileImportResultV1;
     }
   | {
       readonly type: 'PROFILE_STORE_PORTABLE_IMPORT_COMPLETE';
@@ -205,6 +235,34 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
         });
         return;
       }
+      case 'LIST_PROFILES': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        post({
+          type: 'PROFILE_STORE_LIST_READY',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          summaries: await store.listProfileSummaries(),
+        });
+        return;
+      }
+      case 'RENAME_PROFILE': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const summary = await store.renameProfile({
+          profileId: message.profileId,
+          displayName: message.displayName,
+        });
+        post({
+          type: 'PROFILE_STORE_RENAME_COMPLETE',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          summary,
+        });
+        return;
+      }
       case 'ENABLE_PROFILE': {
         const { store, backendKind, persistentStorageGranted } = await getStoreContext();
         const activeState = await store.enableProfile({
@@ -248,9 +306,16 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
       }
       case 'IMPORT_PROFILE': {
         const { store, backendKind, persistentStorageGranted } = await getStoreContext();
-        const summary = await store.importProfile({
+        const importResult = await store.importProfilePackage({
           profilePackage: message.profilePackage,
           overwriteExisting: message.overwriteExisting,
+          ...(message.mode === undefined ? {} : { mode: message.mode }),
+          ...(message.targetProfileId === undefined
+            ? {}
+            : { targetProfileId: message.targetProfileId }),
+          ...(message.targetDisplayName === undefined
+            ? {}
+            : { targetDisplayName: message.targetDisplayName }),
         });
         post({
           type: 'PROFILE_STORE_IMPORT_COMPLETE',
@@ -258,7 +323,8 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
           backendKind,
           persistentStorageGranted,
           activeState: await store.getActiveProfileState(),
-          summary,
+          summary: importResult.summary,
+          importResult: redactEnrollmentProfileImportResult(importResult),
         });
         return;
       }

@@ -1035,6 +1035,41 @@ button.danger,
   margin: 1.25rem 0;
 }
 
+.personal-model-card-row {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0 0.25rem 0.35rem;
+}
+
+.profile-card-actions label {
+  display: grid;
+  min-width: min(100%, 16rem);
+  gap: 0.35rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.profile-card-actions input {
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.profile-card-actions input:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: 2px;
+}
+
 .personal-model-card {
   border: 1px solid rgba(56, 189, 248, 0.24);
   border-radius: 1.1rem;
@@ -1337,6 +1372,10 @@ button.danger,
     grid-template-columns: 1fr;
   }
 
+  .profile-card-actions {
+    align-items: stretch;
+  }
+
   .browser-training-progress__header {
     display: grid;
   }
@@ -1354,6 +1393,7 @@ button.danger,
   .vocabulary-entry-actions button,
   .inline-form button,
   .model-card-actions button,
+  .profile-card-actions button,
   .personal-models-nav a,
   .benchmark-actions button,
   .update-message button,

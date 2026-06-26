@@ -15,6 +15,9 @@ describe('App', () => {
     expect(html).toContain('Browser personal-model readiness');
     expect(html).toContain('Comparison gates and rollback');
     expect(html).toContain('Personal model profile cards');
+    expect(html).toContain('Import behavior');
+    expect(html).toContain('Dedupe existing profile');
+    expect(html).toContain('Import as new profile');
     expect(html).toContain('Offline readiness and model lifecycle');
     expect(html).toContain('Browser capability report');
     expect(html).toContain('Benchmark and diagnostics export');

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   buildTrainingReadinessCoverageReportForProfile,
   type ActiveEnrollmentProfileStateV1,
   type EnrollmentProfileExportPackageV1,
+  type EnrollmentProfileImportMode,
+  type EnrollmentProfileImportResultV1,
   type EnrollmentProfileSummaryV1,
   type ProfileStorageBackendKind,
 } from '@speech/profile-manager';
@@ -12,7 +14,8 @@ import {
   enableEnrollmentProfile,
   exportEnrollmentProfile,
   importEnrollmentProfile,
-  loadEnrollmentProfile,
+  listEnrollmentProfiles,
+  renameEnrollmentProfile,
   rollbackEnrollmentProfile,
 } from '../workers/profile-store-client';
 import {
@@ -34,7 +37,6 @@ import { createDefaultVocabularyStore, loadVocabularyStore } from './vocabulary-
 import {
   buildPersonalModelActivationReviewCard,
   buildPersonalModelProfileCard,
-  defaultPersonalProfileId,
   summarizeActiveVocabulary,
   type ActiveVocabularySummaryV1,
   type PersonalModelActivationReviewCardV1,
@@ -66,7 +68,7 @@ interface PersonalModelsUiState {
   readonly backendKind: ProfileStorageBackendKind | null;
   readonly persistentStorageGranted: boolean | null;
   readonly activeState: ActiveEnrollmentProfileStateV1 | null;
-  readonly summary: EnrollmentProfileSummaryV1 | null;
+  readonly summaries: readonly EnrollmentProfileSummaryV1[];
   readonly activeVocabulary: ActiveVocabularySummaryV1;
   readonly message: string;
 }
@@ -98,7 +100,7 @@ const initialPersonalModelsState: PersonalModelsUiState = {
   backendKind: null,
   persistentStorageGranted: null,
   activeState: null,
-  summary: null,
+  summaries: [],
   activeVocabulary: initialVocabularySummary,
   message: 'Loading local profile cards and active vocabulary counts…',
 };
@@ -122,35 +124,67 @@ const initialPreflightState: PersonalModelsPreflightState = {
 export function PersonalModelsPanel() {
   const [state, setState] = useState<PersonalModelsUiState>(initialPersonalModelsState);
   const [preflight, setPreflight] = useState<PersonalModelsPreflightState>(initialPreflightState);
+  const [importMode, setImportMode] = useState<EnrollmentProfileImportMode>('dedupe');
   const modelLifecycleWorkerRef = useRef<Worker | null>(null);
-  const card = useMemo(
+  const primarySummary = useMemo(
     () =>
-      buildPersonalModelProfileCard({
-        summary: state.summary,
+      state.summaries.find(
+        (summary) => summary.profile.id === state.activeState?.activeProfileId,
+      ) ??
+      state.summaries[0] ??
+      null,
+    [state.activeState?.activeProfileId, state.summaries],
+  );
+  const cardRows = useMemo(() => {
+    if (state.summaries.length === 0) {
+      return [
+        {
+          profileId: null,
+          summary: null,
+          card: buildPersonalModelProfileCard({
+            summary: null,
+            activeState: state.activeState,
+            activeVocabulary: state.activeVocabulary,
+          }),
+        },
+      ];
+    }
+    return state.summaries.map((summary) => ({
+      profileId: summary.profile.id,
+      summary,
+      card: buildPersonalModelProfileCard({
+        summary,
         activeState: state.activeState,
         activeVocabulary: state.activeVocabulary,
       }),
-    [state.activeState, state.activeVocabulary, state.summary],
-  );
+    }));
+  }, [state.activeState, state.activeVocabulary, state.summaries]);
+  const primaryCard = buildPersonalModelProfileCard({
+    summary: primarySummary,
+    activeState: state.activeState,
+    activeVocabulary: state.activeVocabulary,
+  });
   const activationReview = useMemo(
     () =>
       buildPersonalModelActivationReviewCard({
-        profileCard: card,
+        profileCard: primaryCard,
         activeState: state.activeState,
         activationDecision: null,
       }),
-    [card, state.activeState],
+    [primaryCard, state.activeState],
   );
   const readinessReport = useMemo(
     () =>
-      state.summary === null ? null : buildTrainingReadinessCoverageReportForProfile(state.summary),
-    [state.summary],
+      primarySummary === null
+        ? null
+        : buildTrainingReadinessCoverageReportForProfile(primarySummary),
+    [primarySummary],
   );
   const capabilityChecks = useMemo(
     () => buildPersonalModelCapabilityChecks(preflight.capabilityReport),
     [preflight.capabilityReport],
   );
-  const preferredBaseModelId = state.summary?.profile.baseModel?.id;
+  const preferredBaseModelId = primarySummary?.profile.baseModel?.id;
   const trainingCompanion = useMemo(
     () =>
       summarizePersonalModelTrainingCompanion({
@@ -260,20 +294,22 @@ export function PersonalModelsPanel() {
       const vocabulary = summarizeActiveVocabulary(
         loadVocabularyStore(window.localStorage).snapshot,
       );
-      const result = await loadEnrollmentProfile({ profileId: defaultPersonalProfileId });
+      const result = await listEnrollmentProfiles();
       if (cancelled()) return;
       setState({
         status: 'ready',
         backendKind: result.backendKind,
         persistentStorageGranted: result.persistentStorageGranted,
         activeState: result.activeState,
-        summary: result.summary ?? null,
+        summaries: result.summaries,
         activeVocabulary: vocabulary,
         message:
           nextMessage ??
-          (result.summary === undefined
+          (result.summaries.length === 0
             ? 'No personal profile is stored yet. The app will use the generic base-model fallback.'
-            : 'Personal model card refreshed from private local profile storage.'),
+            : `Loaded ${result.summaries.length.toString()} local personal profile card${
+                result.summaries.length === 1 ? '' : 's'
+              } from private storage.`),
       });
     } catch (error) {
       if (cancelled()) return;
@@ -323,12 +359,11 @@ export function PersonalModelsPanel() {
     }
   }
 
-  async function enableProfile() {
-    if (!card.actions.canEnable) return;
+  async function enableProfile(profileId: string) {
     await runLifecycleAction(
       'activating',
       'Enabling this personal profile between utterances…',
-      () => enableEnrollmentProfile({ profileId: defaultPersonalProfileId }),
+      () => enableEnrollmentProfile({ profileId }),
     );
   }
 
@@ -338,8 +373,7 @@ export function PersonalModelsPanel() {
     );
   }
 
-  async function exportProfile() {
-    if (!card.actions.canExport) return;
+  async function exportProfile(profileId: string) {
     setState((current) => ({
       ...current,
       status: 'exporting',
@@ -347,7 +381,7 @@ export function PersonalModelsPanel() {
     }));
     try {
       const result = await exportEnrollmentProfile({
-        profileId: defaultPersonalProfileId,
+        profileId,
         timeoutMs: 15_000,
       });
       downloadProfilePackage(result.profilePackage);
@@ -375,14 +409,14 @@ export function PersonalModelsPanel() {
     }));
     try {
       const profilePackage = JSON.parse(await file.text()) as EnrollmentProfileExportPackageV1;
-      await importEnrollmentProfile({
+      const result = await importEnrollmentProfile({
         profilePackage,
-        overwriteExisting: true,
+        mode: importMode,
+        overwriteExisting: importMode === 'replace',
         timeoutMs: 15_000,
       });
       await refreshPersonalModels({
-        nextMessage:
-          'Profile import verified checksums and restored local profile files. Review before enabling.',
+        nextMessage: formatImportResultMessage(result.importResult),
       });
     } catch (error) {
       setState((current) => ({
@@ -393,10 +427,32 @@ export function PersonalModelsPanel() {
     }
   }
 
-  async function deleteProfile() {
-    if (!card.actions.canDelete) return;
+  async function renameProfile(event: FormEvent<HTMLFormElement>, profileId: string) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const displayName = String(new FormData(form).get('displayName') ?? '');
+    setState((current) => ({
+      ...current,
+      status: 'loading',
+      message: 'Renaming local personal profile card…',
+    }));
+    try {
+      await renameEnrollmentProfile({ profileId, displayName, timeoutMs: 15_000 });
+      await refreshPersonalModels({
+        nextMessage: 'Personal profile display name updated locally.',
+      });
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Profile rename failed.',
+      }));
+    }
+  }
+
+  async function deleteProfile(profileId: string) {
     await runLifecycleAction('deleting', 'Deleting stored profile files and active pointers…', () =>
-      deleteEnrollmentProfile({ profileId: defaultPersonalProfileId }),
+      deleteEnrollmentProfile({ profileId }),
     );
   }
 
@@ -452,7 +508,12 @@ export function PersonalModelsPanel() {
       </nav>
 
       <div className="personal-models-summary" aria-label="Personal Models summary">
-        <StatusPill label="Cards" value="1 local profile slot" />
+        <StatusPill
+          label="Cards"
+          value={`${state.summaries.length.toString()} local profile${
+            state.summaries.length === 1 ? '' : 's'
+          }`}
+        />
         <StatusPill label="Profile store" value={formatProfileStoreBackend(state.backendKind)} />
         <StatusPill
           label="Persistent storage"
@@ -460,7 +521,7 @@ export function PersonalModelsPanel() {
         />
         <StatusPill
           label="Active vocabulary"
-          value={`${card.activeVocabulary.activeEntryCount.toString()} entries`}
+          value={`${primaryCard.activeVocabulary.activeEntryCount.toString()} entries`}
         />
       </div>
 
@@ -479,7 +540,56 @@ export function PersonalModelsPanel() {
       <PersonalModelActivationReviewPanel review={activationReview} />
 
       <div className="personal-model-card-list" aria-label="Personal model profile cards">
-        <PersonalModelProfileCard card={card} />
+        {cardRows.map((row) => (
+          <div className="personal-model-card-row" key={row.profileId ?? 'generic-fallback'}>
+            <PersonalModelProfileCard card={row.card} />
+            {row.profileId === null ? null : (
+              <form
+                className="profile-card-actions"
+                aria-label={`${row.card.displayName} profile actions`}
+                onSubmit={(event) => void renameProfile(event, row.profileId)}
+              >
+                <label>
+                  <span>Display name</span>
+                  <input
+                    key={row.card.displayName}
+                    name="displayName"
+                    defaultValue={row.card.displayName}
+                    maxLength={80}
+                    disabled={isBusy}
+                  />
+                </label>
+                <button type="submit" className="secondary" disabled={isBusy}>
+                  Rename profile
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void enableProfile(row.profileId)}
+                  disabled={isBusy || !row.card.actions.canEnable}
+                >
+                  Enable personal profile
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void exportProfile(row.profileId)}
+                  disabled={isBusy || !row.card.actions.canExport}
+                >
+                  Export sensitive profile package
+                </button>
+                <button
+                  type="button"
+                  className="secondary danger"
+                  onClick={() => void deleteProfile(row.profileId)}
+                  disabled={isBusy || !row.card.actions.canDelete}
+                >
+                  Delete local personal profile
+                </button>
+              </form>
+            )}
+          </div>
+        ))}
       </div>
 
       <div className="hero-actions" aria-label="Personal model profile lifecycle controls">
@@ -494,27 +604,25 @@ export function PersonalModelsPanel() {
         <button
           type="button"
           className="secondary"
-          onClick={() => void enableProfile()}
-          disabled={isBusy || !card.actions.canEnable}
-        >
-          Enable personal profile
-        </button>
-        <button
-          type="button"
-          className="secondary"
           onClick={() => void rollbackProfile()}
           disabled={isBusy || state.activeState?.previousProfileId === undefined}
         >
           Roll back active profile
         </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => void exportProfile()}
-          disabled={isBusy || !card.actions.canExport}
-        >
-          Export sensitive profile package
-        </button>
+        <label className="select-field">
+          <span>Import behavior</span>
+          <select
+            value={importMode}
+            onChange={(event) =>
+              setImportMode(event.currentTarget.value as EnrollmentProfileImportMode)
+            }
+            disabled={isBusy}
+          >
+            <option value="dedupe">Dedupe existing profile</option>
+            <option value="import-as-new">Import as new profile</option>
+            <option value="replace">Replace matching profile</option>
+          </select>
+        </label>
         <label className="secondary file-button">
           Import profile package
           <input
@@ -524,14 +632,6 @@ export function PersonalModelsPanel() {
             disabled={isBusy}
           />
         </label>
-        <button
-          type="button"
-          className="secondary danger"
-          onClick={() => void deleteProfile()}
-          disabled={isBusy || !card.actions.canDelete}
-        >
-          Delete local personal profile
-        </button>
       </div>
 
       <p
@@ -882,6 +982,19 @@ function summarizeCheckStatuses(checks: readonly PersonalModelPreflightCheckV1[]
   if (actionNeeded > 0) return `${actionNeeded.toString()} actions needed`;
   if (fallbacks > 0) return `${fallbacks.toString()} fallbacks`;
   return 'ready';
+}
+
+function formatImportResultMessage(result: EnrollmentProfileImportResultV1): string {
+  switch (result.operation) {
+    case 'deduped-existing':
+      return 'Profile import matched an existing local profile, so no duplicate files were written.';
+    case 'imported-new':
+      return result.nameCollisionResolved
+        ? 'Profile import verified checksums, created a new local profile, and resolved a display-name collision.'
+        : 'Profile import verified checksums and created a new local profile. Review before enabling.';
+    case 'replaced-existing':
+      return 'Profile import verified checksums and replaced the matching local profile.';
+  }
 }
 
 function formatActivationReviewStatus(review: PersonalModelActivationReviewCardV1): string {

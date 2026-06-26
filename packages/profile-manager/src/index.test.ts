@@ -22,6 +22,7 @@ import {
   OpfsProfileStorageBackend,
   buildTrainingReadinessCoverageReportForProfile,
   encodePcm16Wav,
+  redactEnrollmentProfileImportResult,
   requestPersistentProfileStorage,
   summarizeTrainingJobFeaturePreparationManifest,
   summarizeTrainingJobFrameLabelsManifest,
@@ -1116,6 +1117,81 @@ describe('enrollment profile store', () => {
     await expect(importedStore.importProfile({ profilePackage: exported })).rejects.toThrow(
       /already exists/,
     );
+  });
+
+  it('lists, renames, dedupes, imports as new, and replaces multiple profiles', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const sourceStore = createStore(new InMemoryProfileStorageBackend());
+    await saveFixtureTake(sourceStore, 'profile-export', 'utt-export', baseModel);
+    const exported = await sourceStore.exportProfile('profile-export');
+    const store = createStore(backend, { randomId: () => 'imported' });
+
+    const imported = await store.importProfilePackage({ profilePackage: exported });
+    expect(imported).toMatchObject({
+      operation: 'imported-new',
+      targetProfileId: 'profile-export',
+      displayName: 'profile-export',
+    });
+    expect(redactEnrollmentProfileImportResult(imported)).toMatchObject({
+      operation: 'imported-new',
+      displayName: 'profile-export',
+      privacy: { containsRawProfileId: false, aggregateOnly: true },
+    });
+    expect(redactEnrollmentProfileImportResult(imported)).not.toHaveProperty('targetProfileId');
+
+    const deduped = await store.importProfilePackage({ profilePackage: exported, mode: 'dedupe' });
+    expect(deduped).toMatchObject({
+      operation: 'deduped-existing',
+      targetProfileId: 'profile-export',
+    });
+
+    const renamed = await store.renameProfile({
+      profileId: 'profile-export',
+      displayName: 'Main personal profile',
+    });
+    expect(renamed.profile.displayName).toBe('Main personal profile');
+
+    const importedAsNew = await store.importProfilePackage({
+      profilePackage: exported,
+      mode: 'import-as-new',
+      targetDisplayName: 'Main personal profile',
+    });
+    expect(importedAsNew.operation).toBe('imported-new');
+    expect(importedAsNew.targetProfileId).toBe('main-personal-profile-imported');
+    expect(importedAsNew.displayName).toBe('Main personal profile (2)');
+    expect(importedAsNew.nameCollisionResolved).toBe(true);
+    expect(importedAsNew.summary.utterances[0]?.profileId).toBe(importedAsNew.targetProfileId);
+    expect(importedAsNew.summary.utterances[0]?.audio.path).toContain(
+      `profiles/${importedAsNew.targetProfileId}/recordings/`,
+    );
+
+    const collisionRenamed = await store.renameProfile({
+      profileId: importedAsNew.targetProfileId,
+      displayName: 'Main personal profile',
+    });
+    expect(collisionRenamed.profile.displayName).toBe('Main personal profile (2)');
+
+    const replacement = await store.importProfilePackage({
+      profilePackage: exported,
+      mode: 'replace',
+      targetProfileId: importedAsNew.targetProfileId,
+      targetDisplayName: 'Replacement profile',
+    });
+    expect(replacement).toMatchObject({
+      operation: 'replaced-existing',
+      targetProfileId: importedAsNew.targetProfileId,
+      displayName: 'Replacement profile',
+    });
+
+    await store.enableProfile({ profileId: 'profile-export' });
+    await store.enableProfile({ profileId: importedAsNew.targetProfileId });
+    await store.deleteProfile(importedAsNew.targetProfileId);
+    await expect(store.getActiveProfileState()).resolves.toMatchObject({
+      activeProfileId: 'profile-export',
+    });
+
+    const summaries = await store.listProfileSummaries();
+    expect(summaries.map((summary) => summary.profile.id)).toEqual(['profile-export']);
   });
 
   it('rejects tampered exported profile files during import', async () => {

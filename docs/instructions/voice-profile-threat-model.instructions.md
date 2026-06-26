@@ -24,6 +24,7 @@ Voice profiles are sensitive voice-biometric-like personal data. Treat accepted 
 - Imports must validate package schema, safe paths, file sizes, SHA-256 checksums, embedded metadata consistency, and profile ID consistency before writing or activating anything.
 - Deletion must remove raw recordings, utterance metadata, derived files, checksum indexes, and active/previous profile pointers for the target profile.
 - Personal Models cards and navigation may show only aggregate profile/vocabulary/base-model status plus explicit lifecycle controls; keep raw identifiers, prompts, vocabulary terms, audio, features, checkpoints, adapter weights, and full profile JSON out of rendered summaries.
+- Multi-profile import/dedupe/replace/import-as-new/rename/delete controls must use worker-owned profile-store operations, redact UI-facing import results, resolve name collisions deterministically, and preserve rollback/fallback semantics when deleting the active profile.
 
 ## Threats and required mitigations
 
