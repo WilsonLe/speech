@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.6.0",
+  "purpose": "Approved terminology map and default copy budgets for the minimal, task-first UI/UX release.",
+  "privacy": {
+    "containsPrivateData": false,
+    "containsUserGeneratedContent": false,
+    "notes": "This artifact defines product language and budgets only; it contains no audio, transcripts, vocabulary entries, model/profile data, screenshots, telemetry, or participant evidence."
+  },
+  "terminology": [
+    {
+      "technicalConcept": "Personal Voice Model",
+      "defaultUiTerm": "Voice model",
+      "technicalDetailTerm": "Personal Voice Model",
+      "notes": "Use default term in Models list/detail and ordinary workflows."
+    },
+    {
+      "technicalConcept": "P1 speaker/channel profile",
+      "defaultUiTerm": "Voice profile",
+      "technicalDetailTerm": "P1 speaker/channel profile",
+      "notes": "Use default term only when distinguishing profile metadata from the active voice model is necessary."
+    },
+    {
+      "technicalConcept": "P2 adapter",
+      "defaultUiTerm": "Personal model",
+      "technicalDetailTerm": "P2 adapter",
+      "notes": "Avoid adapter terminology outside technical details, diagnostics, and reproducible reports."
+    },
+    {
+      "technicalConcept": "Base RNN-T model",
+      "defaultUiTerm": "Speech model",
+      "technicalDetailTerm": "Base RNN-T model",
+      "notes": "Use for required setup and compatibility blockers."
+    },
+    {
+      "technicalConcept": "Contextual bias vocabulary",
+      "defaultUiTerm": "Vocabulary",
+      "technicalDetailTerm": "Contextual bias vocabulary",
+      "notes": "Do not expose decoder/trie/automaton language in default vocabulary workflows."
+    },
+    {
+      "technicalConcept": "Training companion pack",
+      "defaultUiTerm": "Training support files",
+      "technicalDetailTerm": "Training companion pack",
+      "notes": "Use when a browser needs optional files before personal-model training."
+    },
+    {
+      "technicalConcept": "Activation gate",
+      "defaultUiTerm": "Quality check",
+      "technicalDetailTerm": "Activation gate",
+      "notes": "Default copy distinguishes blocking and advisory checks without requiring metric-table interpretation."
+    },
+    {
+      "technicalConcept": "Generic anchor evaluation",
+      "defaultUiTerm": "General speech check",
+      "technicalDetailTerm": "Generic anchor evaluation",
+      "notes": "Use for checks that protect shared/general recognition quality."
+    },
+    {
+      "technicalConcept": "Projected voice condition",
+      "defaultUiTerm": "Loud",
+      "technicalDetailTerm": "Projected voice condition",
+      "notes": "Pair with the safety instruction: Project your voice without straining. Never instruct the user to scream."
+    },
+    {
+      "technicalConcept": "Execution provider",
+      "defaultUiTerm": "Processing mode",
+      "technicalDetailTerm": "Execution provider",
+      "notes": "Default UI normally omits this; Diagnostics may show WebGPU/WASM names."
+    },
+    {
+      "technicalConcept": "OPFS",
+      "defaultUiTerm": "Device storage",
+      "technicalDetailTerm": "OPFS",
+      "notes": "Use device storage in Storage/Privacy summaries; technical details may name OPFS."
+    }
+  ],
+  "technicalTermsAllowedByDefaultOnlyWhenUserProvided": [
+    "WebGPU",
+    "WASM",
+    "RNN-T",
+    "CTC",
+    "WER",
+    "CER",
+    "SNR",
+    "VAD",
+    "OPFS"
+  ],
+  "copyBudgets": [
+    {
+      "surface": "default-dictate",
+      "label": "Default Dictate screen",
+      "maxVisibleInterfaceWords": 35,
+      "excludes": ["user-generated transcript text", "expanded diagnostics", "legal/license text"]
+    },
+    {
+      "surface": "ordinary-list-detail",
+      "label": "Ordinary list/detail screen before disclosures",
+      "maxVisibleInterfaceWords": 80,
+      "excludes": [
+        "user-generated vocabulary entries",
+        "expanded diagnostics",
+        "legal/license text"
+      ]
+    },
+    {
+      "surface": "wizard-step",
+      "label": "Wizard step",
+      "maxVisibleInterfaceWords": 45,
+      "excludes": ["current recording prompt", "user-entered values", "legal/license text"]
+    },
+    {
+      "surface": "empty-state",
+      "label": "Empty state",
+      "maxVisibleInterfaceWords": 30,
+      "excludes": ["primary action label"]
+    },
+    {
+      "surface": "helper-text",
+      "label": "Helper text",
+      "maxCharacters": 100,
+      "maxSentences": 1
+    },
+    {
+      "surface": "tooltip",
+      "label": "Tooltip",
+      "maxCharacters": 140,
+      "mayContainRequiredInformation": false
+    },
+    {
+      "surface": "status-label",
+      "label": "Status label",
+      "maxCharacters": 40
+    },
+    {
+      "surface": "primary-button",
+      "label": "Primary button",
+      "minWords": 1,
+      "maxWords": 4,
+      "startsWithVerb": true
+    },
+    {
+      "surface": "recoverable-error",
+      "label": "Recoverable error",
+      "maxSentences": 1,
+      "requiresRecoveryAction": true,
+      "technicalDetailDisclosedSeparately": true
+    }
+  ],
+  "visibleStringUserNeeds": [
+    "identify-destination-or-control",
+    "state-action-available-now",
+    "state-required-choice",
+    "communicate-state-or-progress",
+    "explain-consequence-risk-or-privacy-boundary",
+    "explain-recovery-action",
+    "satisfy-accessibility-legal-licensing-or-provenance-requirement"
+  ],
+  "writingRules": [
+    "Use sentence case.",
+    "Start action buttons with verbs.",
+    "Use nouns for destinations.",
+    "Prefer exact state words such as Downloading, Verifying, Training, Paused, Ready, and Incompatible.",
+    "Avoid please, successfully, oops, something went wrong, and unexplained valid/invalid language.",
+    "Do not blame the user.",
+    "Use the field or action name in errors.",
+    "Preserve Vietnamese diacritics in examples and transcript-related UI.",
+    "Do not silently rename user data; canonical/display transformations remain explicit."
+  ],
+  "exceptionProcess": {
+    "allowedReasons": [
+      "user-need",
+      "legal",
+      "privacy",
+      "accessibility",
+      "safety",
+      "licensing",
+      "provenance"
+    ],
+    "requiredFields": [
+      "surface",
+      "budget",
+      "measuredCountOrLength",
+      "reason",
+      "owner",
+      "testOrReviewReference"
+    ],
+    "rule": "Any budget exception must be documented next to the changed screen test, ADR, or issue evidence before the release candidate."
+  }
+}
