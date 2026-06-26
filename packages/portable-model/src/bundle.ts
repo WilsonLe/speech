@@ -3,9 +3,13 @@ import {
   PORTABLE_SPEECH_MODEL_HARD_MAX_BYTES,
   PORTABLE_SPEECH_MODEL_MAX_EXPANDED_BYTES,
   PORTABLE_SPEECH_MODEL_MAX_FILE_COUNT,
+  decryptPortableSpeechModelEnvelope,
   isSafePortableModelPath,
   normalizePortableModelPath,
+  parsePortableSpeechModelEnvelopePrefix,
   portableModelPathsCollide,
+  type DecryptPortableSpeechModelEnvelopeOptionsV1,
+  type PortableSpeechModelEnvelopeHeaderV1,
 } from './envelope';
 import {
   parsePortableSpeechModelManifestV1,
@@ -74,6 +78,25 @@ export interface ParsedPortableSpeechModelInnerBundleV1 {
   readonly manifest: PortableSpeechModelManifestV1;
   readonly dataOffset: number;
 }
+
+export interface ImportedPortableSpeechModelFileV1 extends ProfileFileRef {
+  readonly bytes: Uint8Array;
+}
+
+export interface ImportedPortableSpeechModelArchiveV1 {
+  readonly envelopeHeader: PortableSpeechModelEnvelopeHeaderV1;
+  readonly index: PortableSpeechModelInnerBundleIndexV1;
+  readonly manifest: PortableSpeechModelManifestV1;
+  readonly files: readonly ImportedPortableSpeechModelFileV1[];
+  readonly summary: {
+    readonly encrypted: boolean;
+    readonly fileCount: number;
+    readonly expandedBytes: number;
+    readonly containsVoiceDerivedWeights: true;
+  };
+}
+
+export type ImportPortableSpeechModelArchiveOptionsV1 = DecryptPortableSpeechModelEnvelopeOptionsV1;
 
 export async function createPortableSpeechModelFileRef(
   file: PortableSpeechModelBundleFileInputV1,
@@ -176,6 +199,38 @@ export async function parseAndVerifyPortableSpeechModelInnerBundle(
   const manifest = parsePortableSpeechModelManifestV1(parseJson(manifestBytes));
   assertManifestRefsMatchInnerBundle(manifest, parsed.index);
   return { ...parsed, manifest };
+}
+
+export async function importPortableSpeechModelArchive(
+  bytes: Uint8Array,
+  options: ImportPortableSpeechModelArchiveOptionsV1 = {},
+): Promise<ImportedPortableSpeechModelArchiveV1> {
+  throwIfPortableImportAborted(options.signal);
+  if (!(bytes instanceof Uint8Array)) {
+    throw new Error('Portable speech model import must be a Uint8Array.');
+  }
+  if (bytes.byteLength > PORTABLE_SPEECH_MODEL_HARD_MAX_BYTES) {
+    throw new Error('Portable speech model import exceeds the hard size limit.');
+  }
+  const { header: envelopeHeader } = parsePortableSpeechModelEnvelopePrefix(bytes);
+  const innerBundleBytes = await decryptPortableSpeechModelEnvelope(bytes, options);
+  throwIfPortableImportAborted(options.signal);
+  const parsed = await parseAndVerifyPortableSpeechModelInnerBundle(innerBundleBytes);
+  throwIfPortableImportAborted(options.signal);
+  const files = extractAndValidateImportedFiles(innerBundleBytes, parsed);
+  const expandedBytes = files.reduce((total, file) => total + file.bytes.byteLength, 0);
+  return {
+    envelopeHeader,
+    index: parsed.index,
+    manifest: parsed.manifest,
+    files,
+    summary: {
+      encrypted: envelopeHeader.mode === 'encrypted',
+      fileCount: files.length,
+      expandedBytes,
+      containsVoiceDerivedWeights: true,
+    },
+  };
 }
 
 export function getPortableSpeechModelInnerBundleFileBytes(
@@ -540,6 +595,140 @@ function assertManifestRefsMatchInnerBundle(
   }
 }
 
+function extractAndValidateImportedFiles(
+  bytes: Uint8Array,
+  parsed: ParsedPortableSpeechModelInnerBundleV1,
+): readonly ImportedPortableSpeechModelFileV1[] {
+  const files = parsed.index.files.map((entry) => {
+    const entryBytes = getPortableSpeechModelInnerBundleFileBytes(bytes, parsed, entry.path);
+    assertImportedPortablePayloadAllowed(entry, entryBytes);
+    return {
+      path: entry.path,
+      sha256: entry.sha256,
+      sizeBytes: entry.sizeBytes,
+      mediaType: entry.mediaType,
+      bytes: copyBytes(entryBytes),
+    };
+  });
+  if (files.length > PORTABLE_SPEECH_MODEL_MAX_FILE_COUNT) {
+    throw new Error('Portable speech model import has too many files.');
+  }
+  return files;
+}
+
+function assertImportedPortablePayloadAllowed(ref: ProfileFileRef, bytes: Uint8Array): void {
+  assertDefaultPortablePayloadAllowed(ref.path, ref.mediaType);
+  assertPortableImportFileKindAllowed(ref.path, ref.mediaType);
+  if (ref.sizeBytes !== bytes.byteLength) {
+    throw new Error(`Portable speech model import file ${ref.path} size does not match index.`);
+  }
+  if (ref.mediaType === 'application/json') {
+    assertImportedJsonPayloadAllowed(ref.path, parseJson(bytes));
+  }
+}
+
+function assertPortableImportFileKindAllowed(path: string, mediaType: string): void {
+  const lowerPath = path.toLowerCase();
+  const lowerMediaType = mediaType.toLowerCase();
+  const forbiddenExtensions = [
+    '.onnx',
+    '.ort',
+    '.pb',
+    '.pbtxt',
+    '.safetensors',
+    '.ckpt',
+    '.pt',
+    '.pth',
+  ];
+  if (forbiddenExtensions.some((extension) => lowerPath.endsWith(extension))) {
+    throw new Error(
+      'Portable speech model imports must not contain base-model, operator, checkpoint, or external-data files.',
+    );
+  }
+  if (
+    lowerMediaType.includes('onnx') ||
+    lowerMediaType.includes('protobuf') ||
+    lowerMediaType.includes('safetensors')
+  ) {
+    throw new Error(
+      'Portable speech model imports must not contain base-model, operator, checkpoint, or external-data media types.',
+    );
+  }
+}
+
+function assertImportedJsonPayloadAllowed(path: string, value: unknown): void {
+  scanPortableImportJson(path, value, []);
+}
+
+function scanPortableImportJson(path: string, value: unknown, keyPath: readonly string[]): void {
+  if (value === null) return;
+  if (Array.isArray(value)) {
+    if (value.length > 4096) {
+      throw new Error(`Portable speech model import JSON file ${path} exceeds array limits.`);
+    }
+    value.forEach((entry, index) => {
+      scanPortableImportJson(path, entry, [...keyPath, index.toString()]);
+    });
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, entry] of Object.entries(value)) {
+    assertPortableImportJsonKeyAllowed(path, key, entry, keyPath);
+    scanPortableImportJson(path, entry, [...keyPath, key]);
+  }
+}
+
+function assertPortableImportJsonKeyAllowed(
+  path: string,
+  key: string,
+  value: unknown,
+  keyPath: readonly string[],
+): void {
+  const normalized = key.replace(/[-_]/g, '').toLowerCase();
+  const forbiddenKeys = new Set([
+    'externaldata',
+    'externaldatalocation',
+    'externaldatareference',
+    'operatorsetimports',
+    'opsetimports',
+    'operatorimports',
+    'initializer',
+    'initializers',
+    'rawdata',
+    'rawaudio',
+    'audiosamples',
+    'featuretensors',
+    'checkpoint',
+    'checkpoints',
+  ]);
+  if (forbiddenKeys.has(normalized)) {
+    throw new Error(
+      `Portable speech model import JSON file ${path} contains forbidden tensor/operator/external-data key ${key}.`,
+    );
+  }
+  if (
+    keyPath.at(-1) === 'privacy' &&
+    typeof value === 'boolean' &&
+    value === true &&
+    forbiddenTruePrivacyFlags.has(key)
+  ) {
+    throw new Error(
+      `Portable speech model import JSON file ${path} declares forbidden privacy data.`,
+    );
+  }
+}
+
+const forbiddenTruePrivacyFlags = new Set([
+  'containsRawAudio',
+  'containsTranscriptText',
+  'containsPreparedFeatures',
+  'containsFeatureTensors',
+  'containsCheckpoints',
+  'containsBaseModel',
+  'containsRawTerms',
+  'containsCaseIds',
+]);
+
 function assertFileRefMatches(file: NormalizedPortableBundleFile, ref: ProfileFileRef): void {
   assertProfileFileRefEquivalent(
     {
@@ -601,13 +790,19 @@ function assertDefaultPortablePayloadAllowed(path: string, mediaType: string): v
     'checkpoints',
     'optimizer',
     'training-jobs',
+    'base-model',
+    'base_model',
+    'graphs',
+    'operators',
+    'external-data',
+    'external_data',
   ]);
   if (mediaType.toLowerCase().startsWith('audio/') || lowerPath.endsWith('.wav')) {
     throw new Error('Default portable .speechmodel bundles must exclude raw audio files.');
   }
   if (lowerSegments.some((segment) => forbiddenSegments.has(segment))) {
     throw new Error(
-      'Default portable .speechmodel bundles must exclude raw audio, prepared features, checkpoints, and optimizer state.',
+      'Default portable .speechmodel bundles must exclude raw audio, prepared features, checkpoints, optimizer state, base-model graphs, operator files, and external data.',
     );
   }
 }
@@ -617,8 +812,20 @@ function toUint8Array(value: ArrayBuffer | ArrayBufferView): Uint8Array {
   return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
 }
 
+function copyBytes(bytes: Uint8Array): Uint8Array {
+  const output = new Uint8Array(bytes.byteLength);
+  output.set(bytes);
+  return output;
+}
+
 function parseJson(bytes: Uint8Array): unknown {
   return JSON.parse(textDecoder.decode(bytes)) as unknown;
+}
+
+function throwIfPortableImportAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw new Error('Portable speech model import was aborted.');
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
