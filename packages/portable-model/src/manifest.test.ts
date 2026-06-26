@@ -55,16 +55,22 @@ function manifest(
       summaryFile: fileRef('evaluation/summary.json'),
       metricsFile: fileRef('evaluation/metrics.json'),
     },
+    noticesFile: fileRef('notices/THIRD_PARTY_NOTICES.txt'),
+    checksumsFile: fileRef('metadata/checksums.json'),
+    testVectors: [fileRef('test-vectors/forward.json')],
     privacy: {
       containsRawAudio: false,
       containsPreparedFeatures: false,
       containsVoiceDerivedWeights: true,
     },
     files: [
-      fileRef('manifest.json'),
       fileRef('artifacts/adapter-weights.bin', 256_000),
+      fileRef('vocabulary/entries.json'),
       fileRef('evaluation/summary.json'),
       fileRef('evaluation/metrics.json'),
+      fileRef('notices/THIRD_PARTY_NOTICES.txt'),
+      fileRef('metadata/checksums.json'),
+      fileRef('test-vectors/forward.json'),
     ],
     ...overrides,
   };
@@ -158,7 +164,10 @@ describe('portable speech model manifest v1', () => {
 
   it('rejects empty files arrays and malformed file refs', () => {
     const value = manifest({
-      files: [fileRef('manifest.json'), { path: '', sha256: 'bad', sizeBytes: 0, mediaType: '' }],
+      files: [
+        fileRef('artifacts/adapter-weights.bin'),
+        { path: '', sha256: 'bad', sizeBytes: 0, mediaType: '' },
+      ],
     });
 
     const result = validatePortableSpeechModelManifestV1(value);
@@ -169,6 +178,24 @@ describe('portable speech model manifest v1', () => {
         'files[1].sha256 has invalid format',
         'files[1].sizeBytes must be a positive integer',
         'files[1].mediaType must be a non-empty string',
+      ]),
+    );
+  });
+
+  it('requires notices, checksums, and at least one test vector', () => {
+    const value = manifest({
+      noticesFile: undefined,
+      checksumsFile: undefined,
+      testVectors: [],
+    } as unknown as Partial<PortableSpeechModelManifestV1>);
+
+    const result = validatePortableSpeechModelManifestV1(value);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'noticesFile must be an object',
+        'checksumsFile must be an object',
+        'testVectors must be a non-empty array',
       ]),
     );
   });

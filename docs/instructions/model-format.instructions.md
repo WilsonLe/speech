@@ -12,6 +12,7 @@ applyTo: 'model-packs/**,apps/web/public/model-catalog.json,apps/web/public/mode
 - Enumerate every graph input/output tensor name, data type, shape convention, and state-cache relationship.
 - Every graph `fileKey` and speaker-embedding `encoderFileKey` must reference a declared manifest `files` entry.
 - Browser-training `anchor-pack` artifact refs must be redistributable and provenance-backed. Anchor feature-pack artifacts may include only generic/synthetic public feature frames with hashes and aggregate metric expectations; never use raw audio, transcript text, private frozen features, participant-derived features, or private vocabulary.
+- Deterministic `.speechmodel` inner bundles must sort payload files by safe normalized path, generate `manifest.json` inside the archive, keep `manifest.files` self-reference-free, require checked `noticesFile`, `checksumsFile`, and at least one `testVectors` ref, and verify every manifest ref against archive byte SHA-256/size/media type before export/import.
 - Manifest file entries require non-empty URLs/media types, positive sizes, and lowercase 64-character SHA-256 checksums before any large download or activation.
 - Never rely on undocumented tensor ordering.
 - `supportedLanguageModes` must include each declared base language, must not include undeclared base languages, and `auto`/`mixed` modes require both `vi` and `en` in `languages`.
