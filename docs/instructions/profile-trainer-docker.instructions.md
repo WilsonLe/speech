@@ -100,9 +100,26 @@ docker run --rm --network none -u "$(id -u):$(id -g)" -v "$PWD:/work" \
   --output /work/local-trainer-out/my-adapter.speechprofile.json \
   --display-name "My local adapter" \
   --json
+
+# 6. Optional: wrap the same valid CLI residual adapter in the .speechmodel container.
+# This command requires the exact base-model manifest so the portable bundle can bind
+# manifest, graph-contract, and tokenizer checksums. The local CLI writes an
+# unencrypted envelope only when explicitly requested with --allow-unencrypted;
+# browser exports should still prefer encrypted .speechmodel output.
+docker run --rm --network none -u "$(id -u):$(id -g)" -v "$PWD:/work" \
+  speech-profile-trainer:local \
+  package-speechmodel \
+  --adapter /work/local-trainer-out/adapter.bin \
+  --training-metadata /work/local-trainer-out/training-metadata.json \
+  --evaluation-report /work/local-trainer-out/evaluation-report.json \
+  --base-model-manifest /work/base-model-manifest.json \
+  --output /work/local-trainer-out/my-adapter.speechmodel \
+  --display-name "My local adapter" \
+  --allow-unencrypted \
+  --json
 ```
 
-The output adapter package is a sensitive explicit export. Import it into the PWA only after verifying that the profile/base-model identity and activation gate match the currently installed model.
+The output adapter package or `.speechmodel` bundle is a sensitive explicit export. Import it into the PWA only after verifying that the profile/base-model identity and activation gate match the currently installed model.
 
 ## Publication checklist
 

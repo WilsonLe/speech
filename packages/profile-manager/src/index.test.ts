@@ -1297,6 +1297,33 @@ describe('enrollment profile store', () => {
     );
   });
 
+  it('imports CLI residual-adapter portable bundles through the same staged path', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend, { randomId: () => 'portable-import-cli' });
+    const archive = await createPortableArchiveFixture({ adaptationType: 'cli-residual-adapter' });
+
+    const summary = await store.importPortableSpeechModel({
+      archive,
+      expectedBaseModel: portableBaseModel,
+      smokeTest: createPortableSmokeResult,
+      importId: 'portable-import-cli',
+    });
+
+    expect(summary).toMatchObject({
+      bundleId: 'portable-import-fixture',
+      importId: 'portable-import-cli',
+      adaptationType: 'cli-residual-adapter',
+      smokeTest: { status: 'passed', vectorCount: 1 },
+      privacy: { containsAdapterWeights: false, containsRawAudio: false },
+    });
+    expect(summary.fileCount).toBeGreaterThanOrEqual(7);
+    expect(await backend.listFiles(['portable-import-staging'])).toEqual([]);
+    expect(await store.getPortableSpeechModelImport('portable-import-fixture')).toMatchObject({
+      summary: { adaptationType: 'cli-residual-adapter' },
+      privacy: { containsAdapterWeights: true },
+    });
+  });
+
   it('rejects portable imports with non-exact base-model identity before staging', async () => {
     const backend = new InMemoryProfileStorageBackend();
     const store = createStore(backend);
@@ -1468,7 +1495,12 @@ function createActivationReview(
   };
 }
 
-async function createPortableArchiveFixture(): Promise<ImportedPortableSpeechModelArchiveV1> {
+async function createPortableArchiveFixture(
+  options: {
+    readonly adaptationType?: PortableSpeechModelManifestV1['adaptation']['type'];
+  } = {},
+): Promise<ImportedPortableSpeechModelArchiveV1> {
+  const adaptationType = options.adaptationType ?? 'browser-top-adapter';
   const adapter = portableFile(
     'artifacts/adapter-weights.bin',
     'application/octet-stream',
@@ -1478,6 +1510,25 @@ async function createPortableArchiveFixture(): Promise<ImportedPortableSpeechMod
     'embeddings/speaker.f32',
     'application/octet-stream',
     bytes(5, 6, 7, 8),
+  );
+  const profileManifest = portableFile(
+    'metadata/profile-manifest.json',
+    'application/json',
+    jsonBytes({
+      schemaVersion: 1,
+      id: 'private-source-profile',
+      adaptation: {
+        type: 'residual-adapter',
+        adapter: {
+          graphFileKey: 'adapterGraph',
+          graphContractSha256: portableBaseModel.graphContractSha256,
+          insertionPointIds: ['encoder-block-11'],
+          application: 'residual-add',
+          activationSwap: 'utterance-boundary',
+        },
+      },
+      privacy: { containsRawAudio: false },
+    }),
   );
   const evaluationSummary = portableFile(
     'evaluation/summary.json',
@@ -1499,14 +1550,11 @@ async function createPortableArchiveFixture(): Promise<ImportedPortableSpeechMod
     'application/json',
     jsonBytes({ schemaVersion: 1, vectorType: 'portable-smoke-vector-v1', expected: [0, 1] }),
   );
-  const refsWithoutChecksums = await refsForPortableFiles([
-    adapter,
-    speaker,
-    evaluationSummary,
-    evaluationMetrics,
-    notices,
-    vector,
-  ]);
+  const payloadWithoutChecksums =
+    adaptationType === 'cli-residual-adapter'
+      ? [adapter, profileManifest, evaluationSummary, evaluationMetrics, notices, vector]
+      : [adapter, speaker, evaluationSummary, evaluationMetrics, notices, vector];
+  const refsWithoutChecksums = await refsForPortableFiles(payloadWithoutChecksums);
   const checksums = portableFile(
     'metadata/checksums.json',
     'application/json',
@@ -1536,15 +1584,26 @@ async function createPortableArchiveFixture(): Promise<ImportedPortableSpeechMod
       supportsMixed: true,
     },
     baseModel: portableBaseModel,
-    adaptation: {
-      type: 'browser-top-adapter',
-      contractVersion: 1,
-      algorithmId: 'browser-top-adapter-frame-ce-v1',
-      files: {
-        weights: requirePortableRef(refs, adapter.path),
-        speakerEmbedding: requirePortableRef(refs, speaker.path),
-      },
-    },
+    adaptation:
+      adaptationType === 'cli-residual-adapter'
+        ? {
+            type: 'cli-residual-adapter',
+            contractVersion: 1,
+            algorithmId: 'cli-residual-adapter-v1',
+            files: {
+              adapterGraph: requirePortableRef(refs, adapter.path),
+              profileManifest: requirePortableRef(refs, profileManifest.path),
+            },
+          }
+        : {
+            type: 'browser-top-adapter',
+            contractVersion: 1,
+            algorithmId: 'browser-top-adapter-frame-ce-v1',
+            files: {
+              weights: requirePortableRef(refs, adapter.path),
+              speakerEmbedding: requirePortableRef(refs, speaker.path),
+            },
+          },
     evaluation: {
       gatePassed: true,
       summaryFile: requirePortableRef(refs, evaluationSummary.path),
@@ -1562,7 +1621,7 @@ async function createPortableArchiveFixture(): Promise<ImportedPortableSpeechMod
   };
   const bundle = await buildPortableSpeechModelInnerBundle({
     manifest,
-    files: [adapter, speaker, evaluationSummary, evaluationMetrics, notices, vector, checksums],
+    files: [...payloadWithoutChecksums, checksums],
   });
   return importPortableSpeechModelArchive(
     buildUnencryptedPortableSpeechModelEnvelope(bundle.bytes).bytes,

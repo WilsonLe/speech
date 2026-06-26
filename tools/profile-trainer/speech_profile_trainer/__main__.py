@@ -7,7 +7,12 @@ from typing import Any
 
 from .dataset import load_profile_dataset
 from .evaluation import evaluate_adapter_activation_from_files, write_evaluation_report
-from .packaging import package_personal_adapter_from_files, write_personal_adapter_package
+from .packaging import (
+    package_personal_adapter_as_speechmodel_from_files,
+    package_personal_adapter_from_files,
+    write_personal_adapter_package,
+    write_portable_speechmodel_package,
+)
 from .training import train_frozen_base_adapter_from_files, write_training_outputs
 from .validation import load_json_file, validate_profile_package
 
@@ -74,6 +79,33 @@ def main(argv: list[str] | None = None) -> int:
     package_parser.add_argument("--profile-id", help="safe profile id override")
     package_parser.add_argument("--display-name", help="display name for the packaged adapter")
     package_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    portable_parser = subparsers.add_parser(
+        "package-speechmodel",
+        help="package a valid CLI residual adapter in the portable .speechmodel container",
+    )
+    portable_parser.add_argument("--adapter", required=True, help="path to adapter.bin")
+    portable_parser.add_argument(
+        "--training-metadata", required=True, help="path to training-metadata.json"
+    )
+    portable_parser.add_argument(
+        "--evaluation-report", required=True, help="path to aggregate evaluation report JSON"
+    )
+    portable_parser.add_argument(
+        "--base-model-manifest", required=True, help="path to exact base model manifest JSON"
+    )
+    portable_parser.add_argument("--output", required=True, help="path to .speechmodel output")
+    portable_parser.add_argument("--profile-id", help="safe profile id override")
+    portable_parser.add_argument("--display-name", help="display name for the packaged adapter")
+    portable_parser.add_argument(
+        "--allow-unencrypted",
+        action="store_true",
+        help=(
+            "explicitly write an unencrypted .speechmodel envelope; "
+            "browser exports should prefer encryption"
+        ),
+    )
+    portable_parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
     args = parser.parse_args(argv)
     if args.command == "validate":
@@ -152,6 +184,29 @@ def main(argv: list[str] | None = None) -> int:
             "outputPath": str(output_path),
             "adapterSha256": result.manifest["adaptation"]["files"]["adapterGraph"]["sha256"],
             "activationGatePassed": result.manifest["evaluation"]["activationGatePassed"],
+        }
+        _emit(payload, json_output=args.json)
+        return 0
+    if args.command == "package-speechmodel":
+        result = package_personal_adapter_as_speechmodel_from_files(
+            adapter_path=args.adapter,
+            training_metadata_path=args.training_metadata,
+            evaluation_report_path=args.evaluation_report,
+            base_model_manifest_path=args.base_model_manifest,
+            profile_id=args.profile_id,
+            display_name=args.display_name,
+            allow_unencrypted=args.allow_unencrypted,
+        )
+        output_path = write_portable_speechmodel_package(result, args.output)
+        adapter_ref = result.manifest["adaptation"]["files"]["adapterGraph"]
+        payload = {
+            "profileId": result.manifest["profile"]["sourceProfileId"],
+            "outputPath": str(output_path),
+            "adapterSha256": adapter_ref["sha256"],
+            "activationGatePassed": result.manifest["evaluation"]["gatePassed"],
+            "bundleId": result.manifest["bundleId"],
+            "adaptationType": result.manifest["adaptation"]["type"],
+            "encrypted": result.envelope_header["mode"] == "encrypted",
         }
         _emit(payload, json_output=args.json)
         return 0
