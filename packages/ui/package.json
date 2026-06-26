@@ -7,6 +7,9 @@
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts",
+    "./primitives": "./src/primitives/index.ts",
+    "./primitives.css": "./src/primitives/index.css",
+    "./testing": "./src/testing/index.ts",
     "./tokens.css": "./src/tokens/index.css",
     "./tokens/*": "./src/tokens/*.css"
   },
@@ -15,5 +18,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests --exclude=dist/**"
   },
-  "devDependencies": {}
+  "peerDependencies": {
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
 }
