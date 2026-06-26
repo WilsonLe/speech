@@ -5,6 +5,11 @@ import type {
 } from '@speech/browser-training';
 import { useEffect, useRef, useState } from 'react';
 import {
+  buildBrowserTrainingProgressView,
+  type BrowserTrainingControlIntent,
+  type BrowserTrainingProgressViewV1,
+} from './browser-training-ui';
+import {
   checkAsrWorkerRuntime,
   type AsrWorkerRuntimeCheckResult,
 } from '../workers/asr-worker-client';
@@ -47,7 +52,17 @@ export function ModelRuntimePanel() {
   );
   const [trainingCoordination, setTrainingCoordination] =
     useState<BrowserTrainingCoordinationEventV1 | null>(null);
+  const [trainingControlIntent, setTrainingControlIntent] =
+    useState<BrowserTrainingControlIntent>('none');
   const trainingRun = useRef<BrowserTrainingPrototypeRunController | null>(null);
+  const latestTrainingCoordination = trainingCoordination ?? trainingRecovery?.coordination ?? null;
+  const trainingProgressView = buildBrowserTrainingProgressView({
+    status: trainingStatus,
+    recovery: trainingRecovery,
+    coordination: latestTrainingCoordination,
+    warnings: trainingWarnings,
+    controlIntent: trainingControlIntent,
+  });
 
   useEffect(() => subscribeBrowserTrainingCoordination(setTrainingCoordination), []);
 
@@ -68,7 +83,12 @@ export function ModelRuntimePanel() {
   }
 
   async function handleRunBrowserTrainingPrototype(resume: boolean = false) {
+    if (!resume) {
+      clearBrowserTrainingRecovery();
+      setTrainingRecovery(null);
+    }
     setTrainingStatus({ state: 'training' });
+    setTrainingControlIntent('none');
     setTrainingWarnings([]);
     const checkpoint = resume ? trainingRecovery?.checkpoint : undefined;
     const resumeOptions = checkpoint === undefined ? {} : { resumeFromCheckpoint: checkpoint };
@@ -99,15 +119,18 @@ export function ModelRuntimePanel() {
       });
       setTrainingRecovery(readBrowserTrainingRecovery());
     } finally {
+      setTrainingControlIntent('none');
       trainingRun.current = null;
     }
   }
 
   function handlePauseBrowserTrainingPrototype() {
+    setTrainingControlIntent('pause-requested');
     trainingRun.current?.pause();
   }
 
   function handleCancelBrowserTrainingPrototype() {
+    setTrainingControlIntent('cancel-requested');
     trainingRun.current?.cancel();
   }
 
@@ -141,49 +164,68 @@ export function ModelRuntimePanel() {
         >
           {status.state === 'loading' ? 'Benchmarking provider…' : 'Benchmark worker provider'}
         </button>
-        <button
-          type="button"
-          onClick={() => void handleRunBrowserTrainingPrototype(false)}
-          disabled={trainingStatus.state === 'training'}
-        >
-          {trainingStatus.state === 'training'
-            ? 'Training tiny adapter…'
-            : 'Run browser training prototype'}
-        </button>
-        <button
-          type="button"
-          onClick={handlePauseBrowserTrainingPrototype}
-          disabled={trainingStatus.state !== 'training'}
-        >
-          Pause browser training
-        </button>
-        <button
-          type="button"
-          onClick={handleCancelBrowserTrainingPrototype}
-          disabled={trainingStatus.state !== 'training'}
-        >
-          Cancel browser training
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleRunBrowserTrainingPrototype(true)}
-          disabled={trainingStatus.state === 'training' || trainingRecovery === null}
-        >
-          Resume browser training prototype
-        </button>
-        <button
-          type="button"
-          onClick={handleClearBrowserTrainingRecovery}
-          disabled={trainingStatus.state === 'training' || trainingRecovery === null}
-        >
-          Clear browser training recovery
-        </button>
+        <div className="browser-training-controls" aria-label="Browser training controls">
+          <button
+            type="button"
+            onClick={() => void handleRunBrowserTrainingPrototype(false)}
+            disabled={trainingStatus.state === 'training'}
+          >
+            {trainingStatus.state === 'training'
+              ? 'Training tiny adapter…'
+              : 'Run browser training prototype'}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void handleRunBrowserTrainingPrototype(false)}
+            disabled={
+              trainingStatus.state === 'training' ||
+              (trainingStatus.state === 'idle' && trainingRecovery === null)
+            }
+          >
+            Restart browser training prototype
+          </button>
+          <button
+            type="button"
+            onClick={handlePauseBrowserTrainingPrototype}
+            disabled={trainingStatus.state !== 'training'}
+          >
+            {trainingControlIntent === 'pause-requested'
+              ? 'Pause requested…'
+              : 'Pause browser training'}
+          </button>
+          <button
+            type="button"
+            onClick={handleCancelBrowserTrainingPrototype}
+            disabled={trainingStatus.state !== 'training'}
+          >
+            {trainingControlIntent === 'cancel-requested'
+              ? 'Cancel requested…'
+              : 'Cancel browser training'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleRunBrowserTrainingPrototype(true)}
+            disabled={trainingStatus.state === 'training' || trainingRecovery === null}
+          >
+            Resume browser training prototype
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={handleClearBrowserTrainingRecovery}
+            disabled={trainingStatus.state === 'training' || trainingRecovery === null}
+          >
+            Clear browser training recovery
+          </button>
+        </div>
         <TrainingSpikeStatus />
         <BrowserTrainingStatusMessage
           status={trainingStatus}
           recovery={trainingRecovery}
-          coordination={trainingCoordination}
+          coordination={latestTrainingCoordination}
           warnings={trainingWarnings}
+          progressView={trainingProgressView}
         />
         <RuntimeStatusMessage status={status} />
       </div>
@@ -227,17 +269,20 @@ function BrowserTrainingStatusMessage({
   recovery,
   coordination,
   warnings,
+  progressView,
 }: {
   readonly status: BrowserTrainingStatus;
   readonly recovery: BrowserTrainingRecoveryRecordV1 | null;
   readonly coordination: BrowserTrainingCoordinationEventV1 | null;
   readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
+  readonly progressView: BrowserTrainingProgressViewV1;
 }) {
   const recoverySummary = formatBrowserTrainingRecovery(recovery);
   const latestCoordination = coordination ?? recovery?.coordination ?? null;
   if (status.state === 'idle') {
     return (
       <>
+        <BrowserTrainingProgressDetails view={progressView} />
         <p className="status-message">
           Browser-training worker prototype has not run yet. It uses synthetic frozen features and
           does not touch the active ASR worker or profile.
@@ -254,6 +299,7 @@ function BrowserTrainingStatusMessage({
     const progress = status.latestProgress;
     return (
       <>
+        <BrowserTrainingProgressDetails view={progressView} />
         <p className="status-message">
           Training tiny adapter in a dedicated worker…{' '}
           {progress === undefined
@@ -281,6 +327,7 @@ function BrowserTrainingStatusMessage({
   if (status.state === 'error') {
     return (
       <>
+        <BrowserTrainingProgressDetails view={progressView} />
         <p className="status-message error-message">{status.message}</p>
         <BrowserTrainingRecoveryDetails
           recovery={recovery}
@@ -293,6 +340,7 @@ function BrowserTrainingStatusMessage({
   const { result } = status;
   return (
     <>
+      <BrowserTrainingProgressDetails view={progressView} />
       <dl className="microphone-settings" aria-label="Browser training prototype status">
         <div>
           <dt>Training worker</dt>
@@ -339,6 +387,66 @@ function BrowserTrainingStatusMessage({
         warnings={warnings}
       />
     </>
+  );
+}
+
+function BrowserTrainingProgressDetails({
+  view,
+}: {
+  readonly view: BrowserTrainingProgressViewV1;
+}) {
+  return (
+    <section
+      className="browser-training-progress"
+      aria-label="Browser training named-phase progress"
+    >
+      <div className="browser-training-progress__header">
+        <div>
+          <p className="eyebrow">Training progress</p>
+          <h3>{view.currentPhaseLabel}</h3>
+        </div>
+        <strong>{view.progressPercent.toString()}%</strong>
+      </div>
+      <div
+        className="browser-training-progress__bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={view.progressPercent}
+        aria-valuetext={view.progressValueText}
+      >
+        <span style={{ width: `${view.progressPercent.toString()}%` }} />
+      </div>
+      <ol className="training-phase-list">
+        {view.phases.map((phase, index) => (
+          <li key={phase.id} data-status={phase.status}>
+            <span>{(index + 1).toString()}</span>
+            <div>
+              <strong>{phase.label}</strong>
+              <small>{phase.detail}</small>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <dl className="microphone-settings" aria-label="Browser training reload recovery summary">
+        <div>
+          <dt>Reload recovery</dt>
+          <dd>{view.recovery.label}</dd>
+        </div>
+        <div>
+          <dt>Recovery updated</dt>
+          <dd>{view.recovery.updatedAt ?? 'not stored'}</dd>
+        </div>
+      </dl>
+      <p className="status-message">{view.localOnlyDisclosure}</p>
+      {view.resourceWarnings.length > 0 ? (
+        <ul className="runtime-warnings" aria-label="Browser training resource guidance">
+          {view.resourceWarnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
