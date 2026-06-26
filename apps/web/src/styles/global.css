@@ -167,6 +167,7 @@ h2 {
 .runtime,
 .transcript,
 .vocabulary,
+.personal-models,
 .offline-model {
   margin-bottom: 1rem;
 }
@@ -849,6 +850,73 @@ button.danger,
   gap: 0.75rem;
 }
 
+.personal-models-nav,
+.personal-models-summary,
+.personal-model-card-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.personal-models-nav {
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  margin: 1.25rem 0;
+}
+
+.personal-models-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 1.25rem 0;
+}
+
+.personal-model-card {
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 1.1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.personal-model-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.personal-model-card-header h3 {
+  margin-bottom: 0.35rem;
+  color: #f8fafc;
+}
+
+.personal-model-card-header p {
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.personal-model-card-header span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.16);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.personal-model-card-header span[data-status='active'] {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.personal-model-card-header span[data-status='no-profile'] {
+  color: #fde68a;
+  background: rgba(113, 63, 18, 0.2);
+}
+
+.personal-model-card-meta {
+  margin-top: 1rem;
+}
+
 .benchmark-actions {
   display: flex;
   flex-wrap: wrap;
@@ -985,7 +1053,9 @@ button.danger,
   .vocabulary-form-grid,
   .vocabulary-entry,
   .offline-grid,
-  .model-card {
+  .model-card,
+  .personal-models-nav,
+  .personal-models-summary {
     grid-template-columns: 1fr;
   }
 
@@ -998,9 +1068,14 @@ button.danger,
   .vocabulary-entry-actions button,
   .inline-form button,
   .model-card-actions button,
+  .personal-models-nav a,
   .benchmark-actions button,
   .update-message button {
     width: 100%;
+  }
+
+  .personal-model-card-header {
+    display: grid;
   }
 
   .benchmark-metadata,
