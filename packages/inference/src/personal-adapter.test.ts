@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { migrateSpeechProfileManifestV1ToV2 } from '@speech/protocol';
 import { createMockResidualAdapterRuntimeInputs } from './mock-adapter-fixture';
 import {
   loadAndBenchmarkPersonalAdapterRuntime,
@@ -61,6 +62,31 @@ describe('personal residual-adapter runtime', () => {
     await disposePersonalAdapterRuntime(adapterRuntime);
 
     expect(result.runDurationsMs).toHaveLength(1);
+  });
+
+  it('loads migrated V2 residual-adapter manifests without rewriting adapter metadata', async () => {
+    const inputs = createMockResidualAdapterRuntimeInputs();
+    const runtime = await loadOnnxRuntimeWeb({
+      preferredProvider: 'wasm',
+      capabilities: wasmCapabilities,
+      wasm: { numThreads: 1 },
+    });
+    if (inputs.profileManifest.adaptation.type !== 'residual-adapter') {
+      throw new Error('Expected mock residual-adapter profile.');
+    }
+    const migratedProfileManifest = migrateSpeechProfileManifestV1ToV2(inputs.profileManifest);
+
+    const adapterRuntime = await loadPersonalAdapterRuntime({
+      loadedRuntime: runtime,
+      ...inputs,
+      profileManifest: migratedProfileManifest,
+    });
+    await disposePersonalAdapterRuntime(adapterRuntime);
+
+    expect(adapterRuntime.profileId).toBe(inputs.profileManifest.id);
+    expect(adapterRuntime.insertionPointIds).toEqual(
+      inputs.profileManifest.adaptation.adapter.insertionPointIds,
+    );
   });
 
   it('rejects adapter bytes that do not match the profile manifest checksum', async () => {

@@ -1,7 +1,7 @@
 import type { ErrorCode, WarningCode } from './errors';
 import type { LanguageModeDiagnostics, LanguageSpan } from './language-diagnostics';
 import type { SpeechLanguageMode, SpeechModelManifestV2 } from './model-manifest';
-import type { ModelIdentity, AdaptationType, SpeechProfileManifestV1 } from './profile';
+import type { ModelIdentity, AdaptationType, SpeechProfileManifest } from './profile';
 import type { VocabularyEntryV1, VocabularyError } from './vocabulary';
 
 export interface RuntimeCapabilities {
@@ -57,7 +57,7 @@ export type MainToAsrWorker =
       readonly type: 'LOAD_PROFILE';
       readonly profileId: string;
       readonly expectedBaseModel: ModelIdentity;
-      readonly profileManifest?: SpeechProfileManifestV1;
+      readonly profileManifest?: SpeechProfileManifest;
       readonly baseModelManifest?: SpeechModelManifestV2;
       readonly adapterGraphBytes?: ArrayBuffer;
       readonly adapterBenchmark?: {

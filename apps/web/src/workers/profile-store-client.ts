@@ -9,6 +9,7 @@ import type {
   EnrollmentUtteranceV1,
   PortableSpeechModelImportSummaryV1,
   ProfileStorageBackendKind,
+  SpeechProfileManifestMigrationResultV1,
   TrainingJobPromptIdentitySplitSummaryV1,
   TrainingJobRevisionSummaryV1,
   TrainingJobRevisionVerificationResultV1,
@@ -66,6 +67,10 @@ export interface ProfileStoreRenameResult extends ProfileStoreActiveResult {
 
 export interface ProfileStorePortableImportResult extends ProfileStoreActiveResult {
   readonly summary: PortableSpeechModelImportSummaryV1;
+}
+
+export interface ProfileStoreSpeechProfileMigrationResult extends ProfileStoreActiveResult {
+  readonly migration: SpeechProfileManifestMigrationResultV1;
 }
 
 export interface ProfileStoreTrainingJobFreezeResult extends ProfileStoreActiveResult {
@@ -148,6 +153,13 @@ export interface ImportPortableSpeechModelOptions {
   readonly passphrase?: string;
   readonly overwriteExisting?: boolean;
   readonly importId?: string;
+  readonly timeoutMs?: number;
+}
+
+export interface MigrateSpeechProfileManifestOptions {
+  readonly profileId: string;
+  readonly sourcePath?: readonly string[];
+  readonly targetPath?: readonly string[];
   readonly timeoutMs?: number;
 }
 
@@ -349,6 +361,31 @@ export function importPortableSpeechModel(
       };
     },
   );
+}
+
+export function migrateSpeechProfileManifestToV2(
+  options: MigrateSpeechProfileManifestOptions,
+): Promise<ProfileStoreSpeechProfileMigrationResult> {
+  return requestProfileStore(
+    {
+      type: 'MIGRATE_SPEECH_PROFILE_MANIFEST_TO_V2',
+      requestId: createRequestId('migrate-profile-manifest'),
+      profileId: options.profileId,
+      ...(options.sourcePath === undefined ? {} : { sourcePath: options.sourcePath }),
+      ...(options.targetPath === undefined ? {} : { targetPath: options.targetPath }),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_SPEECH_PROFILE_MIGRATION_COMPLETE') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      migration: response.migration,
+    };
+  });
 }
 
 export function saveAcceptedEnrollmentTake(

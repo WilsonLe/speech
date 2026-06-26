@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { analyzeEnrollmentTakeQuality, defaultTrainingReadinessPolicyV1 } from '@speech/enrollment';
 import { decodeFloat16Array } from '@speech/features';
@@ -14,6 +15,8 @@ import {
 import type {
   ExactBaseModelIdentityV1,
   ProfileFileRef,
+  SpeechProfileManifestV1,
+  SpeechProfileManifestV2,
   VocabularyStoreSnapshotV1,
 } from '@speech/protocol';
 import {
@@ -37,6 +40,13 @@ import {
   type PortableSpeechModelImportSmokeResultV1,
   type ProfileStorageBackend,
 } from './index';
+
+const legacySpeechProfileFixture = JSON.parse(
+  readFileSync(
+    new URL('../../../test-data/expected/speech-profile-v1-v0.4.0.json', import.meta.url),
+    'utf8',
+  ),
+) as SpeechProfileManifestV1;
 
 const capture: EnrollmentCaptureMetadataV1 = {
   requestedConstraints: { audio: { channelCount: { ideal: 1 }, autoGainControl: false } },
@@ -1241,6 +1251,177 @@ describe('enrollment profile store', () => {
     ).rejects.toThrow(/profile metadata does not match embedded profile\.json/);
   });
 
+  it('migrates legacy speech profile manifests to profile.v2.json without mutating V1', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend, { now: () => '2026-06-26T09:30:00.000Z' });
+    const sourcePath = ['profiles', legacySpeechProfileFixture.id, 'profile.json'];
+    const targetPath = ['profiles', legacySpeechProfileFixture.id, 'profile.v2.json'];
+    await backend.putFile(sourcePath, jsonBytes(legacySpeechProfileFixture));
+    await backend.putFile(
+      [...targetPath.slice(0, -1), 'profile.v2.json.tmp-interrupted'],
+      jsonBytes({ partial: true }),
+    );
+    await backend.putFile(
+      [...targetPath.slice(0, -1), 'nested', 'profile.v2.json.tmp-unrelated'],
+      jsonBytes({ keep: true }),
+    );
+
+    const result = await store.migrateSpeechProfileManifestToV2({
+      profileId: legacySpeechProfileFixture.id,
+    });
+
+    expect(result).toMatchObject({
+      status: 'migrated',
+      sourceSchemaVersion: 1,
+      targetSchemaVersion: 2,
+      manifest: {
+        adaptationType: 'residual-adapter',
+        baseModel: { id: 'mock-vi-en-rnnt', version: '0.4.0' },
+        cliResidualAdapterPreserved: true,
+      },
+      recovery: { deletedTemporaryFiles: 1, reusedExistingV2: false, replacedInvalidV2: false },
+      downgrade: { v1ManifestRetained: true, v2ManifestFileName: 'profile.v2.json' },
+      privacy: { aggregateOnly: true, containsAdapterWeights: false, exposesStoragePaths: false },
+    });
+    const source = jsonFromBytes(await requiredBytes(backend, sourcePath));
+    const migrated = jsonFromBytes<SpeechProfileManifestV2>(
+      await requiredBytes(backend, targetPath),
+    );
+    expect(source).toEqual(legacySpeechProfileFixture);
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.adaptation).toEqual(legacySpeechProfileFixture.adaptation);
+    expect(await backend.listFiles(['profiles', legacySpeechProfileFixture.id])).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: [...targetPath.slice(0, -1), 'profile.v2.json.tmp-interrupted'],
+        }),
+      ]),
+    );
+    expect(
+      await backend.getFile([
+        ...targetPath.slice(0, -1),
+        'nested',
+        'profile.v2.json.tmp-unrelated',
+      ]),
+    ).toBeDefined();
+    const serializedResult = JSON.stringify(result);
+    expect(serializedResult).not.toContain(legacySpeechProfileFixture.id);
+    expect(serializedResult).not.toContain('profiles/');
+    expect(serializedResult).not.toContain('adapter.onnx');
+  });
+
+  it('resumes interrupted migrations when a valid V2 target already exists', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend, { now: () => '2026-06-26T09:31:00.000Z' });
+    const sourcePath = ['profiles', legacySpeechProfileFixture.id, 'profile.json'];
+    const targetPath = ['profiles', legacySpeechProfileFixture.id, 'profile.v2.json'];
+    const existingV2: SpeechProfileManifestV2 = {
+      ...legacySpeechProfileFixture,
+      schemaVersion: 2,
+    };
+    await backend.putFile(sourcePath, jsonBytes(legacySpeechProfileFixture));
+    await backend.putFile(targetPath, jsonBytes(existingV2));
+    await backend.putFile(
+      [...targetPath.slice(0, -1), 'profile.v2.json.tmp-old'],
+      jsonBytes({ partial: true }),
+    );
+
+    const result = await store.migrateSpeechProfileManifestToV2({
+      profileId: legacySpeechProfileFixture.id,
+    });
+
+    expect(result.status).toBe('recovered-existing-v2');
+    expect(result.sourceSchemaVersion).toBe(1);
+    expect(result.downgrade.v1ManifestRetained).toBe(true);
+    expect(result.recovery).toMatchObject({
+      deletedTemporaryFiles: 1,
+      reusedExistingV2: true,
+      replacedInvalidV2: false,
+    });
+    expect(jsonFromBytes(await requiredBytes(backend, targetPath))).toEqual(existingV2);
+  });
+
+  it('recovers a valid existing V2 target even when the retained source is unparsable', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const sourcePath = ['profiles', legacySpeechProfileFixture.id, 'profile.json'];
+    const targetPath = ['profiles', legacySpeechProfileFixture.id, 'profile.v2.json'];
+    const existingV2: SpeechProfileManifestV2 = {
+      ...legacySpeechProfileFixture,
+      schemaVersion: 2,
+    };
+    await backend.putFile(sourcePath, jsonBytes({ broken: true }));
+    await backend.putFile(targetPath, jsonBytes(existingV2));
+
+    const result = await store.migrateSpeechProfileManifestToV2({
+      profileId: legacySpeechProfileFixture.id,
+    });
+
+    expect(result.status).toBe('recovered-existing-v2');
+    expect(result.sourceSchemaVersion).toBe(2);
+    expect(result.downgrade.v1ManifestRetained).toBe(false);
+    expect(jsonFromBytes(await requiredBytes(backend, targetPath))).toEqual(existingV2);
+  });
+
+  it('returns already-v2 without writing a downgrade-retention claim when the source is V2', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const sourcePath = ['profiles', legacySpeechProfileFixture.id, 'profile.json'];
+    const targetPath = ['profiles', legacySpeechProfileFixture.id, 'profile.v2.json'];
+    const sourceV2: SpeechProfileManifestV2 = {
+      ...legacySpeechProfileFixture,
+      schemaVersion: 2,
+    };
+    await backend.putFile(sourcePath, jsonBytes(sourceV2));
+
+    const result = await store.migrateSpeechProfileManifestToV2({
+      profileId: legacySpeechProfileFixture.id,
+    });
+
+    expect(result.status).toBe('already-v2');
+    expect(result.sourceSchemaVersion).toBe(2);
+    expect(result.recovery).toMatchObject({
+      reusedExistingV2: false,
+      replacedInvalidV2: false,
+    });
+    expect(result.downgrade.v1ManifestRetained).toBe(false);
+    expect(await backend.getFile(targetPath)).toBeUndefined();
+  });
+
+  it('replaces an invalid interrupted V2 target from the retained V1 source', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend, { now: () => '2026-06-26T09:32:00.000Z' });
+    const sourcePath = ['profiles', legacySpeechProfileFixture.id, 'profile.json'];
+    const targetPath = ['profiles', legacySpeechProfileFixture.id, 'profile.v2.json'];
+    await backend.putFile(sourcePath, jsonBytes(legacySpeechProfileFixture));
+    await backend.putFile(targetPath, jsonBytes({ schemaVersion: 2, id: 'partial' }));
+
+    const result = await store.migrateSpeechProfileManifestToV2({
+      profileId: legacySpeechProfileFixture.id,
+    });
+
+    expect(result.status).toBe('replaced-invalid-v2');
+    expect(result.recovery.replacedInvalidV2).toBe(true);
+    const migrated = jsonFromBytes<SpeechProfileManifestV2>(
+      await requiredBytes(backend, targetPath),
+    );
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.id).toBe(legacySpeechProfileFixture.id);
+  });
+
+  it('fails migration without deleting a retained invalid target when the V1 source is missing', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const targetPath = ['profiles', legacySpeechProfileFixture.id, 'profile.v2.json'];
+    const invalidTarget = jsonBytes({ schemaVersion: 2, id: 'partial' });
+    await backend.putFile(targetPath, invalidTarget);
+
+    await expect(
+      store.migrateSpeechProfileManifestToV2({ profileId: legacySpeechProfileFixture.id }),
+    ).rejects.toThrow(/source profile\.json is missing/);
+    expect(await readBytes(backend, targetPath)).toEqual(Array.from(new Uint8Array(invalidTarget)));
+  });
+
   it('stages portable speechmodel imports, runs smoke vectors, and commits the record last', async () => {
     const backend = new InMemoryProfileStorageBackend();
     const store = createStore(backend, { now: () => '2026-06-26T06:30:00.000Z' });
@@ -1934,6 +2115,10 @@ async function requiredBytes(
     throw new Error(`Missing test fixture bytes at ${path.join('/')}`);
   }
   return bytes;
+}
+
+function jsonFromBytes<T = unknown>(bytes: ArrayBuffer): T {
+  return JSON.parse(new TextDecoder().decode(bytes)) as T;
 }
 
 function text(bytes: Uint8Array, start: number, end: number): string {
