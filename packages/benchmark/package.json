@@ -1,6 +1,6 @@
 {
   "name": "@speech/benchmark",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Latency, RTF, queue, memory, custom-term, and benchmark export contracts.",
   "type": "module",

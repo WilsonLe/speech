@@ -1,6 +1,6 @@
 {
   "name": "@speech/browser-training",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
   "description": "BrowserTrainingBackend contracts, fixed local adapter-math training loop, and sampler/optimizer diagnostics for in-browser personal models.",
   "type": "module",

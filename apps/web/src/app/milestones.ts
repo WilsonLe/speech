@@ -1,35 +1,41 @@
 export interface RoadmapItem {
   readonly label: string;
-  readonly status: 'scaffolded' | 'planned';
+  readonly status: 'shipped' | 'evidence-needed' | 'planned';
   readonly description: string;
 }
 
 export const roadmap: readonly RoadmapItem[] = [
   {
     label: 'Foundation',
-    status: 'scaffolded',
+    status: 'shipped',
     description: 'Monorepo, PWA shell, CI, contracts, documentation, and licensing baseline.',
   },
   {
     label: 'Capability diagnostics',
-    status: 'planned',
+    status: 'shipped',
     description: 'API probes, execution-tier selection, worker benchmark, and downloadable report.',
   },
   {
     label: 'Audio transport',
-    status: 'planned',
+    status: 'shipped',
     description:
       'Microphone controller, AudioWorklet, SharedArrayBuffer ring buffer, and transferable fallback.',
   },
   {
     label: 'Streaming ASR runtime',
-    status: 'planned',
+    status: 'shipped',
     description: 'Resampler, log-Mel features, ONNX RNN-T sessions, decoding, and stable partials.',
   },
   {
-    label: 'Personalization',
-    status: 'planned',
+    label: 'Personal Models',
+    status: 'shipped',
     description:
-      'Vocabulary steering, guided enrollment, private profiles, and local adapter tooling.',
+      'Guided enrollment, browser training infrastructure, activation review, rollback, and private profile lifecycle.',
+  },
+  {
+    label: 'Evidence-backed production claims',
+    status: 'evidence-needed',
+    description:
+      '30-speaker bilingual cohort evidence, declared reference-hardware benchmarks, and release-cleared production model packs.',
   },
 ];

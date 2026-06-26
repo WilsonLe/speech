@@ -6,17 +6,18 @@ Local-first Vietnamese/English streaming speech-to-text PWA with private voice p
 
 ## Current status
 
-The project is tagged as the v0.1.0 PWA/runtime foundation release:
+The current release line is v0.5.0 browser Personal Voice Model infrastructure:
 
 - responsive transcript workspace with page-scoped push-to-talk controls;
 - microphone permission, `AudioWorklet` PCM capture, shared-memory and transferable-buffer audio transport primitives;
 - streaming resampler, log-Mel feature extraction, RNN-T decoder primitives, stable-prefix/finalization controllers, and deterministic transcript parity fixtures;
 - ONNX Runtime Web loading in a dedicated worker with WebGPU/WASM provider benchmark and fallback reporting;
-- model catalog, manifest validation, OPFS/Cache-backed model storage, checksum verification, and atomic activation contracts;
-- offline app shell, model lifecycle UI, local benchmark/diagnostics exports, and release-validation E2E checks;
-- guided-personalization contracts, local profile storage/import/export controls, and a Dockerized local profile-trainer workflow for browser-compatible residual-adapter packages.
+- model catalog, manifest validation, OPFS/Cache-backed model storage, checksum verification, atomic activation, offline app shell, and diagnostics/benchmark exports;
+- guided enrollment, local profile storage, vocabulary steering, browser-training readiness, frozen revisions, feature shards, frame labels, checkpoints, evaluation, activation review, rollback, and multi-profile lifecycle controls;
+- worker-owned browser-training infrastructure behind `@speech/browser-training`, with fixed adapter math, deterministic resume, Web Locks coordination, ASR-priority pause, accessible progress UI, and private local recovery;
+- deterministic `.speechmodel` bundles, default Web Crypto encrypted export, hostile import validation, exact base-model compatibility, smoke vectors, atomic staging, CLI residual-adapter compatibility, and V1-to-V2 profile migration.
 
-Production ASR weights, private recordings, speech corpora, and personal profiles are intentionally not committed. The current VietASR catalog entry is a metadata-only external candidate; it is not yet advertised as a low-latency streaming model because its inspected ONNX encoder does not expose streaming cache tensors.
+Production ASR weights, private recordings, speech corpora, and personal profiles are intentionally not committed. The current VietASR catalog entry is a metadata-only external candidate; it is not yet advertised as a low-latency streaming model because its inspected ONNX encoder does not expose streaming cache tensors. v0.5.0 ships the local-first personal-model infrastructure and guardrails, but ADR 0004 and ADR 0005 keep production accuracy and reference-hardware performance claims blocked until aggregate evidence is available.
 
 ## Quick start
 
@@ -69,6 +70,10 @@ Start with:
 - `docs/adr/0001-defer-browser-training-path.md` — historical decision to defer browser-only adapter training for the current shipped baseline.
 - `docs/adr/0002-v0-5-0-personal-model-semantics.md` — accepted v0.5.0 Personal Voice Model semantics, schema names, support tier, release gates, and production browser-training conditions.
 - `docs/adr/0003-onnx-runtime-web-training-feasibility.md` — accepted #128 feasibility result: the documented ORT Training WASM artifact is not exposed by the pinned npm package, so production work uses `BrowserTrainingBackend` with a fixed adapter-math backend unless a real ORT Training artifact/API is later proven.
+- `docs/adr/0004-v0-5-0-quality-cohort-gate.md` — records the missing user-approved 30-speaker bilingual cohort evidence and blocks production quality claims.
+- `docs/adr/0005-v0-5-0-reference-benchmark-gate.md` — records the missing declared reference-hardware personal-model benchmark evidence and blocks production performance claims.
+- `docs/adr/0006-v0-5-0-privacy-security-licensing-review.md` — final v0.5.0 privacy/security/licensing review and release-note limitations.
+- `docs/adr/0007-v0-5-0-release-notes-and-planning-snapshot.md` — v0.5.0 release notes, tag checklist, and follow-on planning snapshot.
 - `docs/instructions/model-card-vietasr-iter3-int8.instructions.md` — current external VietASR candidate model card.
 - `docs/instructions/benchmark.instructions.md` — diagnostics export and performance methodology.
 - `docs/instructions/release-validation.instructions.md` — accessibility, soak/stress, network-privacy, and performance evidence rules.
@@ -95,17 +100,18 @@ Current catalog:
 - Audio and transcripts remain local unless the user explicitly exports them.
 - No telemetry, analytics, remote logging, or crash uploads are enabled by default.
 - During active transcription, the app must not call remote services; model downloads and app updates are explicit lifecycle events outside active dictation.
-- Enrollment recordings, speaker embeddings, adapters, exported profiles, and local trainer packages are sensitive personal data.
+- Enrollment recordings, prompt text, feature shards, frame labels, checkpoints, speaker embeddings, adapters, `.speechmodel` bundles, exported profiles, and local trainer packages are sensitive personal data.
 - Code is licensed under Apache-2.0. Model weights, datasets, pseudo-labels, and fixtures require separate license notices and redistribution review.
 
 ## Known limitations
 
-- The v0.1.0 release validates the browser runtime and model-pack contracts; it does not yet publish a production bilingual streaming ASR accuracy benchmark.
+- v0.5.0 does not yet publish user-approved 30-speaker bilingual cohort evidence; do not claim production Personal Voice Model accuracy or quality gates pass until ADR 0004 is resolved.
+- v0.5.0 does not yet publish declared reference-hardware Personal Voice Model benchmark evidence; do not claim production memory, storage, latency, RTF, export/import, offline, or zero-network performance gates pass until ADR 0005 is resolved.
+- Synthetic fixtures, CI smoke tests, local diagnostics, and contract tests are regression evidence only; they are not substitutes for production quality or performance evidence.
 - The VietASR candidate is Vietnamese-only and its inspected ONNX encoder is full-sequence/length based, not streaming-cache based.
-- The benchmark panel runs synthetic worker timing for export plumbing and methodology; headline latency/RTF numbers require real model packs on declared reference hardware.
-- Browser-only adapter training remains unavailable in the current shipped app, but ADR 0002 accepts the v0.5.0 Personal Voice Model release contract and ADR 0003 records the #128 backend feasibility result. Production browser training can ship only after the fixed `BrowserTrainingBackend` adapter-math path (or a future proven ORT Training artifact/API) passes the quality, privacy, security, portability, and release gates; until then the local Python/Docker trainer remains the supported adapter path.
-- Global OS hotkeys and cross-application insertion are roadmap items for later milestones. Bilingual vocabulary steering, guided enrollment, and local adapter training currently use deterministic contract/tooling slices until production model-quality data supports user-facing accuracy claims.
+- The fixed `BrowserTrainingBackend` adapter-math path is the supported browser-training backend for v0.5.0. ORT Training can replace or augment it only after a real browser training artifact/API is proven and reviewed.
+- Global OS hotkeys, cross-application insertion, production bilingual/code-switching model packs, and evidence-backed public accuracy/performance claims remain roadmap items for later milestones.
 
 ## Roadmap
 
-The issue backlog tracks the implementation plan from engineering foundation through audio transport, model runtime, streaming ASR, PWA release, bilingual vocabulary steering, guided personalization, local adapter training, browser-training experiments, and the new `v0.5.0-browser-personal-models` milestone for production in-browser Personal Voice Models and portable `.speechmodel` bundles.
+The issue backlog tracks the implementation plan from engineering foundation through audio transport, model runtime, streaming ASR, PWA release, bilingual vocabulary steering, guided personalization, local adapter training, browser-training experiments, and the `v0.5.0-browser-personal-models` milestone. After v0.5.0, the highest-priority follow-ups are aggregate cohort evidence, declared reference-hardware benchmarks, and release-cleared production bilingual/code-switching model packs.
