@@ -1585,6 +1585,28 @@ describe('enrollment profile store', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('cleans temporary portable import staging and leaves no committed record when smoke times out', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const archive = await createPortableArchiveFixture();
+
+    await expect(
+      store.importPortableSpeechModel({
+        archive,
+        expectedBaseModel: portableBaseModel,
+        importId: 'portable-import-timeout',
+        smokeTimeoutMs: 1,
+        smokeTest: () => new Promise<PortableSpeechModelImportSmokeResultV1>(() => undefined),
+      }),
+    ).rejects.toThrow(/runtime smoke timed out/);
+
+    expect(await backend.listFiles(['portable-import-staging'])).toEqual([]);
+    expect(await backend.listFiles(['portable-models'])).toEqual([]);
+    await expect(
+      store.getPortableSpeechModelImport(archive.manifest.bundleId),
+    ).resolves.toBeUndefined();
+  });
+
   it('requires explicit overwrite before replacing an imported portable bundle', async () => {
     const backend = new InMemoryProfileStorageBackend();
     const store = createStore(backend);
