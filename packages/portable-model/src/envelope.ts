@@ -75,10 +75,34 @@ const encryptionModeFromByte: Readonly<Record<number, PortableSpeechModelEnvelop
   1: 'encrypted',
 };
 
+const PORTABLE_SPEECH_MODEL_ENCRYPTION_SALT_BYTES = 16;
+const PORTABLE_SPEECH_MODEL_ENCRYPTION_IV_BYTES = 12;
+
 /** Magic(15) + formatVersion(1) + mode(1) + headerPayloadLength(uint32 LE). */
 const ENVELOPE_PREFIX_FIXED_BYTES = 15 + 1 + 1 + 4;
 
 export interface PortableSpeechModelEnvelopePrefix {
+  readonly header: PortableSpeechModelEnvelopeHeaderV1;
+  readonly bodyOffset: number;
+}
+
+export type PortableSpeechModelRandomBytes = (length: number) => Uint8Array;
+
+export interface EncryptPortableSpeechModelEnvelopeOptionsV1 {
+  readonly body: Uint8Array;
+  readonly passphrase: string | Uint8Array;
+  readonly iterations?: number;
+  readonly randomBytes?: PortableSpeechModelRandomBytes;
+  readonly signal?: AbortSignal;
+}
+
+export interface DecryptPortableSpeechModelEnvelopeOptionsV1 {
+  readonly passphrase?: string | Uint8Array;
+  readonly signal?: AbortSignal;
+}
+
+export interface PortableSpeechModelEnvelopeBytesV1 {
+  readonly bytes: Uint8Array;
   readonly header: PortableSpeechModelEnvelopeHeaderV1;
   readonly bodyOffset: number;
 }
@@ -156,6 +180,155 @@ export function parsePortableSpeechModelEnvelopePrefix(
   };
 }
 
+export function buildUnencryptedPortableSpeechModelEnvelope(
+  body: Uint8Array,
+): PortableSpeechModelEnvelopeBytesV1 {
+  assertEnvelopeBodyBytes(body, 'Unencrypted portable speech model body');
+  const header: PortableSpeechModelEnvelopeHeaderV1 = { formatVersion: 1, mode: 'unencrypted' };
+  const prefix = buildPortableSpeechModelEnvelopePrefix(header);
+  return {
+    bytes: concatenateBytes(prefix, body),
+    header,
+    bodyOffset: prefix.byteLength,
+  };
+}
+
+export async function encryptPortableSpeechModelEnvelope({
+  body,
+  passphrase,
+  iterations = PORTABLE_SPEECH_MODEL_MIN_PBKDF2_ITERATIONS,
+  randomBytes = secureRandomBytes,
+  signal,
+}: EncryptPortableSpeechModelEnvelopeOptionsV1): Promise<PortableSpeechModelEnvelopeBytesV1> {
+  throwIfPortableEncryptionAborted(signal);
+  assertEnvelopeBodyBytes(body, 'Portable speech model body');
+  if (!Number.isInteger(iterations) || iterations < PORTABLE_SPEECH_MODEL_MIN_PBKDF2_ITERATIONS) {
+    throw new Error(
+      `encryption.iterations must be at least ${PORTABLE_SPEECH_MODEL_MIN_PBKDF2_ITERATIONS.toString()}.`,
+    );
+  }
+  const salt = randomBytes(PORTABLE_SPEECH_MODEL_ENCRYPTION_SALT_BYTES);
+  const iv = randomBytes(PORTABLE_SPEECH_MODEL_ENCRYPTION_IV_BYTES);
+  if (salt.byteLength !== PORTABLE_SPEECH_MODEL_ENCRYPTION_SALT_BYTES) {
+    throw new Error('Portable speech model encryption salt must be 16 bytes.');
+  }
+  if (iv.byteLength !== PORTABLE_SPEECH_MODEL_ENCRYPTION_IV_BYTES) {
+    throw new Error('Portable speech model encryption IV must be 12 bytes.');
+  }
+
+  const paramsWithoutLength = {
+    kdf: 'pbkdf2-hmac-sha-256' as const,
+    iterations,
+    saltBase64: bytesToBase64(salt),
+    ivBase64: bytesToBase64(iv),
+  };
+  const passphraseBytes = normalizePassphraseBytes(passphrase);
+  try {
+    const key = await derivePortableSpeechModelEncryptionKey(passphraseBytes, salt, iterations, [
+      'encrypt',
+    ]);
+    throwIfPortableEncryptionAborted(signal);
+    const subtle = getPortableSpeechModelSubtleCrypto();
+    const ciphertext = new Uint8Array(
+      await subtle.encrypt(
+        {
+          name: 'AES-GCM',
+          iv: copyBytes(iv),
+          additionalData: copyBytes(encryptionAdditionalData(paramsWithoutLength)),
+          tagLength: 128,
+        },
+        key,
+        copyBytes(body),
+      ),
+    );
+    throwIfPortableEncryptionAborted(signal);
+    const encryption: PortableSpeechModelEncryptionParametersV1 = {
+      ...paramsWithoutLength,
+      ciphertextLength: ciphertext.byteLength,
+    };
+    const header: PortableSpeechModelEnvelopeHeaderV1 = {
+      formatVersion: 1,
+      mode: 'encrypted',
+      encryption,
+    };
+    const prefix = buildPortableSpeechModelEnvelopePrefix(header);
+    const bytes = concatenateBytes(prefix, ciphertext);
+    if (bytes.byteLength > PORTABLE_SPEECH_MODEL_HARD_MAX_BYTES) {
+      throw new Error('Encrypted portable speech model envelope exceeds the hard size limit.');
+    }
+    return { bytes, header, bodyOffset: prefix.byteLength };
+  } finally {
+    passphraseBytes.fill(0);
+  }
+}
+
+export async function decryptPortableSpeechModelEnvelope(
+  bytes: Uint8Array,
+  options: DecryptPortableSpeechModelEnvelopeOptionsV1 = {},
+): Promise<Uint8Array> {
+  throwIfPortableEncryptionAborted(options.signal);
+  if (!(bytes instanceof Uint8Array)) {
+    throw new Error('Portable speech model envelope must be a Uint8Array.');
+  }
+  if (bytes.byteLength > PORTABLE_SPEECH_MODEL_HARD_MAX_BYTES) {
+    throw new Error('Portable speech model envelope exceeds the hard size limit.');
+  }
+  const { header, bodyOffset } = parsePortableSpeechModelEnvelopePrefix(bytes);
+  const body = bytes.subarray(bodyOffset);
+  if (header.mode === 'unencrypted') {
+    assertEnvelopeBodyBytes(body, 'Unencrypted portable speech model body');
+    return copyBytes(body);
+  }
+  const encryption = assertEncryptionParameters(header.encryption);
+  if (body.byteLength !== encryption.ciphertextLength) {
+    throw new Error('Encrypted portable speech model ciphertext length does not match header.');
+  }
+  if (options.passphrase === undefined) {
+    throw new Error('Encrypted portable speech model export requires a passphrase.');
+  }
+  const salt = base64ToBytes(encryption.saltBase64, 'salt');
+  const iv = base64ToBytes(encryption.ivBase64, 'IV');
+  if (salt.byteLength !== PORTABLE_SPEECH_MODEL_ENCRYPTION_SALT_BYTES) {
+    throw new Error('Encrypted portable speech model salt length is invalid.');
+  }
+  if (iv.byteLength !== PORTABLE_SPEECH_MODEL_ENCRYPTION_IV_BYTES) {
+    throw new Error('Encrypted portable speech model IV length is invalid.');
+  }
+  const passphraseBytes = normalizePassphraseBytes(options.passphrase);
+  try {
+    const key = await derivePortableSpeechModelEncryptionKey(
+      passphraseBytes,
+      salt,
+      encryption.iterations,
+      ['decrypt'],
+    );
+    throwIfPortableEncryptionAborted(options.signal);
+    const subtle = getPortableSpeechModelSubtleCrypto();
+    const plaintext = await subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: copyBytes(iv),
+        additionalData: copyBytes(encryptionAdditionalData(encryption)),
+        tagLength: 128,
+      },
+      key,
+      copyBytes(body),
+    );
+    throwIfPortableEncryptionAborted(options.signal);
+    const plaintextBytes = new Uint8Array(plaintext);
+    assertEnvelopeBodyBytes(plaintextBytes, 'Decrypted portable speech model body');
+    return plaintextBytes;
+  } catch (error) {
+    if (isAbortLikeError(error)) throw error;
+    throw new Error(
+      'Encrypted portable speech model could not be decrypted with the provided passphrase or file contents.',
+      { cause: error },
+    );
+  } finally {
+    passphraseBytes.fill(0);
+  }
+}
+
 function normalizeEnvelopeHeader(
   parsed: unknown,
   mode: PortableSpeechModelEnvelopeMode,
@@ -206,6 +379,135 @@ function assertEncryptionParameters(value: unknown): PortableSpeechModelEncrypti
     throw new Error('encryption.ciphertextLength must be a non-negative integer.');
   }
   return value as unknown as PortableSpeechModelEncryptionParametersV1;
+}
+
+async function derivePortableSpeechModelEncryptionKey(
+  passphraseBytes: Uint8Array,
+  salt: Uint8Array,
+  iterations: number,
+  usages: readonly KeyUsage[],
+): Promise<CryptoKey> {
+  const subtle = getPortableSpeechModelSubtleCrypto();
+  const passphraseMaterial = await subtle.importKey(
+    'raw',
+    copyBytes(passphraseBytes),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  );
+  return subtle.deriveKey(
+    { name: 'PBKDF2', salt: copyBytes(salt), iterations, hash: 'SHA-256' },
+    passphraseMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    [...usages],
+  );
+}
+
+function getPortableSpeechModelSubtleCrypto(): SubtleCrypto {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle === undefined) {
+    throw new Error('Web Crypto SubtleCrypto is unavailable for portable model encryption.');
+  }
+  return subtle;
+}
+
+function normalizePassphraseBytes(passphrase: string | Uint8Array): Uint8Array {
+  const passphraseBytes =
+    typeof passphrase === 'string' ? textEncoder.encode(passphrase) : copyBytes(passphrase);
+  if (passphraseBytes.byteLength === 0) {
+    throw new Error('Portable speech model encryption passphrase must not be empty.');
+  }
+  return passphraseBytes;
+}
+
+function encryptionAdditionalData(
+  params: Omit<PortableSpeechModelEncryptionParametersV1, 'ciphertextLength'>,
+): Uint8Array {
+  return textEncoder.encode(
+    [
+      'WLSPEECHMODEL-ENCRYPTION-AAD-V1',
+      params.kdf,
+      params.iterations.toString(),
+      params.saltBase64,
+      params.ivBase64,
+    ].join('|'),
+  );
+}
+
+function secureRandomBytes(length: number): Uint8Array {
+  if (!Number.isInteger(length) || length <= 0) {
+    throw new Error('Portable speech model random byte length must be positive.');
+  }
+  const webCrypto = globalThis.crypto;
+  if (webCrypto?.getRandomValues === undefined) {
+    throw new Error('Web Crypto getRandomValues is unavailable for portable model encryption.');
+  }
+  return webCrypto.getRandomValues(new Uint8Array(length));
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let offset = 0; offset < bytes.byteLength; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  if (globalThis.btoa === undefined) {
+    throw new Error('Base64 encoding is unavailable for portable model encryption.');
+  }
+  return globalThis.btoa(binary);
+}
+
+function base64ToBytes(value: string, label: string): Uint8Array {
+  try {
+    if (globalThis.atob === undefined) {
+      throw new Error('Base64 decoding is unavailable for portable model encryption.');
+    }
+    const binary = globalThis.atob(value);
+    const output = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      output[index] = binary.charCodeAt(index);
+    }
+    return output;
+  } catch {
+    throw new Error(`Encrypted portable speech model ${label} is not valid base64.`);
+  }
+}
+
+function concatenateBytes(prefix: Uint8Array, body: Uint8Array): Uint8Array {
+  const output = new Uint8Array(prefix.byteLength + body.byteLength);
+  output.set(prefix, 0);
+  output.set(body, prefix.byteLength);
+  return output;
+}
+
+function assertEnvelopeBodyBytes(body: Uint8Array, label: string): void {
+  if (!(body instanceof Uint8Array)) {
+    throw new Error(`${label} must be a Uint8Array.`);
+  }
+  if (body.byteLength <= 0) {
+    throw new Error(`${label} must not be empty.`);
+  }
+  if (body.byteLength > PORTABLE_SPEECH_MODEL_HARD_MAX_BYTES) {
+    throw new Error(`${label} exceeds the hard size limit.`);
+  }
+}
+
+function throwIfPortableEncryptionAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw new Error('Portable speech model encryption was aborted.');
+  }
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  return (
+    error instanceof Error && error.message === 'Portable speech model encryption was aborted.'
+  );
+}
+
+function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const output = new Uint8Array(new ArrayBuffer(bytes.byteLength));
+  output.set(bytes);
+  return output;
 }
 
 /**

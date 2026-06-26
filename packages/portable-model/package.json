@@ -2,7 +2,7 @@
   "name": "@speech/portable-model",
   "version": "0.1.0",
   "private": true,
-  "description": "Portable per-user .speechmodel manifest, deterministic inner bundle, binary envelope, and hostile-import boundary contracts.",
+  "description": "Portable per-user .speechmodel manifest, deterministic inner bundle, encrypted binary envelope, and hostile-import boundary contracts.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
