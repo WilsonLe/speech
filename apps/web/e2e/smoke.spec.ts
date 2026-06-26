@@ -27,6 +27,9 @@ test('renders the foundation PWA shell', async ({ page }) => {
   await expect(page.getByLabel('Missing recording tasks')).toContainText(
     'Record accepted enrollment takes',
   );
+  await expect(page.getByLabel('Activation gate summary')).toContainText('generic fallback', {
+    timeout: 10_000,
+  });
   await expect(page.getByLabel('Personal model profile cards')).toContainText('generic fallback', {
     timeout: 10_000,
   });

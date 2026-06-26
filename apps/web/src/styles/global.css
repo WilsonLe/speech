@@ -1038,12 +1038,21 @@ button.danger,
   margin-top: 1rem;
 }
 
-.personal-models-preflight {
+.personal-models-preflight,
+.activation-review-card {
   margin: 1.25rem 0;
   border: 1px solid rgba(56, 189, 248, 0.18);
   border-radius: 1.1rem;
   padding: 1rem;
   background: rgba(2, 6, 23, 0.28);
+}
+
+.activation-review-card {
+  border-color: rgba(168, 85, 247, 0.2);
+}
+
+.activation-review-meta {
+  margin: 1rem 0;
 }
 
 .compact-heading h3 {
@@ -1265,6 +1274,7 @@ button.danger,
   .personal-models-nav,
   .personal-models-summary,
   .preflight-grid,
+  .activation-review-meta,
   .training-phase-list {
     grid-template-columns: 1fr;
   }

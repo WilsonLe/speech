@@ -7,6 +7,7 @@ import {
   summarizeTrainingJobRevision,
   type ActiveEnrollmentProfileStateV1,
   type EnrollmentCaptureMetadataV1,
+  type EnrollmentProfileActivationReviewV1,
   type EnrollmentProfileExportPackageV1,
   type EnrollmentProfileSummaryV1,
   type EnrollmentUtteranceV1,
@@ -26,7 +27,12 @@ import type {
 
 export type ProfileStoreWorkerRequest =
   | { readonly type: 'LOAD_PROFILE'; readonly requestId: string; readonly profileId: string }
-  | { readonly type: 'ENABLE_PROFILE'; readonly requestId: string; readonly profileId: string }
+  | {
+      readonly type: 'ENABLE_PROFILE';
+      readonly requestId: string;
+      readonly profileId: string;
+      readonly activationReview?: EnrollmentProfileActivationReviewV1;
+    }
   | { readonly type: 'ROLLBACK_PROFILE'; readonly requestId: string }
   | { readonly type: 'EXPORT_PROFILE'; readonly requestId: string; readonly profileId: string }
   | {
@@ -180,7 +186,12 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
       }
       case 'ENABLE_PROFILE': {
         const { store, backendKind, persistentStorageGranted } = await getStoreContext();
-        const activeState = await store.enableProfile({ profileId: message.profileId });
+        const activeState = await store.enableProfile({
+          profileId: message.profileId,
+          ...(message.activationReview === undefined
+            ? {}
+            : { activationReview: message.activationReview }),
+        });
         post({
           type: 'PROFILE_STORE_ACTIVE_PROFILE_UPDATED',
           requestId: message.requestId,

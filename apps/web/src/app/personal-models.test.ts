@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { PersonalModelActivationDecisionV1 } from '@speech/personalization';
 import type {
   ActiveEnrollmentProfileStateV1,
   EnrollmentProfileSummaryV1,
@@ -12,6 +13,7 @@ import type {
   ModelLifecycleModel,
 } from '../workers/model-lifecycle-client';
 import {
+  buildPersonalModelActivationReviewCard,
   buildPersonalModelProfileCard,
   defaultPersonalProfileDisplayName,
   summarizeActiveVocabulary,
@@ -79,6 +81,74 @@ describe('personal model card summaries', () => {
     expect(card.actions.canExport).toBe(true);
     expect(JSON.stringify(card)).not.toContain('private prompt text');
     expect(JSON.stringify(card)).not.toContain('Secret Launch Name');
+  });
+
+  it('builds activation review cards without exposing profile ids or private terms', () => {
+    const profileSummary = createProfileSummary();
+    const activeState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      activeProfileId: 'previous-profile',
+      previousProfileId: profileSummary.profile.id,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const card = buildPersonalModelProfileCard({
+      summary: profileSummary,
+      activeState,
+      activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+    });
+
+    const awaiting = buildPersonalModelActivationReviewCard({
+      profileCard: card,
+      activeState,
+      activationDecision: null,
+    });
+    expect(awaiting.status).toBe('awaiting-evaluation');
+    expect(awaiting.activationAllowed).toBe(false);
+    expect(awaiting.rollback.previousProfileAvailable).toBe(true);
+
+    const automatic = buildPersonalModelActivationReviewCard({
+      profileCard: card,
+      activeState,
+      activationDecision: createActivationDecision({ status: 'automatic-activation-allowed' }),
+    });
+    expect(automatic.status).toBe('automatic-ready');
+    expect(automatic.activationAllowed).toBe(true);
+    expect(automatic.comparison.personalHeldoutCases).toBe(4);
+    expect(automatic.comparison.candidateAdapterSizeBytes).toBe(4096);
+
+    const override = buildPersonalModelActivationReviewCard({
+      profileCard: card,
+      activeState,
+      activationDecision: createActivationDecision({
+        status: 'advanced-override-required',
+        activationAllowed: false,
+        automaticActivationAllowed: false,
+        advancedOverrideAvailable: true,
+        advancedOverrideRequired: true,
+        softGatePassed: false,
+      }),
+    });
+    expect(override.status).toBe('advanced-override-required');
+    expect(override.advancedOverrideAvailable).toBe(true);
+
+    const blocked = buildPersonalModelActivationReviewCard({
+      profileCard: card,
+      activeState,
+      activationDecision: createActivationDecision({
+        status: 'blocked-by-hard-gates',
+        activationAllowed: false,
+        automaticActivationAllowed: false,
+        hardGatePassed: false,
+      }),
+    });
+    expect(blocked.status).toBe('blocked');
+    expect(blocked.hardGatePassed).toBe(false);
+    expect(JSON.stringify([awaiting, automatic, override, blocked])).not.toContain(
+      profileSummary.profile.id,
+    );
+    expect(JSON.stringify([awaiting, automatic, override, blocked])).not.toContain(
+      'Secret Launch Name',
+    );
   });
 
   it('builds independent browser capability preflight checks from aggregate capability data', () => {
@@ -493,6 +563,75 @@ function createReadinessReport(): TrainingReadinessCoverageReportV1 {
       telemetry: false,
       localOnly: true,
     },
+  };
+}
+
+function createActivationDecision(
+  overrides: Partial<PersonalModelActivationDecisionV1> = {},
+): PersonalModelActivationDecisionV1 {
+  return {
+    schemaVersion: 1,
+    decisionType: 'personal-model-activation-decision',
+    generatedAt: '2026-01-01T00:00:00.000Z',
+    status: 'automatic-activation-allowed',
+    activationAllowed: true,
+    automaticActivationAllowed: true,
+    advancedOverrideAvailable: false,
+    advancedOverrideRequired: false,
+    advancedOverrideAccepted: false,
+    hardGatePassed: true,
+    softGatePassed: true,
+    comparison: {
+      evaluationId: 'eval-redacted',
+      profileFingerprint: 'redacted-fnv1a32:12345678',
+      candidateAdapterSizeBytes: 4096,
+      candidateAdapterSha256: 'a'.repeat(64),
+      personalHeldout: {
+        caseCount: 4,
+        selectedVocabularyEntryCount: 2,
+        selectedVocabularyCaseCount: 2,
+        candidateVsGenericWerRelativeImprovement: 0.25,
+        candidateVsGenericCerRelativeImprovement: 0.2,
+        candidateVsGenericCustomTermRecallDelta: 0.3,
+        candidateVsP1WerDelta: 0.01,
+      },
+      anchor: {
+        caseCount: 3,
+        candidateVsGenericWerDelta: 0,
+        candidateVsGenericCerDelta: 0,
+        candidateVsGenericFalseInsertionPer100Delta: 0,
+      },
+      overall: {
+        caseCount: 7,
+        rtfOverheadRatioVsP1: 0.05,
+        candidateVsGenericFalseInsertionPer100Delta: 0,
+      },
+    },
+    gates: [],
+    hardGates: [],
+    softGates: [],
+    reasons: [],
+    actions: {
+      activationSwap: 'utterance-boundary',
+      retainPreviousAdapter: true,
+      rollbackAvailable: true,
+      genericFallbackAvailable: true,
+      overrideRequiresExplicitAdvancedAction: true,
+    },
+    privacy: {
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsCaseIds: false,
+      containsRawProfileId: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      exposesRawVocabularyEntryIds: false,
+      networkUpload: false,
+      localOnly: true,
+    },
+    ...overrides,
   };
 }
 

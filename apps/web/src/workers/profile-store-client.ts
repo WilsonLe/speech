@@ -1,6 +1,7 @@
 import type {
   ActiveEnrollmentProfileStateV1,
   EnrollmentCaptureMetadataV1,
+  EnrollmentProfileActivationReviewV1,
   EnrollmentProfileExportPackageV1,
   EnrollmentProfileSummaryV1,
   EnrollmentUtteranceV1,
@@ -85,7 +86,9 @@ export interface DeleteProfileOptions {
 }
 
 export type LoadProfileOptions = DeleteProfileOptions;
-export type EnableProfileOptions = DeleteProfileOptions;
+export interface EnableProfileOptions extends DeleteProfileOptions {
+  readonly activationReview?: EnrollmentProfileActivationReviewV1;
+}
 export interface FreezeTrainingJobRevisionOptions {
   readonly profileId: string;
   readonly vocabularyStore?: VocabularyStoreSnapshotV1;
@@ -163,6 +166,9 @@ export function enableEnrollmentProfile(
       type: 'ENABLE_PROFILE',
       requestId: createRequestId('enable'),
       profileId: options.profileId,
+      ...(options.activationReview === undefined
+        ? {}
+        : { activationReview: options.activationReview }),
     },
     options.timeoutMs,
   ).then(activeResultFromResponse);
