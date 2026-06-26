@@ -3,7 +3,7 @@ import type {
   FrozenFeatureTinyAdapterProgressV1,
   FrozenFeatureTinyAdapterTrainingResultV1,
 } from '@speech/browser-training';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   buildBrowserTrainingProgressView,
   type BrowserTrainingControlIntent,
@@ -165,10 +165,32 @@ export function ModelRuntimePanel() {
           {status.state === 'loading' ? 'Benchmarking provider…' : 'Benchmark worker provider'}
         </button>
         <div className="browser-training-controls" aria-label="Browser training controls">
+          <p id="browser-training-start-help" className="sr-only">
+            Starts the synthetic browser-training worker locally without changing the active
+            profile.
+          </p>
+          <p id="browser-training-restart-help" className="sr-only">
+            Restarts the local prototype after confirmation and clears reload recovery for this
+            synthetic run only.
+          </p>
+          <p id="browser-training-pause-help" className="sr-only">
+            Requests a pause at the next safe checkpoint so reload recovery can resume later.
+          </p>
+          <p id="browser-training-cancel-help" className="sr-only">
+            Requests cancellation at the next safe checkpoint after confirmation; active profiles
+            stay unchanged.
+          </p>
+          <p id="browser-training-resume-help" className="sr-only">
+            Resumes the local synthetic prototype from the stored reload recovery checkpoint.
+          </p>
+          <p id="browser-training-clear-help" className="sr-only">
+            Clears the local synthetic reload recovery checkpoint after confirmation.
+          </p>
           <button
             type="button"
             onClick={() => void handleRunBrowserTrainingPrototype(false)}
             disabled={trainingStatus.state === 'training'}
+            aria-describedby="browser-training-start-help"
           >
             {trainingStatus.state === 'training'
               ? 'Training tiny adapter…'
@@ -177,11 +199,20 @@ export function ModelRuntimePanel() {
           <button
             type="button"
             className="secondary"
-            onClick={() => void handleRunBrowserTrainingPrototype(false)}
+            onClick={() => {
+              if (
+                confirmBrowserTrainingAction(
+                  'Restart browser training prototype? This clears local reload recovery for the synthetic run only. The active profile is unchanged.',
+                )
+              ) {
+                void handleRunBrowserTrainingPrototype(false);
+              }
+            }}
             disabled={
               trainingStatus.state === 'training' ||
               (trainingStatus.state === 'idle' && trainingRecovery === null)
             }
+            aria-describedby="browser-training-restart-help"
           >
             Restart browser training prototype
           </button>
@@ -189,6 +220,7 @@ export function ModelRuntimePanel() {
             type="button"
             onClick={handlePauseBrowserTrainingPrototype}
             disabled={trainingStatus.state !== 'training'}
+            aria-describedby="browser-training-pause-help"
           >
             {trainingControlIntent === 'pause-requested'
               ? 'Pause requested…'
@@ -196,8 +228,17 @@ export function ModelRuntimePanel() {
           </button>
           <button
             type="button"
-            onClick={handleCancelBrowserTrainingPrototype}
+            onClick={() => {
+              if (
+                confirmBrowserTrainingAction(
+                  'Cancel browser training at the next safe checkpoint? A local recovery checkpoint may remain, and the active profile is unchanged.',
+                )
+              ) {
+                handleCancelBrowserTrainingPrototype();
+              }
+            }}
             disabled={trainingStatus.state !== 'training'}
+            aria-describedby="browser-training-cancel-help"
           >
             {trainingControlIntent === 'cancel-requested'
               ? 'Cancel requested…'
@@ -207,14 +248,24 @@ export function ModelRuntimePanel() {
             type="button"
             onClick={() => void handleRunBrowserTrainingPrototype(true)}
             disabled={trainingStatus.state === 'training' || trainingRecovery === null}
+            aria-describedby="browser-training-resume-help"
           >
             Resume browser training prototype
           </button>
           <button
             type="button"
             className="secondary"
-            onClick={handleClearBrowserTrainingRecovery}
+            onClick={() => {
+              if (
+                confirmBrowserTrainingAction(
+                  'Clear the browser training reload recovery checkpoint? This cannot be undone, but the active profile is unchanged.',
+                )
+              ) {
+                handleClearBrowserTrainingRecovery();
+              }
+            }}
             disabled={trainingStatus.state === 'training' || trainingRecovery === null}
+            aria-describedby="browser-training-clear-help"
           >
             Clear browser training recovery
           </button>
@@ -328,7 +379,9 @@ function BrowserTrainingStatusMessage({
     return (
       <>
         <BrowserTrainingProgressDetails view={progressView} />
-        <p className="status-message error-message">{status.message}</p>
+        <p role="alert" className="status-message error-message">
+          {status.message}
+        </p>
         <BrowserTrainingRecoveryDetails
           recovery={recovery}
           coordination={latestCoordination}
@@ -395,21 +448,35 @@ function BrowserTrainingProgressDetails({
 }: {
   readonly view: BrowserTrainingProgressViewV1;
 }) {
+  const titleId = useId();
+  const phaseDescriptionId = useId();
+  const localOnlyId = useId();
+  const liveRegionId = useId();
   return (
     <section
       className="browser-training-progress"
       aria-label="Browser training named-phase progress"
+      aria-describedby={`${phaseDescriptionId} ${localOnlyId}`}
+      aria-busy={view.isBusy}
     >
+      <p id={liveRegionId} className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {view.liveRegionText}
+      </p>
+      <p id={phaseDescriptionId} className="sr-only">
+        {view.phaseTextEquivalent}
+      </p>
       <div className="browser-training-progress__header">
         <div>
           <p className="eyebrow">Training progress</p>
-          <h3>{view.currentPhaseLabel}</h3>
+          <h3 id={titleId}>{view.currentPhaseLabel}</h3>
         </div>
         <strong>{view.progressPercent.toString()}%</strong>
       </div>
       <div
         className="browser-training-progress__bar"
         role="progressbar"
+        aria-label="Browser training overall progress"
+        aria-describedby={`${phaseDescriptionId} ${liveRegionId}`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={view.progressPercent}
@@ -417,12 +484,20 @@ function BrowserTrainingProgressDetails({
       >
         <span style={{ width: `${view.progressPercent.toString()}%` }} />
       </div>
-      <ol className="training-phase-list">
+      <ol className="training-phase-list" aria-label="Browser training phase details">
         {view.phases.map((phase, index) => (
-          <li key={phase.id} data-status={phase.status}>
-            <span>{(index + 1).toString()}</span>
+          <li
+            key={phase.id}
+            data-status={phase.status}
+            aria-current={phase.status === 'active' ? 'step' : undefined}
+            aria-label={`Step ${(index + 1).toString()}: ${phase.label}; ${formatBrowserTrainingPhaseStatus(phase.status)}; ${phase.detail}`}
+          >
+            <span aria-hidden="true">{(index + 1).toString()}</span>
             <div>
               <strong>{phase.label}</strong>
+              <em className="phase-status-label">
+                {formatBrowserTrainingPhaseStatus(phase.status)}
+              </em>
               <small>{phase.detail}</small>
             </div>
           </li>
@@ -438,7 +513,9 @@ function BrowserTrainingProgressDetails({
           <dd>{view.recovery.updatedAt ?? 'not stored'}</dd>
         </div>
       </dl>
-      <p className="status-message">{view.localOnlyDisclosure}</p>
+      <p id={localOnlyId} className="status-message">
+        {view.localOnlyDisclosure}
+      </p>
       {view.resourceWarnings.length > 0 ? (
         <ul className="runtime-warnings" aria-label="Browser training resource guidance">
           {view.resourceWarnings.map((warning) => (
@@ -496,6 +573,27 @@ function BrowserTrainingRecoveryDetails({
       ) : null}
     </>
   );
+}
+
+function confirmBrowserTrainingAction(message: string): boolean {
+  return typeof globalThis.confirm !== 'function' || globalThis.confirm(message);
+}
+
+function formatBrowserTrainingPhaseStatus(
+  status: BrowserTrainingProgressViewV1['phases'][number]['status'],
+): string {
+  switch (status) {
+    case 'pending':
+      return 'Pending';
+    case 'active':
+      return 'Active';
+    case 'complete':
+      return 'Complete';
+    case 'attention':
+      return 'Needs attention';
+    case 'blocked':
+      return 'Blocked';
+  }
 }
 
 function formatBrowserTrainingRecovery(recovery: BrowserTrainingRecoveryRecordV1 | null): string {

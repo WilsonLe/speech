@@ -17,6 +17,7 @@ const requiredBenchmarkMetrics = [
 test('release UI exposes named controls, labelled sections, and keyboard focus', async ({
   page,
 }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 
   const accessibility = await page.evaluate(() => {
@@ -67,15 +68,33 @@ test('release UI exposes named controls, labelled sections, and keyboard focus',
       })
       .map((section) => section.outerHTML.slice(0, 160));
 
+    const unnamedProgressbars = [...document.querySelectorAll('[role="progressbar"]')]
+      .filter((element) => elementLabel(element).length === 0)
+      .map((element) => element.outerHTML.slice(0, 160));
+
     const ids = [...document.querySelectorAll<HTMLElement>('[id]')].map((element) => element.id);
     const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
 
-    return { unnamedControls, unlabeledSections, duplicateIds };
+    return { unnamedControls, unnamedProgressbars, unlabeledSections, duplicateIds };
   });
 
   expect(accessibility.unnamedControls).toEqual([]);
+  expect(accessibility.unnamedProgressbars).toEqual([]);
   expect(accessibility.unlabeledSections).toEqual([]);
   expect(accessibility.duplicateIds).toEqual([]);
+
+  const trainingProgress = page.getByLabel('Browser training named-phase progress');
+  await expect(
+    trainingProgress.getByRole('progressbar', { name: 'Browser training overall progress' }),
+  ).toHaveAttribute('aria-valuetext', '0%');
+  await expect(trainingProgress.locator('[aria-label^="Step 1: Prepare worker"]')).toBeVisible();
+  await expect(trainingProgress.getByText('Pending', { exact: true }).first()).toBeVisible();
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
 
   const focusedControls: string[] = [];
   for (let index = 0; index < 8; index += 1) {
