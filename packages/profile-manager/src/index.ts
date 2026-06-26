@@ -25,7 +25,18 @@ import {
   type LogMelFeatureConfig,
   type ResolvedLogMelFeatureConfig,
 } from '@speech/features';
-import type { VocabularyRevisionV1, VocabularyStoreSnapshotV1 } from '@speech/protocol';
+import type {
+  ExactBaseModelIdentityV1,
+  ProfileFileRef,
+  VocabularyRevisionV1,
+  VocabularyStoreSnapshotV1,
+} from '@speech/protocol';
+import {
+  validatePortableSpeechModelManifestV1,
+  type ImportedPortableSpeechModelArchiveV1,
+  type ImportedPortableSpeechModelFileV1,
+  type PortableSpeechModelManifestV1,
+} from '@speech/portable-model';
 
 export type ProfileStorageBackendKind = 'opfs' | 'memory';
 export type ProfileBinaryFile = ArrayBuffer | ArrayBufferView;
@@ -173,6 +184,110 @@ export interface EnableEnrollmentProfileInput {
 export interface ImportEnrollmentProfileInput {
   readonly profilePackage: EnrollmentProfileExportPackageV1;
   readonly overwriteExisting?: boolean;
+}
+
+export interface PortableSpeechModelImportSmokeResultV1 {
+  readonly schemaVersion: 1;
+  readonly smokeType: 'portable-speechmodel-import-runtime-smoke';
+  readonly status: 'passed';
+  readonly vectorCount: number;
+  readonly checkedAt: string;
+  readonly warnings: readonly string[];
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
+}
+
+export interface PortableSpeechModelImportSmokeContextV1 {
+  readonly bundleId: string;
+  readonly manifest: PortableSpeechModelManifestV1;
+  readonly expectedBaseModel: ExactBaseModelIdentityV1;
+  readonly testVectors: readonly ProfileFileRef[];
+  readonly files: readonly ImportedPortableSpeechModelFileV1[];
+  readonly readStagedFile: (path: string) => Promise<Uint8Array>;
+}
+
+export interface ImportPortableSpeechModelInput {
+  readonly archive: ImportedPortableSpeechModelArchiveV1;
+  readonly expectedBaseModel: ExactBaseModelIdentityV1;
+  readonly smokeTest: (
+    context: PortableSpeechModelImportSmokeContextV1,
+  ) => Promise<PortableSpeechModelImportSmokeResultV1>;
+  readonly overwriteExisting?: boolean;
+  readonly importId?: string;
+}
+
+export interface PortableSpeechModelStoredFileV1 extends ProfileFileRef {
+  readonly storagePath: string;
+}
+
+export interface PortableSpeechModelImportRecordV1 {
+  readonly schemaVersion: 1;
+  readonly recordType: 'portable-speechmodel-import';
+  readonly bundleId: string;
+  readonly importId: string;
+  readonly importedAt: string;
+  readonly manifest: PortableSpeechModelManifestV1;
+  readonly baseModel: ExactBaseModelIdentityV1;
+  readonly files: readonly PortableSpeechModelStoredFileV1[];
+  readonly summary: {
+    readonly encrypted: boolean;
+    readonly fileCount: number;
+    readonly expandedBytes: number;
+    readonly adaptationType: PortableSpeechModelManifestV1['adaptation']['type'];
+    readonly testVectorCount: number;
+  };
+  readonly smokeTest: PortableSpeechModelImportSmokeResultV1;
+  readonly privacy: {
+    readonly localOnly: true;
+    readonly defaultExportIncludesImportedPortableModel: false;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: true;
+    readonly containsPrivateVocabularyTerms: boolean;
+    readonly networkUpload: false;
+    readonly telemetry: false;
+  };
+}
+
+export interface PortableSpeechModelImportSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly bundleId: string;
+  readonly importId: string;
+  readonly displayName: string;
+  readonly importedAt: string;
+  readonly baseModel: {
+    readonly id: string;
+    readonly version: string;
+    readonly exactCompatibility: true;
+  };
+  readonly adaptationType: PortableSpeechModelManifestV1['adaptation']['type'];
+  readonly fileCount: number;
+  readonly expandedBytes: number;
+  readonly smokeTest: {
+    readonly status: 'passed';
+    readonly vectorCount: number;
+    readonly warningCount: number;
+  };
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
 }
 
 export interface FreezeTrainingJobRevisionInput {
@@ -1172,6 +1287,105 @@ export class EnrollmentProfileStore {
     return summary;
   }
 
+  async importPortableSpeechModel(
+    input: ImportPortableSpeechModelInput,
+  ): Promise<PortableSpeechModelImportSummaryV1> {
+    const bundleId = normalizeSegment(input.archive.manifest.bundleId, 'portableBundleId');
+    const importId = normalizeSegment(
+      input.importId ?? this.createPortableImportId(),
+      'portableImportId',
+    );
+    const activeRecordPath = portableSpeechModelActiveRecordPath(bundleId);
+    const existingRecord = await this.readPortableSpeechModelImportRecord(bundleId);
+    if (existingRecord !== undefined && input.overwriteExisting !== true) {
+      throw new Error(
+        `Portable speech model bundle ${bundleId} is already imported. Set overwriteExisting to replace it.`,
+      );
+    }
+    assertPortableImportBaseModelCompatible(
+      input.archive.manifest.baseModel,
+      input.expectedBaseModel,
+    );
+    assertPortableImportManifestReady(input.archive.manifest);
+    assertPortableImportArchiveConsistent(input.archive);
+
+    const stagingRoot = portableSpeechModelImportStagingPath(importId);
+    const finalRoot = portableSpeechModelImportVersionPath(bundleId, importId);
+    await this.backend.deleteDirectory(stagingRoot);
+    await this.backend.deleteDirectory(finalRoot);
+    let committed = false;
+    try {
+      await this.writeAndVerifyPortableImportFiles(stagingRoot, input.archive.files);
+      const smokeTest = await input.smokeTest({
+        bundleId,
+        manifest: input.archive.manifest,
+        expectedBaseModel: input.expectedBaseModel,
+        testVectors: input.archive.manifest.testVectors,
+        files: input.archive.files,
+        readStagedFile: async (path) =>
+          new Uint8Array(
+            await readRequiredProfileFile(this.backend, portableImportFilePath(stagingRoot, path)),
+          ),
+      });
+      assertPortableImportSmokeResult(smokeTest, input.archive.manifest.testVectors.length);
+      const storedFiles = await this.copyPortableImportFiles(
+        stagingRoot,
+        finalRoot,
+        input.archive.files,
+      );
+      const importedAt = this.options.now?.() ?? new Date().toISOString();
+      const record: PortableSpeechModelImportRecordV1 = {
+        schemaVersion: 1,
+        recordType: 'portable-speechmodel-import',
+        bundleId,
+        importId,
+        importedAt,
+        manifest: input.archive.manifest,
+        baseModel: input.archive.manifest.baseModel,
+        files: storedFiles,
+        summary: {
+          encrypted: input.archive.summary.encrypted,
+          fileCount: input.archive.files.length,
+          expandedBytes: input.archive.summary.expandedBytes,
+          adaptationType: input.archive.manifest.adaptation.type,
+          testVectorCount: input.archive.manifest.testVectors.length,
+        },
+        smokeTest,
+        privacy: {
+          localOnly: true,
+          defaultExportIncludesImportedPortableModel: false,
+          containsRawAudio: false,
+          containsTranscriptText: false,
+          containsFeatureTensors: false,
+          containsCheckpoints: false,
+          containsAdapterWeights: true,
+          containsPrivateVocabularyTerms: input.archive.manifest.vocabulary?.included === true,
+          networkUpload: false,
+          telemetry: false,
+        },
+      };
+      await writeJsonAtomically(
+        this.backend,
+        portableSpeechModelImportRecordPath(bundleId, importId),
+        record,
+      );
+      await writeJsonAtomically(this.backend, activeRecordPath, record);
+      committed = true;
+      return summarizePortableSpeechModelImportRecord(record);
+    } finally {
+      await this.backend.deleteDirectory(stagingRoot);
+      if (!committed) {
+        await this.backend.deleteDirectory(finalRoot);
+      }
+    }
+  }
+
+  async getPortableSpeechModelImport(
+    bundleId: string,
+  ): Promise<PortableSpeechModelImportRecordV1 | undefined> {
+    return this.readPortableSpeechModelImportRecord(normalizeSegment(bundleId, 'portableBundleId'));
+  }
+
   async freezeTrainingJobRevision(
     input: FreezeTrainingJobRevisionInput,
   ): Promise<TrainingJobRevisionV1> {
@@ -1730,6 +1944,54 @@ export class EnrollmentProfileStore {
     return { schemaVersion: 1, profileId, updatedAt, files };
   }
 
+  private async writeAndVerifyPortableImportFiles(
+    root: readonly string[],
+    files: readonly ImportedPortableSpeechModelFileV1[],
+  ): Promise<void> {
+    for (const file of files) {
+      const path = portableImportFilePath(root, file.path);
+      await writeFileAtomically(this.backend, path, file.bytes);
+      const stored = await readRequiredProfileFile(this.backend, path);
+      if (stored.byteLength !== file.sizeBytes || (await this.digest(stored)) !== file.sha256) {
+        throw new Error(`Staged portable speech model file ${file.path} failed verification.`);
+      }
+    }
+  }
+
+  private async copyPortableImportFiles(
+    sourceRoot: readonly string[],
+    targetRoot: readonly string[],
+    files: readonly ImportedPortableSpeechModelFileV1[],
+  ): Promise<PortableSpeechModelStoredFileV1[]> {
+    const stored: PortableSpeechModelStoredFileV1[] = [];
+    for (const file of files) {
+      const sourcePath = portableImportFilePath(sourceRoot, file.path);
+      const targetPath = portableImportFilePath(targetRoot, file.path);
+      const bytes = await readRequiredProfileFile(this.backend, sourcePath);
+      await writeFileAtomically(this.backend, targetPath, bytes);
+      const copied = await readRequiredProfileFile(this.backend, targetPath);
+      const copiedSha256 = await this.digest(copied);
+      if (copied.byteLength !== file.sizeBytes || copiedSha256 !== file.sha256) {
+        throw new Error(`Committed portable speech model file ${file.path} failed verification.`);
+      }
+      stored.push({
+        path: file.path,
+        sha256: file.sha256,
+        sizeBytes: file.sizeBytes,
+        mediaType: file.mediaType,
+        storagePath: pathToPortableString(targetPath),
+      });
+    }
+    return stored.sort((left, right) => left.path.localeCompare(right.path));
+  }
+
+  private async readPortableSpeechModelImportRecord(
+    bundleId: string,
+  ): Promise<PortableSpeechModelImportRecordV1 | undefined> {
+    const bytes = await this.backend.getFile(portableSpeechModelActiveRecordPath(bundleId));
+    return bytes === undefined ? undefined : parseJson<PortableSpeechModelImportRecordV1>(bytes);
+  }
+
   private async readProfile(profileId: string): Promise<EnrollmentProfileManifestV1 | undefined> {
     const bytes = await this.backend.getFile(profilePath(profileId, 'profile.json'));
     return bytes === undefined ? undefined : parseJson<EnrollmentProfileManifestV1>(bytes);
@@ -1772,6 +2034,13 @@ export class EnrollmentProfileStore {
     return (
       this.options.randomId?.() ??
       `alignments-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    );
+  }
+
+  private createPortableImportId(): string {
+    return (
+      this.options.randomId?.() ??
+      `portable-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
     );
   }
 }
@@ -2907,7 +3176,7 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, activation-review guarded enables, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
+    'Private profile storage, atomic portable model imports, activation-review guarded enables, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
 };
 
 async function writeJsonAtomically(
@@ -2961,6 +3230,17 @@ async function writeCheckedFileAtomically(
       `Profile storage checksum verification failed for ${pathToPortableString(path)}.`,
     );
   }
+}
+
+async function readRequiredProfileFile(
+  backend: ProfileStorageBackend,
+  path: readonly string[],
+): Promise<ArrayBuffer> {
+  const bytes = await backend.getFile(path);
+  if (bytes === undefined) {
+    throw new Error(`Profile storage is missing required file ${pathToPortableString(path)}.`);
+  }
+  return bytes;
 }
 
 function createEmptyChecksumIndex(
@@ -3028,6 +3308,31 @@ function profileLifecyclePath(...segments: readonly string[]): string[] {
     'profile-lifecycle',
     ...segments.map((segment) => normalizeSegment(segment, 'profilePath')),
   ];
+}
+
+function portableSpeechModelImportStagingPath(importId: string): string[] {
+  return ['portable-import-staging', normalizeSegment(importId, 'portableImportId')];
+}
+
+function portableSpeechModelImportVersionPath(bundleId: string, importId: string): string[] {
+  return [
+    'portable-models',
+    normalizeSegment(bundleId, 'portableBundleId'),
+    'imports',
+    normalizeSegment(importId, 'portableImportId'),
+  ];
+}
+
+function portableSpeechModelImportRecordPath(bundleId: string, importId: string): string[] {
+  return [...portableSpeechModelImportVersionPath(bundleId, importId), 'record.json'];
+}
+
+function portableSpeechModelActiveRecordPath(bundleId: string): string[] {
+  return ['portable-models', normalizeSegment(bundleId, 'portableBundleId'), 'active-import.json'];
+}
+
+function portableImportFilePath(root: readonly string[], portablePath: string): string[] {
+  return [...normalizePath(root), 'files', ...portablePathToSegments(portablePath)];
 }
 
 function trainingJobRevisionPath(jobId?: string): string[] {
@@ -3113,6 +3418,154 @@ function assertBaseModelCompatible(
   ) {
     throw new Error(`Profile ${profileId} base-model identity does not match the active model.`);
   }
+}
+
+function assertPortableImportBaseModelCompatible(
+  actual: ExactBaseModelIdentityV1,
+  expected: ExactBaseModelIdentityV1,
+): void {
+  if (
+    actual.id !== expected.id ||
+    actual.version !== expected.version ||
+    actual.manifestSha256 !== expected.manifestSha256 ||
+    actual.graphContractSha256 !== expected.graphContractSha256 ||
+    actual.tokenizerSha256 !== expected.tokenizerSha256
+  ) {
+    throw new Error('Portable speech model base-model identity does not match the active model.');
+  }
+}
+
+function assertPortableImportManifestReady(manifest: PortableSpeechModelManifestV1): void {
+  const result = validatePortableSpeechModelManifestV1(manifest);
+  if (!result.ok) {
+    throw new Error(`Portable speech model manifest is invalid: ${result.errors.join('; ')}`);
+  }
+  if (!manifest.evaluation.gatePassed) {
+    throw new Error('Portable speech model evaluation gate must pass before import staging.');
+  }
+  if (!manifest.privacy.containsVoiceDerivedWeights) {
+    throw new Error('Portable speech model import must declare voice-derived weights.');
+  }
+  if (manifest.testVectors.length === 0) {
+    throw new Error('Portable speech model import requires at least one runtime smoke vector.');
+  }
+}
+
+function assertPortableImportArchiveConsistent(
+  archive: ImportedPortableSpeechModelArchiveV1,
+): void {
+  if (archive.summary.containsVoiceDerivedWeights !== true) {
+    throw new Error('Portable speech model import summary must declare voice-derived weights.');
+  }
+  if (archive.summary.fileCount !== archive.files.length) {
+    throw new Error('Portable speech model import summary file count does not match files.');
+  }
+  const expandedBytes = archive.files.reduce((total, file) => total + file.bytes.byteLength, 0);
+  if (archive.summary.expandedBytes !== expandedBytes) {
+    throw new Error('Portable speech model import summary expanded bytes does not match files.');
+  }
+
+  const manifestFilePaths = new Set(archive.manifest.files.map((ref) => ref.path));
+  const allowedPaths = new Set(['manifest.json', ...manifestFilePaths]);
+  const filesByPath = new Map<string, ImportedPortableSpeechModelFileV1>();
+  const normalizedPaths = new Set<string>();
+  for (const file of archive.files) {
+    const normalizedPath = pathToPortableString(portablePathToSegments(file.path));
+    const collisionKey = normalizedPath.toLowerCase();
+    if (normalizedPaths.has(collisionKey)) {
+      throw new Error(`Portable speech model import has duplicate or colliding file ${file.path}.`);
+    }
+    normalizedPaths.add(collisionKey);
+    if (!allowedPaths.has(file.path)) {
+      throw new Error(`Portable speech model import contains unmanifested file ${file.path}.`);
+    }
+    if (file.sizeBytes !== file.bytes.byteLength) {
+      throw new Error(`Portable speech model import file ${file.path} size does not match bytes.`);
+    }
+    if (file.mediaType.trim().length === 0) {
+      throw new Error(`Portable speech model import file ${file.path} has an empty media type.`);
+    }
+    filesByPath.set(file.path, file);
+  }
+  for (const ref of archive.manifest.files) {
+    const file = filesByPath.get(ref.path);
+    if (file === undefined) {
+      throw new Error(`Portable speech model import is missing manifest file ${ref.path}.`);
+    }
+    if (
+      file.sha256 !== ref.sha256 ||
+      file.sizeBytes !== ref.sizeBytes ||
+      file.mediaType !== ref.mediaType
+    ) {
+      throw new Error(
+        `Portable speech model import file ${ref.path} metadata does not match manifest.`,
+      );
+    }
+  }
+}
+
+function assertPortableImportSmokeResult(
+  result: PortableSpeechModelImportSmokeResultV1,
+  expectedVectorCount: number,
+): void {
+  if (
+    result.schemaVersion !== 1 ||
+    result.smokeType !== 'portable-speechmodel-import-runtime-smoke' ||
+    result.status !== 'passed'
+  ) {
+    throw new Error('Portable speech model runtime smoke test did not pass.');
+  }
+  if (result.vectorCount !== expectedVectorCount) {
+    throw new Error('Portable speech model runtime smoke vector count does not match manifest.');
+  }
+  if (!result.privacy.aggregateOnly || !result.privacy.localOnly) {
+    throw new Error('Portable speech model runtime smoke result must be aggregate-only and local.');
+  }
+  if (
+    result.privacy.containsRawAudio ||
+    result.privacy.containsTranscriptText ||
+    result.privacy.containsFeatureTensors ||
+    result.privacy.containsCheckpoints ||
+    result.privacy.containsAdapterWeights ||
+    result.privacy.containsPrivateVocabularyTerms
+  ) {
+    throw new Error('Portable speech model runtime smoke result exposes private artifacts.');
+  }
+}
+
+function summarizePortableSpeechModelImportRecord(
+  record: PortableSpeechModelImportRecordV1,
+): PortableSpeechModelImportSummaryV1 {
+  return {
+    schemaVersion: 1,
+    bundleId: record.bundleId,
+    importId: record.importId,
+    displayName: record.manifest.displayName,
+    importedAt: record.importedAt,
+    baseModel: {
+      id: record.baseModel.id,
+      version: record.baseModel.version,
+      exactCompatibility: true,
+    },
+    adaptationType: record.summary.adaptationType,
+    fileCount: record.summary.fileCount,
+    expandedBytes: record.summary.expandedBytes,
+    smokeTest: {
+      status: 'passed',
+      vectorCount: record.smokeTest.vectorCount,
+      warningCount: record.smokeTest.warnings.length,
+    },
+    privacy: {
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      containsPrivateVocabularyTerms: false,
+      localOnly: true,
+    },
+  };
 }
 
 function assertActivationReviewAllowsProfileEnable(

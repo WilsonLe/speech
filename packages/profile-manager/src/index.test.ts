@@ -2,7 +2,20 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { analyzeEnrollmentTakeQuality, defaultTrainingReadinessPolicyV1 } from '@speech/enrollment';
 import { decodeFloat16Array } from '@speech/features';
-import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
+import {
+  buildPortableSpeechModelInnerBundle,
+  buildUnencryptedPortableSpeechModelEnvelope,
+  createPortableSpeechModelFileRef,
+  importPortableSpeechModelArchive,
+  type ImportedPortableSpeechModelArchiveV1,
+  type PortableSpeechModelBundleFileInputV1,
+  type PortableSpeechModelManifestV1,
+} from '@speech/portable-model';
+import type {
+  ExactBaseModelIdentityV1,
+  ProfileFileRef,
+  VocabularyStoreSnapshotV1,
+} from '@speech/protocol';
 import {
   EnrollmentProfileStore,
   InMemoryProfileStorageBackend,
@@ -19,6 +32,8 @@ import {
   type OpfsDirectoryHandleLike,
   type OpfsFileHandleLike,
   type OpfsWritableFileStreamLike,
+  type PortableSpeechModelImportSmokeContextV1,
+  type PortableSpeechModelImportSmokeResultV1,
   type ProfileStorageBackend,
 } from './index';
 
@@ -33,6 +48,14 @@ const baseModel = {
   version: '0.0.0-test',
   manifestSha256: 'manifest-sha256',
   graphContractSha256: 'graph-contract-sha256',
+};
+
+const portableBaseModel: ExactBaseModelIdentityV1 = {
+  id: 'mock-vi-en-rnnt',
+  version: '0.5.0-portable',
+  manifestSha256: 'a'.repeat(64),
+  graphContractSha256: 'b'.repeat(64),
+  tokenizerSha256: 'c'.repeat(64),
 };
 
 const quality = analyzeEnrollmentTakeQuality({
@@ -1142,6 +1165,178 @@ describe('enrollment profile store', () => {
     ).rejects.toThrow(/profile metadata does not match embedded profile\.json/);
   });
 
+  it('stages portable speechmodel imports, runs smoke vectors, and commits the record last', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend, { now: () => '2026-06-26T06:30:00.000Z' });
+    const archive = await createPortableArchiveFixture();
+    const smokePaths: string[] = [];
+
+    const summary = await store.importPortableSpeechModel({
+      archive,
+      expectedBaseModel: portableBaseModel,
+      importId: 'portable-import-001',
+      smokeTest: async (context) => {
+        const vectorBytes = await context.readStagedFile('test-vectors/forward.json');
+        smokePaths.push(text(vectorBytes, 0, vectorBytes.byteLength));
+        expect(
+          await backend.getFile([
+            'portable-models',
+            archive.manifest.bundleId,
+            'active-import.json',
+          ]),
+        ).toBeUndefined();
+        const adapterBytes = await context.readStagedFile('artifacts/adapter-weights.bin');
+        expect(adapterBytes.byteLength).toBeGreaterThan(0);
+        return createPortableSmokeResult(context);
+      },
+    });
+
+    expect(summary).toMatchObject({
+      bundleId: archive.manifest.bundleId,
+      importId: 'portable-import-001',
+      displayName: archive.manifest.displayName,
+      baseModel: {
+        id: portableBaseModel.id,
+        version: portableBaseModel.version,
+        exactCompatibility: true,
+      },
+      smokeTest: { status: 'passed', vectorCount: 1, warningCount: 0 },
+      privacy: { aggregateOnly: true, containsAdapterWeights: false, localOnly: true },
+    });
+    expect(smokePaths[0]).toContain('portable-smoke-vector-v1');
+    expect(await backend.listFiles(['portable-import-staging'])).toEqual([]);
+
+    const record = await store.getPortableSpeechModelImport(archive.manifest.bundleId);
+    expect(record).toMatchObject({
+      bundleId: archive.manifest.bundleId,
+      importId: 'portable-import-001',
+      privacy: { containsAdapterWeights: true, localOnly: true },
+      smokeTest: { status: 'passed', vectorCount: 1 },
+    });
+    expect(record?.files.map((file) => file.storagePath)).toEqual(
+      expect.arrayContaining([
+        'portable-models/portable-import-fixture/imports/portable-import-001/files/artifacts/adapter-weights.bin',
+        'portable-models/portable-import-fixture/imports/portable-import-001/files/test-vectors/forward.json',
+      ]),
+    );
+  });
+
+  it('rejects portable imports with non-exact base-model identity before staging', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const archive = await createPortableArchiveFixture();
+
+    await expect(
+      store.importPortableSpeechModel({
+        archive,
+        expectedBaseModel: { ...portableBaseModel, tokenizerSha256: 'd'.repeat(64) },
+        smokeTest: createPortableSmokeResult,
+      }),
+    ).rejects.toThrow(/base-model identity/);
+    expect(await backend.listFiles()).toEqual([]);
+  });
+
+  it('rejects forged portable archive summaries before staging', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const archive = await createPortableArchiveFixture();
+
+    await expect(
+      store.importPortableSpeechModel({
+        archive: {
+          ...archive,
+          summary: { ...archive.summary, expandedBytes: archive.summary.expandedBytes + 1 },
+        },
+        expectedBaseModel: portableBaseModel,
+        smokeTest: createPortableSmokeResult,
+      }),
+    ).rejects.toThrow(/expanded bytes/);
+    expect(await backend.listFiles()).toEqual([]);
+  });
+
+  it('rejects forged portable archives with duplicate file paths before staging', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const archive = await createPortableArchiveFixture();
+    const duplicate = requirePortableImportFile(archive, 'artifacts/adapter-weights.bin');
+
+    await expect(
+      store.importPortableSpeechModel({
+        archive: {
+          ...archive,
+          files: [...archive.files, duplicate],
+          summary: {
+            ...archive.summary,
+            fileCount: archive.files.length + 1,
+            expandedBytes: archive.summary.expandedBytes + duplicate.bytes.byteLength,
+          },
+        },
+        expectedBaseModel: portableBaseModel,
+        smokeTest: createPortableSmokeResult,
+      }),
+    ).rejects.toThrow(/duplicate or colliding file/);
+    expect(await backend.listFiles()).toEqual([]);
+  });
+
+  it('cleans temporary portable import staging and leaves no committed record when smoke fails', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const archive = await createPortableArchiveFixture();
+
+    await expect(
+      store.importPortableSpeechModel({
+        archive,
+        expectedBaseModel: portableBaseModel,
+        importId: 'portable-import-fail',
+        smokeTest: async () => {
+          throw new Error('synthetic runtime smoke failure');
+        },
+      }),
+    ).rejects.toThrow(/synthetic runtime smoke failure/);
+
+    expect(await backend.listFiles(['portable-import-staging'])).toEqual([]);
+    expect(await backend.listFiles(['portable-models'])).toEqual([]);
+    await expect(
+      store.getPortableSpeechModelImport(archive.manifest.bundleId),
+    ).resolves.toBeUndefined();
+  });
+
+  it('requires explicit overwrite before replacing an imported portable bundle', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const archive = await createPortableArchiveFixture();
+
+    await store.importPortableSpeechModel({
+      archive,
+      expectedBaseModel: portableBaseModel,
+      importId: 'portable-import-first',
+      smokeTest: createPortableSmokeResult,
+    });
+    await expect(
+      store.importPortableSpeechModel({
+        archive,
+        expectedBaseModel: portableBaseModel,
+        importId: 'portable-import-second',
+        smokeTest: createPortableSmokeResult,
+      }),
+    ).rejects.toThrow(/already imported/);
+
+    await expect(
+      store.importPortableSpeechModel({
+        archive,
+        expectedBaseModel: portableBaseModel,
+        importId: 'portable-import-second',
+        overwriteExisting: true,
+        smokeTest: createPortableSmokeResult,
+      }),
+    ).resolves.toMatchObject({ importId: 'portable-import-second' });
+    await expect(
+      store.getPortableSpeechModelImport(archive.manifest.bundleId),
+    ).resolves.toMatchObject({
+      importId: 'portable-import-second',
+    });
+  });
+
   it('stores files through an OPFS-compatible backend', async () => {
     const backend = new OpfsProfileStorageBackend(new FakeOpfsDirectory());
     const store = createStore(backend);
@@ -1197,11 +1392,181 @@ function createActivationReview(
   };
 }
 
-function createStore(backend: ProfileStorageBackend): EnrollmentProfileStore {
+async function createPortableArchiveFixture(): Promise<ImportedPortableSpeechModelArchiveV1> {
+  const adapter = portableFile(
+    'artifacts/adapter-weights.bin',
+    'application/octet-stream',
+    bytes(1, 2, 3, 4),
+  );
+  const speaker = portableFile(
+    'embeddings/speaker.f32',
+    'application/octet-stream',
+    bytes(5, 6, 7, 8),
+  );
+  const evaluationSummary = portableFile(
+    'evaluation/summary.json',
+    'application/json',
+    jsonBytes({ schemaVersion: 1, gatePassed: true, aggregateOnly: true }),
+  );
+  const evaluationMetrics = portableFile(
+    'evaluation/metrics.json',
+    'application/json',
+    jsonBytes({ schemaVersion: 1, wer: 0.12, privacy: { containsCaseIds: false } }),
+  );
+  const notices = portableFile(
+    'notices/THIRD_PARTY_NOTICES.txt',
+    'text/plain',
+    new TextEncoder().encode('Synthetic notices for portable import tests.'),
+  );
+  const vector = portableFile(
+    'test-vectors/forward.json',
+    'application/json',
+    jsonBytes({ schemaVersion: 1, vectorType: 'portable-smoke-vector-v1', expected: [0, 1] }),
+  );
+  const refsWithoutChecksums = await refsForPortableFiles([
+    adapter,
+    speaker,
+    evaluationSummary,
+    evaluationMetrics,
+    notices,
+    vector,
+  ]);
+  const checksums = portableFile(
+    'metadata/checksums.json',
+    'application/json',
+    jsonBytes({
+      schemaVersion: 1,
+      files: Object.values(refsWithoutChecksums).sort((left, right) =>
+        left.path.localeCompare(right.path),
+      ),
+    }),
+  );
+  const refs = {
+    ...refsWithoutChecksums,
+    [checksums.path]: await createPortableSpeechModelFileRef(checksums),
+  };
+  const manifest: PortableSpeechModelManifestV1 = {
+    schemaVersion: 1,
+    bundleType: 'personal-voice-model',
+    bundleId: 'portable-import-fixture',
+    modelRevision: 'rev-import-001',
+    displayName: 'Portable import fixture',
+    createdAt: '2026-06-26T00:00:00.000Z',
+    exportedAt: '2026-06-26T00:00:00.000Z',
+    sourceAppVersion: '0.5.0',
+    profile: {
+      sourceProfileId: 'private-source-profile',
+      languages: ['vi', 'en'],
+      supportsMixed: true,
+    },
+    baseModel: portableBaseModel,
+    adaptation: {
+      type: 'browser-top-adapter',
+      contractVersion: 1,
+      algorithmId: 'browser-top-adapter-frame-ce-v1',
+      files: {
+        weights: requirePortableRef(refs, adapter.path),
+        speakerEmbedding: requirePortableRef(refs, speaker.path),
+      },
+    },
+    evaluation: {
+      gatePassed: true,
+      summaryFile: requirePortableRef(refs, evaluationSummary.path),
+      metricsFile: requirePortableRef(refs, evaluationMetrics.path),
+    },
+    noticesFile: requirePortableRef(refs, notices.path),
+    checksumsFile: requirePortableRef(refs, checksums.path),
+    testVectors: [requirePortableRef(refs, vector.path)],
+    privacy: {
+      containsRawAudio: false,
+      containsPreparedFeatures: false,
+      containsVoiceDerivedWeights: true,
+    },
+    files: Object.values(refs).sort((left, right) => left.path.localeCompare(right.path)),
+  };
+  const bundle = await buildPortableSpeechModelInnerBundle({
+    manifest,
+    files: [adapter, speaker, evaluationSummary, evaluationMetrics, notices, vector, checksums],
+  });
+  return importPortableSpeechModelArchive(
+    buildUnencryptedPortableSpeechModelEnvelope(bundle.bytes).bytes,
+  );
+}
+
+async function createPortableSmokeResult(
+  context: PortableSpeechModelImportSmokeContextV1,
+): Promise<PortableSpeechModelImportSmokeResultV1> {
+  return {
+    schemaVersion: 1,
+    smokeType: 'portable-speechmodel-import-runtime-smoke',
+    status: 'passed',
+    vectorCount: context.testVectors.length,
+    checkedAt: '2026-06-26T06:30:00.000Z',
+    warnings: [],
+    privacy: {
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      containsPrivateVocabularyTerms: false,
+      localOnly: true,
+    },
+  };
+}
+
+async function refsForPortableFiles(
+  files: readonly PortableSpeechModelBundleFileInputV1[],
+): Promise<Record<string, ProfileFileRef>> {
+  const refs: Record<string, ProfileFileRef> = {};
+  for (const file of files) refs[file.path] = await createPortableSpeechModelFileRef(file);
+  return refs;
+}
+
+function requirePortableRef(
+  refs: Readonly<Record<string, ProfileFileRef>>,
+  path: string,
+): ProfileFileRef {
+  const ref = refs[path];
+  if (ref === undefined) throw new Error(`Missing portable fixture ref ${path}`);
+  return ref;
+}
+
+function requirePortableImportFile(
+  archive: ImportedPortableSpeechModelArchiveV1,
+  path: string,
+): ImportedPortableSpeechModelArchiveV1['files'][number] {
+  const file = archive.files.find((entry) => entry.path === path);
+  if (file === undefined) throw new Error(`Missing portable archive file ${path}`);
+  return file;
+}
+
+function portableFile(
+  path: string,
+  mediaType: string,
+  body: ArrayBuffer | Uint8Array,
+): PortableSpeechModelBundleFileInputV1 {
+  return { path, mediaType, bytes: body };
+}
+
+function bytes(...values: readonly number[]): Uint8Array {
+  return new Uint8Array(values);
+}
+
+function createStore(
+  backend: ProfileStorageBackend,
+  overrides: {
+    readonly digest?: (bytes: ArrayBuffer) => Promise<string>;
+    readonly now?: () => string;
+    readonly randomId?: () => string;
+  } = {},
+): EnrollmentProfileStore {
   return new EnrollmentProfileStore(backend, {
     digest,
     now: () => '2026-06-23T00:00:00.000Z',
     randomId: () => 'utt-generated',
+    ...overrides,
   });
 }
 

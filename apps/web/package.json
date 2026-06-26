@@ -23,6 +23,7 @@
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
     "@speech/personalization": "workspace:*",
+    "@speech/portable-model": "workspace:*",
     "@speech/profile-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
     "@vitejs/plugin-react": "^6.0.2",
