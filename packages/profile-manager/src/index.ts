@@ -274,6 +274,7 @@ export interface ImportPortableSpeechModelInput {
   readonly smokeTest: (
     context: PortableSpeechModelImportSmokeContextV1,
   ) => Promise<PortableSpeechModelImportSmokeResultV1>;
+  readonly smokeTimeoutMs?: number;
   readonly overwriteExisting?: boolean;
   readonly importId?: string;
 }
@@ -1483,17 +1484,23 @@ export class EnrollmentProfileStore {
     let committed = false;
     try {
       await this.writeAndVerifyPortableImportFiles(stagingRoot, input.archive.files);
-      const smokeTest = await input.smokeTest({
-        bundleId,
-        manifest: input.archive.manifest,
-        expectedBaseModel: input.expectedBaseModel,
-        testVectors: input.archive.manifest.testVectors,
-        files: input.archive.files,
-        readStagedFile: async (path) =>
-          new Uint8Array(
-            await readRequiredProfileFile(this.backend, portableImportFilePath(stagingRoot, path)),
-          ),
-      });
+      const smokeTest = await runPortableImportSmokeWithTimeout(
+        input.smokeTest({
+          bundleId,
+          manifest: input.archive.manifest,
+          expectedBaseModel: input.expectedBaseModel,
+          testVectors: input.archive.manifest.testVectors,
+          files: input.archive.files,
+          readStagedFile: async (path) =>
+            new Uint8Array(
+              await readRequiredProfileFile(
+                this.backend,
+                portableImportFilePath(stagingRoot, path),
+              ),
+            ),
+        }),
+        input.smokeTimeoutMs,
+      );
       assertPortableImportSmokeResult(smokeTest, input.archive.manifest.testVectors.length);
       const storedFiles = await this.copyPortableImportFiles(
         stagingRoot,
@@ -4097,6 +4104,29 @@ function assertPortableImportArchiveConsistent(
         `Portable speech model import file ${ref.path} metadata does not match manifest.`,
       );
     }
+  }
+}
+
+async function runPortableImportSmokeWithTimeout(
+  smokeTest: Promise<PortableSpeechModelImportSmokeResultV1>,
+  timeoutMs: number | undefined,
+): Promise<PortableSpeechModelImportSmokeResultV1> {
+  const timeout = timeoutMs ?? 10_000;
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    throw new Error('Portable speech model runtime smoke timeout must be positive.');
+  }
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      smokeTest,
+      new Promise<never>((_resolve, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error('Portable speech model runtime smoke timed out.'));
+        }, timeout);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }
 }
 
