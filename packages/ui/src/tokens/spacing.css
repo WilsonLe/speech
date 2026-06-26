@@ -1,0 +1,35 @@
+:root {
+  /* 4px base scale from the v0.6.0 UI plan. */
+  --speech-space-0: 0;
+  --speech-space-1: 0.25rem;
+  --speech-space-2: 0.5rem;
+  --speech-space-3: 0.75rem;
+  --speech-space-4: 1rem;
+  --speech-space-5: 1.5rem;
+  --speech-space-6: 2rem;
+  --speech-space-7: 3rem;
+
+  --speech-size-content-max: 70rem;
+  --speech-size-prose-max: 72ch;
+  --speech-size-touch-target: 2.75rem;
+  --speech-size-icon-button: 2.75rem;
+  --speech-size-bottom-nav: 4rem;
+
+  --speech-radius-none: 0;
+  --speech-radius-sm: 0.5rem;
+  --speech-radius-md: 0.75rem;
+  --speech-radius-lg: 1.25rem;
+  --speech-radius-xl: 2rem;
+  --speech-radius-pill: 999px;
+
+  --speech-gap-control: var(--speech-space-2);
+  --speech-gap-section: var(--speech-space-5);
+  --speech-padding-screen: var(--speech-space-5);
+  --speech-padding-screen-narrow: var(--speech-space-4);
+}
+
+@media (width <= 44rem) {
+  :root {
+    --speech-padding-screen: var(--speech-padding-screen-narrow);
+  }
+}

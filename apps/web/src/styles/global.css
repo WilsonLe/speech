@@ -1,21 +1,14 @@
 :root {
-  color: #e2e8f0;
-  background: #020617;
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  color: var(--speech-color-text-primary);
+  background: var(--speech-color-surface-canvas);
+  font-family: var(--speech-font-family-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --panel: rgba(15, 23, 42, 0.82);
-  --panel-border: rgba(148, 163, 184, 0.22);
-  --accent: #38bdf8;
-  --accent-strong: #0ea5e9;
+  --panel: var(--speech-color-surface-panel);
+  --panel-border: var(--speech-color-border-muted);
+  --accent: var(--speech-color-accent);
+  --accent-strong: var(--speech-color-accent-strong);
 }
 
 * {
@@ -40,8 +33,9 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.22), transparent 34rem),
-    radial-gradient(circle at 80% 10%, rgba(16, 185, 129, 0.16), transparent 28rem), #020617;
+    radial-gradient(circle at top left, var(--speech-color-accent-surface), transparent 34rem),
+    radial-gradient(circle at 80% 10%, rgba(16, 185, 129, 0.16), transparent 28rem),
+    var(--speech-color-surface-canvas);
 }
 
 button,
@@ -61,8 +55,8 @@ button,
 button:focus-visible,
 .button:focus-visible,
 .file-button:focus-within {
-  outline: 3px solid #facc15;
-  outline-offset: 3px;
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
 }
 
 button.secondary,
@@ -88,7 +82,7 @@ button:disabled,
 }
 
 .app-shell {
-  width: min(1120px, calc(100% - 2rem));
+  width: min(var(--speech-size-content-max), calc(100% - var(--speech-space-6)));
   margin: 0 auto;
   padding: 4rem 0;
 }
@@ -154,9 +148,9 @@ h2 {
 .panel,
 .roadmap,
 .diagnostics {
-  padding: 1.5rem;
+  padding: var(--speech-space-5);
   border: 1px solid var(--panel-border);
-  border-radius: 1.25rem;
+  border-radius: var(--speech-radius-lg);
   background: var(--panel);
 }
 
@@ -537,8 +531,8 @@ h2 {
 
 .text-field textarea:focus-visible,
 .select-field select:focus-visible {
-  outline: 3px solid #facc15;
-  outline-offset: 3px;
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
 }
 
 .select-field {
@@ -648,8 +642,8 @@ h2 {
 .transcript-editor:focus-visible,
 .transcript-settings-card select:focus-visible,
 .transcript-settings-card input:focus-visible {
-  outline: 3px solid #facc15;
-  outline-offset: 3px;
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
 }
 
 .transcript-provisional {
@@ -870,8 +864,8 @@ h2 {
 .vocabulary-card input:focus-visible,
 .vocabulary-card select:focus-visible,
 .vocabulary-card textarea:focus-visible {
-  outline: 3px solid #facc15;
-  outline-offset: 3px;
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
 }
 
 .vocabulary-card input[type='checkbox'] {

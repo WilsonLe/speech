@@ -1,0 +1,20 @@
+:root {
+  --speech-shadow-none: none;
+  --speech-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.35);
+  --speech-shadow-popover: 0 18px 48px rgba(0, 0, 0, 0.38);
+  --speech-shadow-dialog: 0 28px 80px rgba(0, 0, 0, 0.48);
+
+  --speech-layer-base: 0;
+  --speech-layer-sticky: 10;
+  --speech-layer-popover: 30;
+  --speech-layer-toast: 40;
+  --speech-layer-dialog: 50;
+}
+
+@media (forced-colors: active) {
+  :root {
+    --speech-shadow-panel: none;
+    --speech-shadow-popover: none;
+    --speech-shadow-dialog: none;
+  }
+}
