@@ -269,6 +269,65 @@ describe('portable speech model inner bundle', () => {
     }
   });
 
+  it('builds and imports CLI residual-adapter bundles without rewriting their profile contract', async () => {
+    const input = await samplePortableBundleInput();
+    const profileManifest = file(
+      'metadata/profile-manifest.json',
+      'application/json',
+      jsonBytes({
+        schemaVersion: 1,
+        id: 'profile-local',
+        adaptation: {
+          type: 'residual-adapter',
+          adapter: {
+            graphFileKey: 'adapterGraph',
+            graphContractSha256: 'b'.repeat(64),
+            insertionPointIds: ['encoder-block-11'],
+            application: 'residual-add',
+            activationSwap: 'utterance-boundary',
+          },
+        },
+        privacy: { containsRawAudio: false },
+      }),
+    );
+    const profileRef = await createPortableSpeechModelFileRef(profileManifest);
+    const adapterRef = ref(input.refs, 'artifacts/adapter-weights.bin');
+    const manifest: PortableSpeechModelManifestV1 = {
+      ...input.manifest,
+      bundleId: 'cli-residual-adapter-fixture',
+      adaptation: {
+        type: 'cli-residual-adapter',
+        contractVersion: 1,
+        algorithmId: 'cli-residual-adapter-v1',
+        files: {
+          adapterGraph: adapterRef,
+          profileManifest: profileRef,
+        },
+      },
+      files: [...input.manifest.files, profileRef].sort((left, right) =>
+        left.path.localeCompare(right.path),
+      ),
+    };
+
+    const bundle = await buildPortableSpeechModelInnerBundle({
+      manifest,
+      files: [...input.files, profileManifest],
+    });
+    const archive = await importPortableSpeechModelArchive(
+      buildUnencryptedPortableSpeechModelEnvelope(bundle.bytes).bytes,
+    );
+
+    expect(archive.manifest.adaptation).toMatchObject({
+      type: 'cli-residual-adapter',
+      algorithmId: 'cli-residual-adapter-v1',
+    });
+    expect(archive.manifest.adaptation.files['adapterGraph']).toEqual(adapterRef);
+    expect(archive.manifest.adaptation.files['profileManifest']).toEqual(profileRef);
+    expect(archive.files.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining(['metadata/profile-manifest.json', 'artifacts/adapter-weights.bin']),
+    );
+  });
+
   it('keeps private training data out of the deterministic fixture bundle', async () => {
     const input = await samplePortableBundleInput();
     const bundle = await buildPortableSpeechModelInnerBundle(input);

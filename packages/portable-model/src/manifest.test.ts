@@ -99,6 +99,32 @@ describe('portable speech model manifest v1', () => {
     });
   });
 
+  it('accepts CLI residual adapters as portable adaptation members', () => {
+    const value = manifest({
+      adaptation: {
+        type: 'cli-residual-adapter',
+        contractVersion: 1,
+        algorithmId: 'cli-residual-adapter-v1',
+        files: {
+          adapterGraph: fileRef('profiles/profile-local/adapters/adapter.bin', 4096),
+          profileManifest: fileRef('metadata/profile-manifest.json'),
+        },
+      },
+      files: [
+        fileRef('profiles/profile-local/adapters/adapter.bin', 4096),
+        fileRef('metadata/profile-manifest.json'),
+        fileRef('vocabulary/entries.json'),
+        fileRef('evaluation/summary.json'),
+        fileRef('evaluation/metrics.json'),
+        fileRef('notices/THIRD_PARTY_NOTICES.txt'),
+        fileRef('metadata/checksums.json'),
+        fileRef('test-vectors/forward.json'),
+      ],
+    });
+
+    expect(validatePortableSpeechModelManifestV1(value)).toEqual({ ok: true, errors: [] });
+  });
+
   it('rejects privacy flags that allow raw audio or prepared features', () => {
     const value = manifest({
       privacy: {

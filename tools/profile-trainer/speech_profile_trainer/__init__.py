@@ -23,10 +23,15 @@ from .evaluation import (
 )
 from .packaging import (
     AdapterPackageResult,
+    PortableSpeechModelPackageResult,
+    package_adapter_package_as_speechmodel,
     package_personal_adapter,
+    package_personal_adapter_as_speechmodel,
+    package_personal_adapter_as_speechmodel_from_files,
     package_personal_adapter_from_files,
     validate_personal_adapter_package,
     write_personal_adapter_package,
+    write_portable_speechmodel_package,
 )
 from .training import (
     AdapterTrainingConfig,
@@ -59,6 +64,7 @@ __all__ = [
     "EvaluationCase",
     "FrozenBaseAdapterTrainingConfig",
     "FrozenBaseAdapterTrainingResult",
+    "PortableSpeechModelPackageResult",
     "ProfileDataset",
     "ProfileDatasetRecord",
     "ProfilePackageValidationReport",
@@ -74,7 +80,10 @@ __all__ = [
     "load_json_file",
     "load_profile_dataset",
     "load_training_config",
+    "package_adapter_package_as_speechmodel",
     "package_personal_adapter",
+    "package_personal_adapter_as_speechmodel",
+    "package_personal_adapter_as_speechmodel_from_files",
     "package_personal_adapter_from_files",
     "parse_activation_gate_config",
     "parse_evaluation_case",
@@ -87,5 +96,6 @@ __all__ = [
     "validate_profile_package",
     "write_evaluation_report",
     "write_personal_adapter_package",
+    "write_portable_speechmodel_package",
     "write_training_outputs",
 ]
