@@ -4,6 +4,7 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { MicrophonePanel } from './MicrophonePanel';
 import { ModelRuntimePanel } from './ModelRuntimePanel';
 import { OfflineModelPanel } from './OfflineModelPanel';
+import { PersonalModelsPanel } from './PersonalModelsPanel';
 import { TranscriptPanel } from './TranscriptPanel';
 import { VocabularyPanel } from './VocabularyPanel';
 import { roadmap } from './milestones';
@@ -30,6 +31,9 @@ export function App() {
           </a>
           <a className="button secondary" href="#diagnostics">
             View diagnostics
+          </a>
+          <a className="button secondary" href="#personal-models-title">
+            Personal models
           </a>
           <a className="button secondary" href="#benchmark">
             Run benchmark
@@ -59,6 +63,7 @@ export function App() {
 
       <TranscriptPanel />
       <VocabularyPanel />
+      <PersonalModelsPanel />
       <OfflineModelPanel />
       <DiagnosticsPanel />
       <BenchmarkPanel />

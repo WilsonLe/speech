@@ -39,6 +39,11 @@ import {
   rollbackEnrollmentProfile,
   saveAcceptedEnrollmentTake,
 } from '../workers/profile-store-client';
+import {
+  defaultPersonalProfileDisplayName,
+  defaultPersonalProfileId,
+  defaultPersonalSentenceBankVersion,
+} from './personal-models';
 
 interface ToggleConfig {
   readonly key: keyof MicrophoneProcessingOptions;
@@ -152,9 +157,9 @@ const enrollmentProcessingOptions: MicrophoneProcessingOptions = {
 const voiceConditions: readonly EnrollmentVoiceCondition[] = ['whisper', 'normal', 'projected'];
 const enrollmentLanguages: readonly EnrollmentSentenceLanguage[] = ['vi', 'en', 'mixed'];
 const defaultEnrollmentPrompt = 'Tôi vừa update dashboard.';
-const defaultProfileId = 'local-enrollment-profile';
-const defaultProfileDisplayName = 'Local enrollment profile';
-const defaultSentenceBankVersion = 'synthetic-v1';
+const defaultProfileId = defaultPersonalProfileId;
+const defaultProfileDisplayName = defaultPersonalProfileDisplayName;
+const defaultSentenceBankVersion = defaultPersonalSentenceBankVersion;
 const manualPromptId = 'manual-enrollment-prompt';
 const manualPromptVersion = 1;
 
