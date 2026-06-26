@@ -1,0 +1,23 @@
+:root {
+  --speech-motion-enabled: 1;
+  --speech-duration-instant: 1ms;
+  --speech-duration-fast: 120ms;
+  --speech-duration-standard: 180ms;
+  --speech-duration-slow: 200ms;
+  --speech-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --speech-ease-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
+  --speech-motion-transition-fast: var(--speech-duration-fast) var(--speech-ease-standard);
+  --speech-motion-transition-standard: var(--speech-duration-standard) var(--speech-ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --speech-motion-enabled: 0;
+    --speech-duration-fast: var(--speech-duration-instant);
+    --speech-duration-standard: var(--speech-duration-instant);
+    --speech-duration-slow: var(--speech-duration-instant);
+    --speech-ease-emphasized: linear;
+    --speech-motion-transition-fast: none;
+    --speech-motion-transition-standard: none;
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "issue": 218,
+  "measuredAt": "2026-06-26",
+  "baseline": {
+    "totalBytes": 934094,
+    "totalGzipBytes": 271210,
+    "cssBytes": 20144,
+    "cssGzipBytes": 4326
+  },
+  "after": {
+    "totalBytes": 939548,
+    "totalGzipBytes": 272339,
+    "cssPath": "assets/index-DB5Zr9g7.css",
+    "cssBytes": 25598,
+    "cssGzipBytes": 5458
+  },
+  "delta": {
+    "totalBytes": 5454,
+    "totalGzipBytes": 1129,
+    "cssBytes": 5454,
+    "cssGzipBytes": 1132
+  },
+  "method": "Built @speech/web before and after importing @speech/ui/tokens.css, then summed generated JS/CSS/HTML/JSON/webmanifest asset sizes and gzip -9 byte counts.",
+  "accepted": true,
+  "notes": [
+    "Token plumbing adds semantic CSS custom properties only; no runtime JavaScript dependency is imported by the app shell.",
+    "The CSS increase is within the v0.6.0 Dictate initial-JS gate because it does not add JavaScript."
+  ]
+}

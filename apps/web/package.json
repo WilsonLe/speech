@@ -27,6 +27,7 @@
     "@speech/portable-model": "workspace:*",
     "@speech/profile-manager": "workspace:*",
     "@speech/protocol": "workspace:*",
+    "@speech/ui": "workspace:*",
     "@vitejs/plugin-react": "^6.0.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

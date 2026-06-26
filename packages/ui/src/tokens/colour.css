@@ -1,0 +1,62 @@
+:root {
+  color-scheme: dark;
+
+  --speech-color-surface-canvas: #020617;
+  --speech-color-surface-panel: rgba(15, 23, 42, 0.82);
+  --speech-color-surface-panel-strong: rgba(15, 23, 42, 0.96);
+  --speech-color-surface-control: rgba(15, 23, 42, 0.88);
+  --speech-color-surface-muted: rgba(30, 41, 59, 0.72);
+
+  --speech-color-text-primary: #e2e8f0;
+  --speech-color-text-strong: #f8fafc;
+  --speech-color-text-muted: #cbd5e1;
+  --speech-color-text-subtle: #94a3b8;
+  --speech-color-text-inverse: #00111f;
+
+  --speech-color-border-muted: rgba(148, 163, 184, 0.22);
+  --speech-color-border-subtle: rgba(148, 163, 184, 0.14);
+  --speech-color-border-strong: rgba(226, 232, 240, 0.44);
+
+  --speech-color-accent: #38bdf8;
+  --speech-color-accent-strong: #0ea5e9;
+  --speech-color-accent-surface: rgba(14, 165, 233, 0.22);
+  --speech-color-accent-success: #67e8f9;
+  --speech-color-success: #22c55e;
+  --speech-color-warning: #facc15;
+  --speech-color-danger: #f87171;
+  --speech-color-danger-strong: #ef4444;
+  --speech-color-info: #93c5fd;
+
+  --speech-focus-ring-color: #facc15;
+  --speech-focus-ring-width: 3px;
+  --speech-focus-ring-offset: 3px;
+}
+
+@media (forced-colors: active) {
+  :root {
+    color-scheme: light dark;
+    --speech-color-surface-canvas: Canvas;
+    --speech-color-surface-panel: Canvas;
+    --speech-color-surface-panel-strong: Canvas;
+    --speech-color-surface-control: ButtonFace;
+    --speech-color-surface-muted: Canvas;
+    --speech-color-text-primary: CanvasText;
+    --speech-color-text-strong: CanvasText;
+    --speech-color-text-muted: CanvasText;
+    --speech-color-text-subtle: CanvasText;
+    --speech-color-text-inverse: ButtonText;
+    --speech-color-border-muted: ButtonBorder;
+    --speech-color-border-subtle: ButtonBorder;
+    --speech-color-border-strong: CanvasText;
+    --speech-color-accent: Highlight;
+    --speech-color-accent-strong: Highlight;
+    --speech-color-accent-surface: Canvas;
+    --speech-color-accent-success: Highlight;
+    --speech-color-success: CanvasText;
+    --speech-color-warning: CanvasText;
+    --speech-color-danger: CanvasText;
+    --speech-color-danger-strong: CanvasText;
+    --speech-color-info: CanvasText;
+    --speech-focus-ring-color: Highlight;
+  }
+}
