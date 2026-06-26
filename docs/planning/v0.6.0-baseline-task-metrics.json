@@ -1,0 +1,656 @@
+{
+  "$schema": "https://wilsonle.dev/speech/v0.6-baseline-task-metrics.schema.json",
+  "metadata": {
+    "reportId": "v0.6.0-baseline-task-metrics",
+    "sourceIssue": "https://github.com/WilsonLe/speech/issues/212",
+    "baselineRelease": "v0.5.0",
+    "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+    "capturedDate": "2026-06-26",
+    "captureTool": "Playwright local Chromium against v0.5.0 production build",
+    "artifactRoot": "/tmp/speech-v0.6-baseline-212",
+    "screenshotsCommitted": false,
+    "screenshotCommitDecision": "PNG screenshots were captured locally under /tmp and intentionally not committed to avoid binary repository growth. This manifest commits file names, sizes, dimensions, and SHA-256 hashes so the capture set is auditable and regenerable.",
+    "localOnlyEvidence": true,
+    "captureCommit": "47dc6d65b80f4acb63c248b3e1c20830dc06514d",
+    "captureCommitNote": "Screenshots were captured after #211 merged; #211 was docs/test-only and did not change the v0.5.0 web UI baseline."
+  },
+  "baselineTasks": [
+    {
+      "id": "first-transcript",
+      "planTaskNumber": 1,
+      "title": "Produce a first transcript",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "first-transcript",
+        "fileName": "01-first-transcript-recording.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/01-first-transcript-recording.png",
+        "sha256": "3e7ab0d36cec292892abd151b613555ab95edeaaa4ff15f37142f92fe4b311c8",
+        "bytes": 209834,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": -237,
+          "width": 1120,
+          "height": 1374
+        },
+        "committedToRepository": false,
+        "note": "Current v0.5 first-transcript baseline: user must find the stacked transcript panel, then hold Space or the push-to-talk control. Fake microphone input is used; no private audio or transcript is captured."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 0,
+        "keystrokeCount": 2,
+        "wrongTurnCount": 1,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Open /",
+        "Find Focused push-to-talk dictation panel",
+        "Hold Space or Hold to talk",
+        "Release to finalize"
+      ],
+      "wrongTurns": 1,
+      "accessibilityObstacles": [
+        "Primary dictation task competes with adjacent model, diagnostics, benchmark, and roadmap sections on the same page."
+      ],
+      "qualitativeObservations": [
+        "The correct recording control is reachable, but the default screen asks users to parse technical model/runtime status before speaking."
+      ],
+      "qualitativeConfidence": "medium",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "change-language",
+      "planTaskNumber": 2,
+      "title": "Change language",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "change-language",
+        "fileName": "02-change-language.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/02-change-language.png",
+        "sha256": "71d052160c9687c7f0bdb474b03874123769fc07f00b9fe8e88e1bb87f234694",
+        "bytes": 196100,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": -237,
+          "width": 1120,
+          "height": 1326
+        },
+        "committedToRepository": false,
+        "note": "Language mode is changed from the transcript settings card; technical language-span diagnostics remain visible in the default screen."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 2,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 0,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Open transcript settings card",
+        "Change Recognition mode to English",
+        "Confirm language diagnostics update"
+      ],
+      "wrongTurns": 0,
+      "accessibilityObstacles": [
+        "The language selector is visible, but diagnostics jargon is displayed beside the ordinary task."
+      ],
+      "qualitativeObservations": [
+        "Task is short, but the current label uses implementation-oriented Auto/code-switch terminology."
+      ],
+      "qualitativeConfidence": "high",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "enable-vocabulary-set",
+      "planTaskNumber": 3,
+      "title": "Enable a vocabulary set",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "enable-vocabulary-set",
+        "fileName": "03-enable-vocabulary-set.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/03-enable-vocabulary-set.png",
+        "sha256": "882d610a84decc0bb722a76ecd36a599195349a8865c009deb8236368b859efe",
+        "bytes": 220646,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": 0,
+          "width": 1120,
+          "height": 1840
+        },
+        "committedToRepository": false,
+        "note": "Vocabulary enablement baseline: existing set checkbox plus schema/revision and technical prompt-preview content are visible together."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 1,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 1,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Scroll to Local vocabulary sets",
+        "Find Sets card",
+        "Check Enable this set for future utterances"
+      ],
+      "wrongTurns": 1,
+      "accessibilityObstacles": [
+        "The enable control is surrounded by set creation, deletion, revision, schema, and prompt-preview information."
+      ],
+      "qualitativeObservations": [
+        "Enablement works, but it is not presented as a compact list action."
+      ],
+      "qualitativeConfidence": "medium",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": true,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "add-custom-term",
+      "planTaskNumber": 4,
+      "title": "Add a custom term",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "add-custom-term",
+        "fileName": "04-add-custom-term.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/04-add-custom-term.png",
+        "sha256": "7ac77aee70bf78029c4f38dbddee77ca50757e8b6fbb65b0686f00719ca10719",
+        "bytes": 272262,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": 0,
+          "width": 1120,
+          "height": 2349
+        },
+        "committedToRepository": false,
+        "note": "Custom-term baseline uses synthetic text only. Basic and expert fields are all visible in the v0.5 editor."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 4,
+        "keystrokeCount": 26,
+        "wrongTurnCount": 1,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Open Local vocabulary sets",
+        "Fill Phrase",
+        "Fill Display form",
+        "Choose Language",
+        "Click Add entry"
+      ],
+      "wrongTurns": 1,
+      "accessibilityObstacles": [
+        "Advanced numeric and prompt fields are visible before most users need them."
+      ],
+      "qualitativeObservations": [
+        "The task can be completed, but the editor exposes expert fields in the default path."
+      ],
+      "qualitativeConfidence": "medium",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": true,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "create-model-begin-enrollment",
+      "planTaskNumber": 5,
+      "title": "Create a voice model and begin enrollment",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "create-model-begin-enrollment",
+        "fileName": "05-create-model-begin-enrollment.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/05-create-model-begin-enrollment.png",
+        "sha256": "f9775205bde8acc9c3ba7743a480f31a539d008969dbaf7c5f097935e7737108",
+        "bytes": 374495,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": -147,
+          "width": 1120,
+          "height": 3323
+        },
+        "committedToRepository": false,
+        "note": "Current create-model/enrollment entry is the microphone/enrollment panel rather than a focused model-creation route. Fake microphone input is used."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 2,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 2,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Use Personal Models navigation or scroll to Microphone panel",
+        "Start microphone check",
+        "Review enrollment recorder"
+      ],
+      "wrongTurns": 2,
+      "accessibilityObstacles": [
+        "Model creation, microphone calibration, and enrollment are not a one-question-per-screen flow."
+      ],
+      "qualitativeObservations": [
+        "The existing panel is capable but dense; a first-time user must infer that this is the model-creation entry."
+      ],
+      "qualitativeConfidence": "low",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "resume-enrollment",
+      "planTaskNumber": 6,
+      "title": "Resume an enrollment",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "resume-enrollment",
+        "fileName": "06-resume-enrollment.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/06-resume-enrollment.png",
+        "sha256": "0c280257f8703503b8a17b55fd012923b3c974a46564c7bdaaaa0d5019075bc0",
+        "bytes": 431113,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": -1364,
+          "width": 1120,
+          "height": 3627
+        },
+        "committedToRepository": false,
+        "note": "Enrollment resume baseline after reload. One synthetic fake-microphone take is accepted into local profile storage for evidence only."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 4,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 1,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Record one synthetic take",
+        "Analyze",
+        "Manually accept and save",
+        "Reload page",
+        "Confirm profile store resumed accepted takes"
+      ],
+      "wrongTurns": 1,
+      "accessibilityObstacles": [
+        "Resume state appears in a technical profile-storage section rather than a model workflow step."
+      ],
+      "qualitativeObservations": [
+        "Persistence works after reload, but the recovery affordance is not a focused enrollment screen."
+      ],
+      "qualitativeConfidence": "medium",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "begin-training",
+      "planTaskNumber": 7,
+      "title": "Begin training when ready",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "begin-training",
+        "fileName": "07-begin-training.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/07-begin-training.png",
+        "sha256": "7a8d1812635f673965919510f59e025c844d8caa0ad1c22bf845438acc742dd1",
+        "bytes": 348142,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": -393,
+          "width": 1120,
+          "height": 2196
+        },
+        "committedToRepository": false,
+        "note": "v0.5 training entry baseline is the browser training prototype/runtime panel with technical status visible by default."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 1,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 2,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Scroll to Model runtime and browser training",
+        "Click Run browser training prototype",
+        "Observe named progress phases"
+      ],
+      "wrongTurns": 2,
+      "accessibilityObstacles": [
+        "Training is mixed with runtime diagnostics and ORT spike details."
+      ],
+      "qualitativeObservations": [
+        "The prototype is keyboard-accessible and resumable, but its default context is highly technical."
+      ],
+      "qualitativeConfidence": "medium",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "interpret-candidate-result",
+      "planTaskNumber": 8,
+      "title": "Interpret a passing or failing candidate",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "interpret-candidate-result",
+        "fileName": "08-interpret-candidate-result.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/08-interpret-candidate-result.png",
+        "sha256": "6a50cb913bb5e8eed9e23261332ab610bdfceee51f76d7794cc3b42df91c0c45",
+        "bytes": 586158,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 160,
+          "y": -3496,
+          "width": 1120,
+          "height": 4396
+        },
+        "committedToRepository": false,
+        "note": "Candidate interpretation baseline: activation review/result interpretation is aggregate-only but spread across Personal Models and runtime sections."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 1,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 1,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Wait for synthetic browser-training completion",
+        "Refresh Personal Models",
+        "Review activation gates and rollback summary"
+      ],
+      "wrongTurns": 1,
+      "accessibilityObstacles": [
+        "Candidate interpretation is split between runtime status and Personal Models activation review."
+      ],
+      "qualitativeObservations": [
+        "Aggregate gate language exists, but v0.6 should provide an outcome-first result route."
+      ],
+      "qualitativeConfidence": "medium",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "export-personal-model",
+      "planTaskNumber": 9,
+      "title": "Export a personal model",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "export-personal-model",
+        "fileName": "09-export-personal-model.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/09-export-personal-model.png",
+        "sha256": "52b4373f0000d16d944981237ed61b954659a8ab3de5267e4a01f40a4cf8792f",
+        "bytes": 158300,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 202,
+          "y": -365,
+          "width": 1036,
+          "height": 1265
+        },
+        "committedToRepository": false,
+        "note": "Profile export baseline uses an explicit local download and labels the package as sensitive voice data."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 1,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 1,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Scroll to Enrollment profile storage",
+        "Click Export sensitive profile package",
+        "Confirm local download status"
+      ],
+      "wrongTurns": 1,
+      "accessibilityObstacles": [
+        "Export is available, but it is embedded in the microphone/enrollment panel rather than a focused export route."
+      ],
+      "qualitativeObservations": ["The sensitive-data warning is visible and accurate."],
+      "qualitativeConfidence": "high",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "import-personal-model",
+      "planTaskNumber": 10,
+      "title": "Import a personal model",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "import-personal-model",
+        "fileName": "10-import-personal-model.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/10-import-personal-model.png",
+        "sha256": "040b84c277700c5d9974c321a97c1bdf298935b0a8ea74fc4ffcb8e920eab93a",
+        "bytes": 157964,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 202,
+          "y": -365,
+          "width": 1036,
+          "height": 1265
+        },
+        "committedToRepository": false,
+        "note": "Profile import baseline validates checksums locally through the profile store worker; the exported file is synthetic fake-microphone evidence from this run."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 2,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 1,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Delete current synthetic profile for a clean import",
+        "Choose the exported profile package",
+        "Confirm checksum-verified import"
+      ],
+      "wrongTurns": 1,
+      "accessibilityObstacles": [
+        "Import uses a file input inside the dense profile-storage area rather than a dedicated step-by-step route."
+      ],
+      "qualitativeObservations": [
+        "Checksum validation is clear after completion; pre-validation steps are not separated."
+      ],
+      "qualitativeConfidence": "medium",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    },
+    {
+      "id": "delete-local-speech-data",
+      "planTaskNumber": 11,
+      "title": "Delete all local speech data",
+      "baselineRelease": "v0.5.0",
+      "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+      "evidenceMode": "local Playwright capture with fake microphone and synthetic profile/vocabulary data",
+      "screenshot": {
+        "taskId": "delete-local-speech-data",
+        "fileName": "11-delete-local-speech-data.png",
+        "localPath": "/tmp/speech-v0.6-baseline-212/screenshots/11-delete-local-speech-data.png",
+        "sha256": "6cc8e33bc4a1e95dbad3e6a6be7b664f532d758e31a6f64553cdc84c8d974f1a",
+        "bytes": 77227,
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "boundingBox": {
+          "x": 202,
+          "y": 0,
+          "width": 1036,
+          "height": 687
+        },
+        "committedToRepository": false,
+        "note": "v0.5 has profile-specific deletion here; no single task-first delete-all-local-speech-data route exists yet."
+      },
+      "metrics": {
+        "completionStatus": "completed-for-baseline-observation",
+        "pointerClickCount": 1,
+        "keystrokeCount": 0,
+        "wrongTurnCount": 2,
+        "countBasis": "Manual count from the shortest visible v0.5 path exercised by the local capture script; hover-only alternatives are not counted."
+      },
+      "completionPath": [
+        "Use profile-storage delete for the local profile",
+        "Confirm stored accepted takes return to zero"
+      ],
+      "wrongTurns": 2,
+      "accessibilityObstacles": [
+        "No single Storage/Privacy route gathers all local speech data deletion consequences."
+      ],
+      "qualitativeObservations": [
+        "Profile deletion works, but delete-all local speech data is distributed across panels and should move to a dedicated Storage/Privacy screen."
+      ],
+      "qualitativeConfidence": "low",
+      "privacy": {
+        "usesSyntheticAudio": true,
+        "usesSyntheticVocabulary": false,
+        "containsPrivateAudio": false,
+        "containsPrivateTranscript": false,
+        "containsPrivateVocabularyTerms": false,
+        "containsPrivateProfileData": false,
+        "telemetryOrRemoteAnalytics": false
+      }
+    }
+  ],
+  "aggregateBaseline": {
+    "taskCount": 11,
+    "totalPointerClicks": 19,
+    "totalKeystrokes": 28,
+    "totalWrongTurns": 13,
+    "tasksWithLowConfidence": 2,
+    "tasksWithMediumConfidence": 7,
+    "tasksWithHighConfidence": 2,
+    "notes": [
+      "Counts are a baseline observation of the current v0.5 stacked UI, not a usability-study result.",
+      "Screenshots use fake microphone input, a synthetic vocabulary term, and a synthetic exported profile created during the capture run.",
+      "No telemetry, remote analytics, private audio, private transcript, private vocabulary, or real profile data was used."
+    ]
+  },
+  "requiredV06FollowUps": [
+    "Replace the stacked single-page baseline with task-first routes before comparing final task-efficiency gates.",
+    "Use moderated participant evidence in later usability-study issues; this baseline is a local audit artifact only.",
+    "Keep screenshots or regenerated visual artifacts out of CI logs when they could contain user-provided transcripts or profile names."
+  ]
+}
