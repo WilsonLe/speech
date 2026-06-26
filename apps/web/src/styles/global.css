@@ -22,6 +22,19 @@
   box-sizing: border-box;
 }
 
+.sr-only {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -268,6 +281,7 @@ h2 {
 }
 
 .status-message {
+  overflow-wrap: anywhere;
   border-radius: 0.9rem;
   padding: 0.85rem 1rem;
   background: rgba(15, 23, 42, 0.72);
@@ -380,7 +394,8 @@ h2 {
 }
 
 .training-phase-list strong,
-.training-phase-list small {
+.training-phase-list small,
+.phase-status-label {
   display: block;
 }
 
@@ -388,10 +403,42 @@ h2 {
   color: #f8fafc;
 }
 
+.phase-status-label {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 0.4rem;
+  border-radius: 999px;
+  padding: 0.16rem 0.52rem;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.16);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.training-phase-list li[data-status='complete'] .phase-status-label,
+.training-phase-list li[data-status='active'] .phase-status-label {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.training-phase-list li[data-status='attention'] .phase-status-label {
+  color: #fde68a;
+  background: rgba(113, 63, 18, 0.2);
+}
+
+.training-phase-list li[data-status='blocked'] .phase-status-label {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.22);
+}
+
 .training-phase-list small {
   margin-top: 0.25rem;
   color: #cbd5e1;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .runtime-warnings {
@@ -1245,6 +1292,17 @@ button.danger,
 .roadmap-card span[data-status='scaffolded'] {
   color: #bbf7d0;
   background: rgba(34, 197, 94, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 @media (max-width: 760px) {

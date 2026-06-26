@@ -36,6 +36,9 @@ describe('browser training progress UI helpers', () => {
     expect(view.currentPhaseLabel).toBe('Training adapter epochs');
     expect(view.progressPercent).toBe(25);
     expect(view.progressValueText).toContain('epoch 40/160');
+    expect(view.liveRegionText).toContain('Training adapter epochs. Progress epoch 40/160');
+    expect(view.phaseTextEquivalent).toContain('Step 3 Train adapter epochs: active.');
+    expect(view.isBusy).toBe(true);
     expect(view.phases.map((phase) => phase.label)).toEqual([
       'Prepare worker',
       'Coordinate local lock',
@@ -77,6 +80,7 @@ describe('browser training progress UI helpers', () => {
       status: 'attention',
       detail: 'Reload recovery paused at epoch 8.',
     });
+    expect(view.liveRegionText).toContain('Reload recovery paused at epoch 8.');
     expect(JSON.stringify(view)).not.toContain(paused.checkpoint.checkpointId);
     expect(JSON.stringify(view)).not.toContain(paused.checkpoint.artifact.checksum);
   });
@@ -106,6 +110,23 @@ describe('browser training progress UI helpers', () => {
     });
   });
 
+  it('does not echo raw worker error messages into phase text equivalents', () => {
+    const view = buildBrowserTrainingProgressView({
+      status: { state: 'error', message: 'raw checkpoint path /private/checkpoint.ckpt' },
+      recovery: null,
+      coordination: null,
+      warnings: [],
+    });
+
+    expect(view.currentPhaseLabel).toBe('Training worker needs attention');
+    expect(view.phases.find((phase) => phase.id === 'train-adapter')).toMatchObject({
+      status: 'blocked',
+      detail:
+        'Training worker returned an error; review the alert message and retry after resolving it.',
+    });
+    expect(JSON.stringify(view)).not.toContain('/private/checkpoint.ckpt');
+  });
+
   it('uses sanitized resource guidance instead of raw runtime-warning messages', () => {
     const warnings: readonly BrowserTrainingRuntimeWarningV1[] = [
       {
@@ -127,6 +148,7 @@ describe('browser training progress UI helpers', () => {
     });
 
     expect(view.currentPhaseLabel).toBe('Pause requested at next safe checkpoint');
+    expect(view.liveRegionText).toContain('Pause requested.');
     expect(view.resourceWarnings).toContain(
       'ASR runtime activity can pause training at a cooperative checkpoint boundary.',
     );

@@ -56,6 +56,9 @@ export interface BrowserTrainingProgressViewV1 {
   readonly recovery: BrowserTrainingRecoveryViewV1;
   readonly resourceWarnings: readonly string[];
   readonly localOnlyDisclosure: string;
+  readonly liveRegionText: string;
+  readonly phaseTextEquivalent: string;
+  readonly isBusy: boolean;
   readonly privacy: {
     readonly aggregateOnly: true;
     readonly containsRawAudio: false;
@@ -87,22 +90,32 @@ export function buildBrowserTrainingProgressView({
   const result = status.state === 'complete' ? status.result : undefined;
   const progressPercent = calculateProgressPercent(status, recoveryView);
   const currentPhaseLabel = formatCurrentPhaseLabel(status, recoveryView, controlIntent);
+  const phases = [
+    buildPrepareWorkerPhase(status),
+    buildCoordinationPhase(status, coordination),
+    buildTrainingPhase(status, progress, result, controlIntent),
+    buildCheckpointPhase(status, recoveryView),
+    buildActivationGatePhase(status, result),
+  ];
+  const progressValueText = formatProgressValueText(status, progressPercent);
   return {
     currentPhaseLabel,
     progressPercent,
-    progressValueText: formatProgressValueText(status, progressPercent),
+    progressValueText,
     controlIntent,
-    phases: [
-      buildPrepareWorkerPhase(status),
-      buildCoordinationPhase(status, coordination),
-      buildTrainingPhase(status, progress, result, controlIntent),
-      buildCheckpointPhase(status, recoveryView),
-      buildActivationGatePhase(status, result),
-    ],
+    phases,
     recovery: recoveryView,
     resourceWarnings: summarizeBrowserTrainingResourceWarnings(warnings),
     localOnlyDisclosure:
       'Browser training runs in a dedicated local worker. Recovery checkpoints stay in this browser and are not activated personal models until import, checksum, compatibility, and regression gates pass.',
+    liveRegionText: buildBrowserTrainingLiveRegionText({
+      currentPhaseLabel,
+      progressValueText,
+      recovery: recoveryView,
+      controlIntent,
+    }),
+    phaseTextEquivalent: buildPhaseTextEquivalent(phases),
+    isBusy: status.state === 'training' || controlIntent !== 'none',
     privacy: {
       aggregateOnly: true,
       containsRawAudio: false,
@@ -274,7 +287,8 @@ function buildTrainingPhase(
       id: 'train-adapter',
       label: 'Train adapter epochs',
       status: 'blocked',
-      detail: status.message,
+      detail:
+        'Training worker returned an error; review the alert message and retry after resolving it.',
     };
   }
   if (status.state === 'training') {
@@ -398,6 +412,36 @@ function formatCurrentPhaseLabel(
     case 'cancelled':
       return 'Training cancelled with reload recovery';
   }
+}
+
+function buildBrowserTrainingLiveRegionText({
+  currentPhaseLabel,
+  progressValueText,
+  recovery,
+  controlIntent,
+}: {
+  readonly currentPhaseLabel: string;
+  readonly progressValueText: string;
+  readonly recovery: BrowserTrainingRecoveryViewV1;
+  readonly controlIntent: BrowserTrainingControlIntent;
+}): string {
+  const controlPrefix =
+    controlIntent === 'pause-requested'
+      ? 'Pause requested. '
+      : controlIntent === 'cancel-requested'
+        ? 'Cancel requested. '
+        : '';
+  const recoverySuffix = recovery.resumable ? ` ${recovery.label}` : '';
+  return `${controlPrefix}${currentPhaseLabel}. Progress ${progressValueText}.${recoverySuffix}`;
+}
+
+function buildPhaseTextEquivalent(phases: readonly BrowserTrainingPhaseViewV1[]): string {
+  return phases
+    .map(
+      (phase, index) =>
+        `Step ${(index + 1).toString()} ${phase.label}: ${phase.status}. ${phase.detail}`,
+    )
+    .join(' ');
 }
 
 function formatProgressValueText(status: BrowserTrainingUiStatus, percent: number): string {
