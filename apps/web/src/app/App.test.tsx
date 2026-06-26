@@ -12,6 +12,7 @@ describe('App', () => {
     expect(html).toContain('Local vocabulary sets');
     expect(html).toContain('Profile cards and local lifecycle');
     expect(html).toContain('Personal Models navigation');
+    expect(html).toContain('Browser personal-model readiness');
     expect(html).toContain('Personal model profile cards');
     expect(html).toContain('Offline readiness and model lifecycle');
     expect(html).toContain('Browser capability report');
