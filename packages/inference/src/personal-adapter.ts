@@ -1,11 +1,12 @@
 import {
-  parseSpeechProfileManifestV1,
+  parseSpeechProfileManifest,
   type GraphContract,
   type ModelIdentity,
+  type ProfileFileRef,
   type ResidualAdapterAdaptationV1,
   type ResidualAdapterInsertionPointContract,
   type SpeechModelManifestV2,
-  type SpeechProfileManifestV1,
+  type SpeechProfileManifest,
   type TensorContract,
   type TensorDataType,
 } from '@speech/protocol';
@@ -21,7 +22,7 @@ export interface LoadPersonalAdapterRuntimeOptions {
   readonly loadedRuntime: LoadedOnnxRuntimeWeb;
   readonly baseModelManifest: SpeechModelManifestV2;
   readonly activeBaseModel: ModelIdentity;
-  readonly profileManifest: SpeechProfileManifestV1 | unknown;
+  readonly profileManifest: SpeechProfileManifest | unknown;
   readonly adapterBytes: ArrayBuffer | Uint8Array;
   readonly sessionOptions?: OrtSessionOptions;
   readonly digest?: (bytes: ArrayBuffer) => Promise<string>;
@@ -71,7 +72,7 @@ export interface PersonalAdapterBenchmarkResult {
 export async function loadPersonalAdapterRuntime(
   options: LoadPersonalAdapterRuntimeOptions,
 ): Promise<LoadedPersonalAdapterRuntime> {
-  const profileManifest = parseSpeechProfileManifestV1(options.profileManifest);
+  const profileManifest = parseSpeechProfileManifest(options.profileManifest);
   const adapterBytes = toOwnedUint8Array(options.adapterBytes);
   const adaptation = residualAdapterAdaptation(profileManifest);
   const adapterSha256 = await digestAdapterBytes(adapterBytes, options.digest);
@@ -181,12 +182,12 @@ export async function disposePersonalAdapterRuntime(
 }
 
 function validatePersonalAdapterCompatibility(input: {
-  readonly profileManifest: SpeechProfileManifestV1;
+  readonly profileManifest: SpeechProfileManifest;
   readonly baseModelManifest: SpeechModelManifestV2;
   readonly activeBaseModel: ModelIdentity;
   readonly adapterSha256: string;
   readonly adapterSizeBytes: number;
-}): SpeechProfileManifestV1['adaptation']['files'][string] {
+}): ProfileFileRef {
   const { profileManifest, baseModelManifest, activeBaseModel } = input;
   const adaptation = residualAdapterAdaptation(profileManifest);
   assertBaseModelIdentity(profileManifest.baseModel, activeBaseModel);
@@ -241,7 +242,7 @@ function validatePersonalAdapterCompatibility(input: {
 }
 
 function residualAdapterAdaptation(
-  profileManifest: SpeechProfileManifestV1,
+  profileManifest: SpeechProfileManifest,
 ): ResidualAdapterAdaptationV1 {
   if (profileManifest.adaptation.type !== 'residual-adapter') {
     throw new Error('Only residual-adapter profiles can be loaded into the adapter runtime.');
@@ -263,7 +264,7 @@ function assertBaseModelIdentity(actual: ModelIdentity, expected: ModelIdentity)
 }
 
 function validateInsertionPointBindings(
-  profileManifest: SpeechProfileManifestV1,
+  profileManifest: SpeechProfileManifest,
   insertionPoints: readonly ResidualAdapterInsertionPointContract[],
   graph: GraphContract,
 ): void {

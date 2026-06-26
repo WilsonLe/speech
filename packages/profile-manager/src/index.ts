@@ -25,11 +25,15 @@ import {
   type LogMelFeatureConfig,
   type ResolvedLogMelFeatureConfig,
 } from '@speech/features';
-import type {
-  ExactBaseModelIdentityV1,
-  ProfileFileRef,
-  VocabularyRevisionV1,
-  VocabularyStoreSnapshotV1,
+import {
+  migrateSpeechProfileManifestV1ToV2,
+  parseSpeechProfileManifest,
+  parseSpeechProfileManifestV2,
+  type ExactBaseModelIdentityV1,
+  type ProfileFileRef,
+  type SpeechProfileManifestV2,
+  type VocabularyRevisionV1,
+  type VocabularyStoreSnapshotV1,
 } from '@speech/protocol';
 import {
   validatePortableSpeechModelManifestV1,
@@ -336,6 +340,59 @@ export interface PortableSpeechModelImportSummaryV1 {
     readonly containsCheckpoints: false;
     readonly containsAdapterWeights: false;
     readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
+}
+
+export type SpeechProfileManifestMigrationStatusV1 =
+  | 'migrated'
+  | 'recovered-existing-v2'
+  | 'already-v2'
+  | 'replaced-invalid-v2';
+
+export interface MigrateSpeechProfileManifestToV2Input {
+  readonly profileId: string;
+  readonly sourcePath?: readonly string[];
+  readonly targetPath?: readonly string[];
+}
+
+export interface SpeechProfileManifestMigrationResultV1 {
+  readonly schemaVersion: 1;
+  readonly migrationType: 'speech-profile-manifest-v1-to-v2';
+  readonly status: SpeechProfileManifestMigrationStatusV1;
+  readonly migratedAt: string;
+  readonly sourceSchemaVersion: 1 | 2;
+  readonly targetSchemaVersion: 2;
+  readonly manifest: {
+    readonly adaptationType: SpeechProfileManifestV2['adaptation']['type'];
+    readonly baseModel: {
+      readonly id: string;
+      readonly version: string;
+    };
+    readonly languageCount: number;
+    readonly activationGatePassed: boolean;
+    readonly warningCount: number;
+    readonly cliResidualAdapterPreserved: boolean;
+  };
+  readonly recovery: {
+    readonly deletedTemporaryFiles: number;
+    readonly reusedExistingV2: boolean;
+    readonly replacedInvalidV2: boolean;
+  };
+  readonly downgrade: {
+    readonly v1ManifestRetained: boolean;
+    readonly v2ManifestFileName: 'profile.v2.json';
+  };
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsRawProfileId: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly exposesStoragePaths: false;
     readonly localOnly: true;
   };
 }
@@ -1494,6 +1551,99 @@ export class EnrollmentProfileStore {
     bundleId: string,
   ): Promise<PortableSpeechModelImportRecordV1 | undefined> {
     return this.readPortableSpeechModelImportRecord(normalizeSegment(bundleId, 'portableBundleId'));
+  }
+
+  async migrateSpeechProfileManifestToV2(
+    input: MigrateSpeechProfileManifestToV2Input,
+  ): Promise<SpeechProfileManifestMigrationResultV1> {
+    const profileId = normalizeSegment(input.profileId, 'profileId');
+    const sourcePath = normalizeSpeechProfileMigrationPath(
+      input.sourcePath ?? speechProfileManifestV1Path(profileId),
+      'sourcePath',
+      'profile.json',
+    );
+    const targetPath = normalizeSpeechProfileMigrationPath(
+      input.targetPath ?? speechProfileManifestV2Path(profileId),
+      'targetPath',
+      'profile.v2.json',
+    );
+    if (pathToPortableString(sourcePath) === pathToPortableString(targetPath)) {
+      throw new Error('Speech profile migration source and target paths must be different.');
+    }
+
+    const deletedTemporaryFiles = await cleanupSpeechProfileMigrationTemps(
+      this.backend,
+      targetPath,
+    );
+    const targetBytes = await this.backend.getFile(targetPath);
+    let invalidTargetPresent = false;
+    if (targetBytes !== undefined) {
+      let existingV2: SpeechProfileManifestV2 | undefined;
+      try {
+        existingV2 = parseSpeechProfileManifestV2(parseJson<unknown>(targetBytes));
+      } catch {
+        invalidTargetPresent = true;
+      }
+      if (existingV2 !== undefined) {
+        const sourceBytes = await this.backend.getFile(sourcePath);
+        let sourceSchemaVersion: 1 | 2 = 2;
+        let v1ManifestRetained = false;
+        if (sourceBytes !== undefined) {
+          try {
+            sourceSchemaVersion = parseSpeechProfileManifest(
+              parseJson<unknown>(sourceBytes),
+            ).schemaVersion;
+            v1ManifestRetained = sourceSchemaVersion === 1;
+          } catch {
+            sourceSchemaVersion = 2;
+          }
+        }
+        return summarizeSpeechProfileManifestMigration({
+          status: 'recovered-existing-v2',
+          migratedAt: this.options.now?.() ?? new Date().toISOString(),
+          sourceSchemaVersion,
+          manifest: existingV2,
+          deletedTemporaryFiles,
+          reusedExistingV2: true,
+          replacedInvalidV2: false,
+          v1ManifestRetained,
+        });
+      }
+    }
+
+    const sourceBytes = await this.backend.getFile(sourcePath);
+    if (sourceBytes === undefined) {
+      throw new Error('Speech profile migration source profile.json is missing.');
+    }
+    const sourceManifest = parseSpeechProfileManifest(parseJson<unknown>(sourceBytes));
+    if (sourceManifest.schemaVersion === 2) {
+      return summarizeSpeechProfileManifestMigration({
+        status: 'already-v2',
+        migratedAt: this.options.now?.() ?? new Date().toISOString(),
+        sourceSchemaVersion: 2,
+        manifest: sourceManifest,
+        deletedTemporaryFiles,
+        reusedExistingV2: false,
+        replacedInvalidV2: false,
+        v1ManifestRetained: false,
+      });
+    }
+
+    const migrated = migrateSpeechProfileManifestV1ToV2(sourceManifest);
+    await writeJsonAtomically(this.backend, targetPath, migrated);
+    const verifiedTarget = parseSpeechProfileManifestV2(
+      parseJson<unknown>(await readRequiredProfileFile(this.backend, targetPath)),
+    );
+    return summarizeSpeechProfileManifestMigration({
+      status: invalidTargetPresent ? 'replaced-invalid-v2' : 'migrated',
+      migratedAt: this.options.now?.() ?? new Date().toISOString(),
+      sourceSchemaVersion: 1,
+      manifest: verifiedTarget,
+      deletedTemporaryFiles,
+      reusedExistingV2: false,
+      replacedInvalidV2: invalidTargetPresent,
+      v1ManifestRetained: (await this.backend.getFile(sourcePath)) !== undefined,
+    });
   }
 
   async freezeTrainingJobRevision(
@@ -3405,7 +3555,7 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, multi-profile import/dedupe/naming, atomic portable model imports, activation-review guarded enables, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
+    'Private profile storage, multi-profile import/dedupe/naming, atomic portable model imports, SpeechProfileManifest V1-to-V2 migration recovery, activation-review guarded enables, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
 };
 
 type ResolvedEnrollmentProfileImportMode = EnrollmentProfileImportMode | 'legacy';
@@ -3428,6 +3578,62 @@ function createProfileImportResultPrivacy(): EnrollmentProfileImportResultV1['pr
     containsAdapterWeights: false,
     containsPrivateVocabularyTerms: false,
     localOnly: true,
+  };
+}
+
+function createSpeechProfileMigrationPrivacy(): SpeechProfileManifestMigrationResultV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsRawProfileId: false,
+    containsFeatureTensors: false,
+    containsCheckpoints: false,
+    containsAdapterWeights: false,
+    containsPrivateVocabularyTerms: false,
+    exposesStoragePaths: false,
+    localOnly: true,
+  };
+}
+
+function summarizeSpeechProfileManifestMigration(input: {
+  readonly status: SpeechProfileManifestMigrationStatusV1;
+  readonly migratedAt: string;
+  readonly sourceSchemaVersion: 1 | 2;
+  readonly manifest: SpeechProfileManifestV2;
+  readonly deletedTemporaryFiles: number;
+  readonly reusedExistingV2: boolean;
+  readonly replacedInvalidV2: boolean;
+  readonly v1ManifestRetained: boolean;
+}): SpeechProfileManifestMigrationResultV1 {
+  return {
+    schemaVersion: 1,
+    migrationType: 'speech-profile-manifest-v1-to-v2',
+    status: input.status,
+    migratedAt: input.migratedAt,
+    sourceSchemaVersion: input.sourceSchemaVersion,
+    targetSchemaVersion: 2,
+    manifest: {
+      adaptationType: input.manifest.adaptation.type,
+      baseModel: {
+        id: input.manifest.baseModel.id,
+        version: input.manifest.baseModel.version,
+      },
+      languageCount: input.manifest.languages.length,
+      activationGatePassed: input.manifest.evaluation.activationGatePassed,
+      warningCount: input.manifest.evaluation.warnings.length,
+      cliResidualAdapterPreserved: input.manifest.adaptation.type === 'residual-adapter',
+    },
+    recovery: {
+      deletedTemporaryFiles: input.deletedTemporaryFiles,
+      reusedExistingV2: input.reusedExistingV2,
+      replacedInvalidV2: input.replacedInvalidV2,
+    },
+    downgrade: {
+      v1ManifestRetained: input.v1ManifestRetained,
+      v2ManifestFileName: 'profile.v2.json',
+    },
+    privacy: createSpeechProfileMigrationPrivacy(),
   };
 }
 
@@ -3652,6 +3858,45 @@ function profilePath(profileId: string, ...segments: readonly string[]): string[
     normalizeSegment(profileId, 'profileId'),
     ...segments.map((segment) => normalizeSegment(segment, 'profilePath')),
   ];
+}
+
+function speechProfileManifestV1Path(profileId: string): string[] {
+  return profilePath(profileId, 'profile.json');
+}
+
+function speechProfileManifestV2Path(profileId: string): string[] {
+  return profilePath(profileId, 'profile.v2.json');
+}
+
+function normalizeSpeechProfileMigrationPath(
+  path: readonly string[],
+  fieldName: string,
+  requiredFileName: 'profile.json' | 'profile.v2.json',
+): string[] {
+  const normalizedPath = normalizePath(path);
+  const fileName = normalizedPath[normalizedPath.length - 1];
+  if (fileName !== requiredFileName) {
+    throw new Error(`${fieldName} must end with ${requiredFileName}.`);
+  }
+  return normalizedPath;
+}
+
+async function cleanupSpeechProfileMigrationTemps(
+  backend: ProfileStorageBackend,
+  targetPath: readonly string[],
+): Promise<number> {
+  const parentPath = targetPath.slice(0, -1);
+  const fileName = targetPath[targetPath.length - 1];
+  if (fileName === undefined) return 0;
+  let deleted = 0;
+  for (const file of await backend.listFiles(parentPath)) {
+    if (file.path.length !== targetPath.length) continue;
+    const candidate = file.path[file.path.length - 1];
+    if (candidate !== undefined && candidate.startsWith(`${fileName}.tmp-`)) {
+      if (await backend.deleteFile(file.path)) deleted += 1;
+    }
+  }
+  return deleted;
 }
 
 function profileLifecyclePath(...segments: readonly string[]): string[] {

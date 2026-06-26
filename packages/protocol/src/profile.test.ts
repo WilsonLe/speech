@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   migrateSpeechProfileManifestV1ToV2,
@@ -13,6 +14,13 @@ import {
   type SpeechProfileManifestV1,
   type SpeechProfileManifestV2,
 } from './profile';
+
+const v040Fixture = JSON.parse(
+  readFileSync(
+    new URL('../../../test-data/expected/speech-profile-v1-v0.4.0.json', import.meta.url),
+    'utf8',
+  ),
+) as SpeechProfileManifestV1;
 
 const sha = 'a'.repeat(64);
 const baseModel = {
@@ -321,6 +329,18 @@ describe('speech profile manifest v2 and migration', () => {
     expect(v2.baseModel).toEqual(v1.baseModel);
     expect(v2.evaluation).toEqual(v1.evaluation);
     expect(validateSpeechProfileManifestV2(v2)).toEqual({ ok: true, errors: [] });
+  });
+
+  it('migrates the synthetic v0.4.0 residual-adapter fixture without changing adaptation metadata', () => {
+    expect(validateSpeechProfileManifestV1(v040Fixture)).toEqual({ ok: true, errors: [] });
+
+    const migrated = migrateSpeechProfileManifestV1ToV2(v040Fixture);
+
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.adaptation).toBe(v040Fixture.adaptation);
+    expect(migrated.baseModel.version).toBe('0.4.0');
+    expect(migrated.evaluation.activationGatePassed).toBe(true);
+    expect(validateSpeechProfileManifestV2(migrated)).toEqual({ ok: true, errors: [] });
   });
 
   it('refuses to migrate an invalid V1 manifest', () => {

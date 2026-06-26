@@ -11,3 +11,7 @@ Do not add private recordings, production corpora, unknown-license audio, or gen
 ## Synthetic enrollment sentence-bank fixture
 
 `test-data/expected/enrollment-sentence-bank.json` contains project-authored prompt text used to validate the enrollment sentence-bank schema. It contains no recordings, corpus excerpts, private transcripts, production model output, or user enrollment data, and is distributed under the repository's Apache-2.0 code license.
+
+## Synthetic v0.4.0 speech profile fixture
+
+`test-data/expected/speech-profile-v1-v0.4.0.json` is a hand-authored synthetic `SpeechProfileManifestV1` residual-adapter manifest used to validate V1-to-V2 migration behavior. It contains no recordings, transcript text, feature tensors, checkpoints, adapter bytes, production model output, private vocabulary, or user profile data, and is distributed under the repository's Apache-2.0 code license.

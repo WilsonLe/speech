@@ -16,6 +16,7 @@ import {
   type EnrollmentUtteranceV1,
   type ProfileStorageBackend,
   type ProfileStorageBackendKind,
+  type SpeechProfileManifestMigrationResultV1,
   type TrainingJobPromptIdentitySplitSummaryV1,
   type TrainingJobRevisionSummaryV1,
   type PortableSpeechModelImportSmokeContextV1,
@@ -49,6 +50,13 @@ export type ProfileStoreWorkerRequest =
     }
   | { readonly type: 'ROLLBACK_PROFILE'; readonly requestId: string }
   | { readonly type: 'EXPORT_PROFILE'; readonly requestId: string; readonly profileId: string }
+  | {
+      readonly type: 'MIGRATE_SPEECH_PROFILE_MANIFEST_TO_V2';
+      readonly requestId: string;
+      readonly profileId: string;
+      readonly sourcePath?: readonly string[];
+      readonly targetPath?: readonly string[];
+    }
   | {
       readonly type: 'IMPORT_PROFILE';
       readonly requestId: string;
@@ -182,6 +190,14 @@ export type ProfileStoreWorkerResponse =
       readonly summary: PortableSpeechModelImportSummaryV1;
     }
   | {
+      readonly type: 'PROFILE_STORE_SPEECH_PROFILE_MIGRATION_COMPLETE';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly migration: SpeechProfileManifestMigrationResultV1;
+    }
+  | {
       readonly type: 'PROFILE_STORE_TRAINING_JOB_FROZEN';
       readonly requestId: string;
       readonly backendKind: ProfileStorageBackendKind;
@@ -301,6 +317,23 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
           persistentStorageGranted,
           activeState: await store.getActiveProfileState(),
           profilePackage: await store.exportProfile(message.profileId),
+        });
+        return;
+      }
+      case 'MIGRATE_SPEECH_PROFILE_MANIFEST_TO_V2': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const migration = await store.migrateSpeechProfileManifestToV2({
+          profileId: message.profileId,
+          ...(message.sourcePath === undefined ? {} : { sourcePath: message.sourcePath }),
+          ...(message.targetPath === undefined ? {} : { targetPath: message.targetPath }),
+        });
+        post({
+          type: 'PROFILE_STORE_SPEECH_PROFILE_MIGRATION_COMPLETE',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          migration,
         });
         return;
       }

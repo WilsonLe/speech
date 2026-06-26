@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "id": "profile-v0-4-fixture",
+  "displayName": "Synthetic v0.4.0 residual adapter",
+  "createdAt": "2026-06-24T00:00:00.000Z",
+  "updatedAt": "2026-06-24T00:00:00.000Z",
+  "baseModel": {
+    "id": "mock-vi-en-rnnt",
+    "version": "0.4.0",
+    "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "graphContractSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "languages": ["vi", "en"],
+  "enrollment": {
+    "acceptedUtterances": 12,
+    "acceptedSeconds": 38.4,
+    "languageCounts": {
+      "vi": 5,
+      "en": 4,
+      "mixed": 3
+    },
+    "voiceConditionCounts": {
+      "normal": 8,
+      "projected": 4
+    },
+    "sentenceBankVersion": "synthetic-v0.4.0-fixture"
+  },
+  "vocabularyRevision": 3,
+  "adaptation": {
+    "type": "residual-adapter",
+    "contractVersion": 1,
+    "files": {
+      "adapterGraph": {
+        "path": "profiles/profile-v0-4-fixture/adapters/adapter.onnx",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "sizeBytes": 4096,
+        "mediaType": "application/onnx"
+      }
+    },
+    "adapter": {
+      "graphFileKey": "adapterGraph",
+      "graphContractSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parameterCount": 2048,
+      "maxParameters": 524288,
+      "precision": "float32",
+      "insertionPointIds": ["encoder-block-11"],
+      "application": "residual-add",
+      "activationSwap": "utterance-boundary"
+    },
+    "training": {
+      "runtime": "python-profile-trainer",
+      "trainerVersion": "0.4.0",
+      "configSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "profilePackageSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "baseModelSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "randomSeed": 17
+    }
+  },
+  "evaluation": {
+    "baseMetrics": {
+      "wer": 0.12,
+      "cer": 0.04,
+      "customTermRecall": 0.7,
+      "falseInsertionsPer100Utterances": 1.2,
+      "realTimeFactor": 0.11
+    },
+    "adaptedMetrics": {
+      "wer": 0.08,
+      "cer": 0.03,
+      "customTermRecall": 0.9,
+      "falseInsertionsPer100Utterances": 1.1,
+      "realTimeFactor": 0.12
+    },
+    "activationGatePassed": true,
+    "warnings": []
+  },
+  "privacy": {
+    "containsRawAudio": false,
+    "exportEncrypted": false
+  }
+}
