@@ -2,7 +2,7 @@
   "name": "@speech/personalization",
   "version": "0.1.0",
   "private": true,
-  "description": "Speaker profile, personal/anchor evaluation, activation decisions, adapter runtime, browser-vs-Python comparison, and residual/LHUC personalization contracts.",
+  "description": "Speaker profile, personal/anchor evaluation, bilingual cohort release gates, activation decisions, adapter runtime, browser-vs-Python comparison, and residual/LHUC personalization contracts.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
