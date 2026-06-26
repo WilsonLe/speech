@@ -5,6 +5,7 @@ import type {
   EnrollmentProfileExportPackageV1,
   EnrollmentProfileSummaryV1,
   EnrollmentUtteranceV1,
+  PortableSpeechModelImportSummaryV1,
   ProfileStorageBackendKind,
   TrainingJobPromptIdentitySplitSummaryV1,
   TrainingJobRevisionSummaryV1,
@@ -16,7 +17,7 @@ import type {
   EnrollmentVoiceCondition,
   PromptIdentitySplitConfigV1,
 } from '@speech/enrollment';
-import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
+import type { ExactBaseModelIdentityV1, VocabularyStoreSnapshotV1 } from '@speech/protocol';
 import profileStoreWorkerUrl from './profile-store.worker.ts?worker&url';
 import type { ProfileStoreWorkerRequest, ProfileStoreWorkerResponse } from './profile-store.worker';
 
@@ -47,6 +48,10 @@ export interface ProfileStoreExportResult extends ProfileStoreActiveResult {
 
 export interface ProfileStoreImportResult extends ProfileStoreActiveResult {
   readonly summary: EnrollmentProfileSummaryV1;
+}
+
+export interface ProfileStorePortableImportResult extends ProfileStoreActiveResult {
+  readonly summary: PortableSpeechModelImportSummaryV1;
 }
 
 export interface ProfileStoreTrainingJobFreezeResult extends ProfileStoreActiveResult {
@@ -111,6 +116,15 @@ export interface BuildTrainingJobPromptSplitOptions {
 export interface ImportProfileOptions {
   readonly profilePackage: EnrollmentProfileExportPackageV1;
   readonly overwriteExisting?: boolean;
+  readonly timeoutMs?: number;
+}
+
+export interface ImportPortableSpeechModelOptions {
+  readonly envelopeBytes: ArrayBuffer;
+  readonly expectedBaseModel: ExactBaseModelIdentityV1;
+  readonly passphrase?: string;
+  readonly overwriteExisting?: boolean;
+  readonly importId?: string;
   readonly timeoutMs?: number;
 }
 
@@ -231,6 +245,33 @@ export function importEnrollmentProfile(
       summary: response.summary,
     };
   });
+}
+
+export function importPortableSpeechModel(
+  options: ImportPortableSpeechModelOptions,
+): Promise<ProfileStorePortableImportResult> {
+  const message: ProfileStoreWorkerRequest = {
+    type: 'IMPORT_PORTABLE_SPEECH_MODEL',
+    requestId: createRequestId('portable-import'),
+    envelopeBytes: options.envelopeBytes,
+    expectedBaseModel: options.expectedBaseModel,
+    overwriteExisting: options.overwriteExisting ?? false,
+    ...(options.passphrase === undefined ? {} : { passphrase: options.passphrase }),
+    ...(options.importId === undefined ? {} : { importId: options.importId }),
+  };
+  return requestProfileStore(message, options.timeoutMs, [message.envelopeBytes]).then(
+    (response) => {
+      if (response.type !== 'PROFILE_STORE_PORTABLE_IMPORT_COMPLETE') {
+        throw new Error(`Unexpected profile-store response: ${response.type}`);
+      }
+      return {
+        backendKind: response.backendKind,
+        persistentStorageGranted: response.persistentStorageGranted,
+        activeState: response.activeState,
+        summary: response.summary,
+      };
+    },
+  );
 }
 
 export function saveAcceptedEnrollmentTake(

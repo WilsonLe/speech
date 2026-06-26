@@ -15,9 +15,13 @@ import {
   type ProfileStorageBackendKind,
   type TrainingJobPromptIdentitySplitSummaryV1,
   type TrainingJobRevisionSummaryV1,
+  type PortableSpeechModelImportSmokeContextV1,
+  type PortableSpeechModelImportSmokeResultV1,
+  type PortableSpeechModelImportSummaryV1,
   type TrainingJobRevisionVerificationResultV1,
 } from '@speech/profile-manager';
-import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
+import { importPortableSpeechModelArchive } from '@speech/portable-model';
+import type { ExactBaseModelIdentityV1, VocabularyStoreSnapshotV1 } from '@speech/protocol';
 import type {
   EnrollmentQualityReportV1,
   EnrollmentSentenceLanguage,
@@ -40,6 +44,15 @@ export type ProfileStoreWorkerRequest =
       readonly requestId: string;
       readonly profilePackage: EnrollmentProfileExportPackageV1;
       readonly overwriteExisting: boolean;
+    }
+  | {
+      readonly type: 'IMPORT_PORTABLE_SPEECH_MODEL';
+      readonly requestId: string;
+      readonly envelopeBytes: ArrayBuffer;
+      readonly expectedBaseModel: ExactBaseModelIdentityV1;
+      readonly passphrase?: string;
+      readonly overwriteExisting: boolean;
+      readonly importId?: string;
     }
   | {
       readonly type: 'SAVE_ACCEPTED_TAKE';
@@ -129,6 +142,14 @@ export type ProfileStoreWorkerResponse =
       readonly persistentStorageGranted: boolean;
       readonly activeState: ActiveEnrollmentProfileStateV1;
       readonly summary: EnrollmentProfileSummaryV1;
+    }
+  | {
+      readonly type: 'PROFILE_STORE_PORTABLE_IMPORT_COMPLETE';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly summary: PortableSpeechModelImportSummaryV1;
     }
   | {
       readonly type: 'PROFILE_STORE_TRAINING_JOB_FROZEN';
@@ -233,6 +254,29 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
         });
         post({
           type: 'PROFILE_STORE_IMPORT_COMPLETE',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          summary,
+        });
+        return;
+      }
+      case 'IMPORT_PORTABLE_SPEECH_MODEL': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const archive = await importPortableSpeechModelArchive(
+          new Uint8Array(message.envelopeBytes),
+          message.passphrase === undefined ? {} : { passphrase: message.passphrase },
+        );
+        const summary = await store.importPortableSpeechModel({
+          archive,
+          expectedBaseModel: message.expectedBaseModel,
+          overwriteExisting: message.overwriteExisting,
+          ...(message.importId === undefined ? {} : { importId: message.importId }),
+          smokeTest: runPortableSpeechModelImportSmoke,
+        });
+        post({
+          type: 'PROFILE_STORE_PORTABLE_IMPORT_COMPLETE',
           requestId: message.requestId,
           backendKind,
           persistentStorageGranted,
@@ -378,6 +422,38 @@ async function getBackend(): Promise<ProfileStorageBackend> {
 async function getPersistentStorageGranted(): Promise<boolean> {
   persistentStoragePromise ??= requestPersistentProfileStorage();
   return persistentStoragePromise;
+}
+
+async function runPortableSpeechModelImportSmoke(
+  context: PortableSpeechModelImportSmokeContextV1,
+): Promise<PortableSpeechModelImportSmokeResultV1> {
+  for (const vector of context.testVectors) {
+    const bytes = await context.readStagedFile(vector.path);
+    if (bytes.byteLength !== vector.sizeBytes) {
+      throw new Error('Portable speech model runtime smoke vector size does not match metadata.');
+    }
+    if (vector.mediaType === 'application/json') {
+      JSON.parse(new TextDecoder().decode(bytes));
+    }
+  }
+  return {
+    schemaVersion: 1,
+    smokeType: 'portable-speechmodel-import-runtime-smoke',
+    status: 'passed',
+    vectorCount: context.testVectors.length,
+    checkedAt: new Date().toISOString(),
+    warnings: [],
+    privacy: {
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      containsPrivateVocabularyTerms: false,
+      localOnly: true,
+    },
+  };
 }
 
 function post(message: ProfileStoreWorkerResponse): void {

@@ -68,6 +68,9 @@ importers:
       '@speech/personalization':
         specifier: workspace:*
         version: link:../../packages/personalization
+      '@speech/portable-model':
+        specifier: workspace:*
+        version: link:../../packages/portable-model
       '@speech/profile-manager':
         specifier: workspace:*
         version: link:../../packages/profile-manager
@@ -186,6 +189,9 @@ importers:
       '@speech/features':
         specifier: workspace:*
         version: link:../features
+      '@speech/portable-model':
+        specifier: workspace:*
+        version: link:../portable-model
       '@speech/protocol':
         specifier: workspace:*
         version: link:../protocol
