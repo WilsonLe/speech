@@ -1,5 +1,6 @@
 export * from './adapter-comparison';
 export * from './browser-training';
+export * from './personal-anchor-evaluation';
 export * from './residual-bottleneck-lhuc';
 
 import type {
@@ -540,7 +541,7 @@ export const packageInfo: PersonalizationPackageInfo = {
   name: '@speech/personalization',
   status: 'active',
   description:
-    'Speaker profile, held-out evaluation, residual/LHUC adapter reference math, adapter runtime, and browser-vs-Python comparison contracts.',
+    'Speaker profile, held-out and personal/anchor evaluation, residual/LHUC adapter reference math, adapter runtime, and browser-vs-Python comparison contracts.',
 };
 
 type HeldOutCaseVariant = 'base' | 'profile';
