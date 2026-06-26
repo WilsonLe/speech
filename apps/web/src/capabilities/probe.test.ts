@@ -18,8 +18,11 @@ function makeEnv(overrides: Partial<CapabilityProbeEnvironment> = {}): Capabilit
     hasAtomics: true,
     hasAudioWorklet: true,
     hasWebWorkers: true,
+    hasBroadcastChannel: true,
+    hasLocalStorage: true,
     navigator: {
       mediaDevices: { getUserMedia: () => undefined },
+      locks: { request: () => undefined },
       storage: {
         persisted: async () => true,
         persist: async () => true,
@@ -47,6 +50,11 @@ describe('capability probing', () => {
     expect(report.recommendedProvider).toBe('webgpu');
     expect(report.webGpu).toMatchObject({ adapterAvailable: true, deviceAvailable: true });
     expect(report.storage).toMatchObject({ persisted: true, quotaBytes: 1024, usageBytes: 256 });
+    expect(report.browserTraining).toEqual({
+      webLocks: true,
+      broadcastChannel: true,
+      localStorage: true,
+    });
   });
 
   it('falls back to Tier C when cross-origin isolation is missing', async () => {
@@ -59,6 +67,44 @@ describe('capability probing', () => {
     expect(report.recommendedProvider).toBe('webgpu');
     expect(report.warnings).toContain(
       'Cross-origin isolation or SharedArrayBuffer is unavailable; using transferable buffers.',
+    );
+  });
+
+  it('warns when browser-training coordination and recovery APIs are missing', async () => {
+    const report = await probeRuntimeCapabilities(
+      benchmark,
+      makeEnv({
+        hasBroadcastChannel: false,
+        hasLocalStorage: false,
+        navigator: {
+          mediaDevices: { getUserMedia: () => undefined },
+          storage: {
+            persisted: async () => true,
+            persist: async () => true,
+            estimate: async () => ({ quota: 1024, usage: 256 }),
+          },
+          gpu: {
+            requestAdapter: async () => ({
+              requestDevice: async () => ({ destroy: () => undefined }),
+            }),
+          },
+        },
+      }),
+    );
+
+    expect(report.browserTraining).toEqual({
+      webLocks: false,
+      broadcastChannel: false,
+      localStorage: false,
+    });
+    expect(report.warnings).toContain(
+      'Web Locks API unavailable; cross-tab training coordination will use warnings only.',
+    );
+    expect(report.warnings).toContain(
+      'BroadcastChannel unavailable; cross-tab training status will not sync live.',
+    );
+    expect(report.warnings).toContain(
+      'localStorage unavailable; browser-training recovery checkpoints cannot persist.',
     );
   });
 

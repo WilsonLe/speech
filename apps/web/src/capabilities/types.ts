@@ -24,6 +24,12 @@ export interface WorkerBenchmarkResult {
   readonly error?: string;
 }
 
+export interface BrowserTrainingCapabilityDetails {
+  readonly webLocks: boolean;
+  readonly broadcastChannel: boolean;
+  readonly localStorage: boolean;
+}
+
 export interface CapabilityReport {
   readonly generatedAt: string;
   readonly capabilities: RuntimeCapabilities;
@@ -31,6 +37,7 @@ export interface CapabilityReport {
   readonly storage: StorageCapabilityDetails;
   readonly webGpu: WebGpuCapabilityDetails;
   readonly workerBenchmark: WorkerBenchmarkResult;
+  readonly browserTraining: BrowserTrainingCapabilityDetails;
   readonly warnings: readonly string[];
 }
 
@@ -61,10 +68,15 @@ export interface GpuLike {
   requestAdapter: () => Promise<GpuAdapterLike | null>;
 }
 
+export interface LockManagerLike {
+  request?: unknown;
+}
+
 export interface NavigatorCapabilityLike {
   readonly mediaDevices?: MediaDevicesLike;
   readonly storage?: StorageManagerLike;
   readonly gpu?: GpuLike;
+  readonly locks?: LockManagerLike;
 }
 
 export interface CapabilityProbeEnvironment {
@@ -74,6 +86,8 @@ export interface CapabilityProbeEnvironment {
   readonly hasAtomics: boolean;
   readonly hasAudioWorklet: boolean;
   readonly hasWebWorkers: boolean;
+  readonly hasBroadcastChannel: boolean;
+  readonly hasLocalStorage: boolean;
   readonly navigator?: NavigatorCapabilityLike;
   readonly detectWebAssemblySimd: () => Promise<boolean>;
   readonly detectWebAssemblyThreads: () => Promise<boolean>;

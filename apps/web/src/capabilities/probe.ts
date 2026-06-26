@@ -30,6 +30,8 @@ export function createBrowserCapabilityEnvironment(): CapabilityProbeEnvironment
       audioContextConstructor && 'audioWorklet' in audioContextConstructor.prototype,
     ),
     hasWebWorkers: typeof Worker !== 'undefined',
+    hasBroadcastChannel: typeof BroadcastChannel !== 'undefined',
+    hasLocalStorage: hasUsableLocalStorage(),
     ...(navigatorLike ? { navigator: navigatorLike } : {}),
     detectWebAssemblySimd,
     detectWebAssemblyThreads,
@@ -67,6 +69,12 @@ export async function probeRuntimeCapabilities(
     selectedTier: selectExecutionTier(baseCapabilities),
   };
 
+  const browserTraining = {
+    webLocks: typeof env.navigator?.locks?.request === 'function',
+    broadcastChannel: env.hasBroadcastChannel,
+    localStorage: env.hasLocalStorage,
+  };
+
   return {
     generatedAt: env.toIsoString(),
     capabilities,
@@ -74,7 +82,8 @@ export async function probeRuntimeCapabilities(
     storage,
     webGpu,
     workerBenchmark,
-    warnings: buildWarnings(capabilities, webGpu, workerBenchmark),
+    browserTraining,
+    warnings: buildWarnings(capabilities, webGpu, workerBenchmark, browserTraining),
   };
 }
 
@@ -125,6 +134,11 @@ function buildWarnings(
   capabilities: RuntimeCapabilities,
   webGpu: WebGpuCapabilityDetails,
   workerBenchmark: WorkerBenchmarkResult,
+  browserTraining: {
+    readonly webLocks: boolean;
+    readonly broadcastChannel: boolean;
+    readonly localStorage: boolean;
+  },
 ): string[] {
   const warnings: string[] = [];
 
@@ -152,5 +166,38 @@ function buildWarnings(
     warnings.push(workerBenchmark.error ?? 'Worker round-trip benchmark did not run.');
   }
 
+  if (!browserTraining.webLocks) {
+    warnings.push(
+      'Web Locks API unavailable; cross-tab training coordination will use warnings only.',
+    );
+  }
+
+  if (!browserTraining.broadcastChannel) {
+    warnings.push('BroadcastChannel unavailable; cross-tab training status will not sync live.');
+  }
+
+  if (!browserTraining.localStorage) {
+    warnings.push(
+      'localStorage unavailable; browser-training recovery checkpoints cannot persist.',
+    );
+  }
+
   return warnings;
+}
+
+function hasUsableLocalStorage(): boolean {
+  const probeKey = '__speech_capability_probe__';
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.setItem(probeKey, '1');
+    localStorage.removeItem(probeKey);
+    return true;
+  } catch {
+    try {
+      localStorage.removeItem(probeKey);
+    } catch {
+      // Ignore cleanup errors from disabled or unavailable localStorage implementations.
+    }
+    return false;
+  }
 }
