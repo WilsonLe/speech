@@ -4,6 +4,8 @@ import {
   type TranscriptDisplayReplacement,
   type TranscriptVocabulary,
 } from '@speech/formatter';
+export * from './personal-model-release-benchmark';
+import type { PersonalModelReleaseBenchmarkReportV1 } from './personal-model-release-benchmark';
 
 export type BenchmarkMetricName =
   | 'firstPartialLatencyMs'
@@ -158,6 +160,7 @@ export interface DiagnosticsExportV1 {
   readonly generatedAt: string;
   readonly privacy: BenchmarkPrivacyStatement;
   readonly benchmark?: BenchmarkReportV1;
+  readonly personalModelReleaseBenchmark?: PersonalModelReleaseBenchmarkReportV1;
   readonly capabilities?: unknown;
   readonly notes: readonly string[];
 }
@@ -165,6 +168,7 @@ export interface DiagnosticsExportV1 {
 export interface CreateDiagnosticsExportOptions {
   readonly generatedAt: string;
   readonly benchmark?: BenchmarkReportV1;
+  readonly personalModelReleaseBenchmark?: PersonalModelReleaseBenchmarkReportV1;
   readonly capabilities?: unknown;
   readonly notes?: readonly string[];
 }
@@ -178,7 +182,8 @@ export interface BenchmarkPackageInfo {
 export const packageInfo: BenchmarkPackageInfo = {
   name: '@speech/benchmark',
   status: 'active',
-  description: 'Latency, RTF, queue, memory, custom-term, and benchmark export contracts.',
+  description:
+    'Latency, RTF, queue, memory, storage, custom-term, personal-model release gates, and benchmark export contracts.',
 };
 
 export const benchmarkPrivacyStatement: BenchmarkPrivacyStatement = {
@@ -248,6 +253,9 @@ export function createDiagnosticsExport(
     generatedAt: options.generatedAt,
     privacy: benchmarkPrivacyStatement,
     ...(options.benchmark === undefined ? {} : { benchmark: options.benchmark }),
+    ...(options.personalModelReleaseBenchmark === undefined
+      ? {}
+      : { personalModelReleaseBenchmark: options.personalModelReleaseBenchmark }),
     ...(options.capabilities === undefined ? {} : { capabilities: options.capabilities }),
     notes: [...(options.notes ?? [])],
   };

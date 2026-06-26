@@ -1,5 +1,6 @@
 import {
   createDiagnosticsExport,
+  createMissingPersonalModelReleaseBenchmarkReport,
   serializeBenchmarkJson,
   type BenchmarkMetricName,
   type BenchmarkMetricSummary,
@@ -101,9 +102,16 @@ export function BenchmarkPanel() {
       exportStatus: 'Preparing diagnostics bundle…',
     });
     try {
+      const generatedAt = new Date().toISOString();
       const diagnostics = createDiagnosticsExport({
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         benchmark: readyStatus.report,
+        personalModelReleaseBenchmark: createMissingPersonalModelReleaseBenchmarkReport({
+          generatedAt,
+          warnings: [
+            'The synthetic worker benchmark in this diagnostics bundle is not a declared reference-hardware v0.5.0 personal-model benchmark run.',
+          ],
+        }),
         capabilities: readyStatus.capabilityReport,
         notes: [
           'Generated locally in the browser.',

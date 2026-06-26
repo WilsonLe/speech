@@ -4,10 +4,13 @@ import {
   createBenchmarkId,
   createBenchmarkReport,
   createDiagnosticsExport,
+  createMissingPersonalModelReleaseBenchmarkReport,
+  createPersonalModelReleaseBenchmarkReport,
   createSyntheticCustomTermBenchmarkEvaluation,
   serializeBenchmarkJson,
   summarizeSamples,
   type BenchmarkTraceEvent,
+  type PersonalModelReleaseBenchmarkMeasurementInputV1,
 } from './index';
 
 const traces: readonly BenchmarkTraceEvent[] = [
@@ -164,22 +167,27 @@ describe('benchmark report helpers', () => {
     expect(serialized).not.toMatch(/Pangea|Wilson|Sổ Cái|dashboard chat|mở/);
   });
 
-  it('creates a combined diagnostics export with optional capability data', () => {
+  it('creates a combined diagnostics export with optional capability and release-benchmark data', () => {
     const report = createBenchmarkReport({
       generatedAt: '2026-06-22T00:00:00.000Z',
       benchmarkId: 'speech-test',
       configuration,
       traces,
     });
+    const releaseBenchmark = createMissingPersonalModelReleaseBenchmarkReport({
+      generatedAt: '2026-06-22T00:00:01.000Z',
+    });
     const diagnostics = createDiagnosticsExport({
       generatedAt: '2026-06-22T00:00:01.000Z',
       benchmark: report,
+      personalModelReleaseBenchmark: releaseBenchmark,
       capabilities: { selectedTier: 'B' },
       notes: ['Local download; no telemetry.'],
     });
 
     expect(diagnostics.reportType).toBe('speech-diagnostics-export');
     expect(diagnostics.benchmark?.benchmarkId).toBe('speech-test');
+    expect(diagnostics.personalModelReleaseBenchmark?.status).toBe('insufficient-evidence');
     expect(diagnostics.capabilities).toEqual({ selectedTier: 'B' });
     expect(serializeBenchmarkJson(diagnostics)).toMatch(/\n$/);
   });
@@ -189,4 +197,123 @@ describe('benchmark report helpers', () => {
       'speech-local-synthetic-worker-2026-06-22T00-00-00-000Z',
     );
   });
+
+  it('blocks personal-model release benchmarks when reference-hardware evidence is missing', () => {
+    const report = createMissingPersonalModelReleaseBenchmarkReport({
+      generatedAt: '2026-06-26T00:00:00.000Z',
+      warnings: [
+        'profile-secret-alpha prompt-secret-beta case-secret-gamma checkpoint-secret-delta /home/minh/private/profile.json https://example.invalid/private were excluded from local notes',
+      ],
+    });
+
+    expect(report.status).toBe('insufficient-evidence');
+    expect(report.gate.checks.every((check) => check.status === 'insufficient-evidence')).toBe(
+      true,
+    );
+    expect(report.measurements).toHaveLength(9);
+    expect(report.privacy).toMatchObject({
+      aggregateOnly: true,
+      containsAudio: false,
+      containsTranscriptText: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      networkUpload: false,
+      localOnly: true,
+    });
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain('profile-secret-alpha');
+    expect(serialized).not.toContain('prompt-secret-beta');
+    expect(serialized).not.toContain('case-secret-gamma');
+    expect(serialized).not.toContain('checkpoint-secret-delta');
+    expect(serialized).not.toContain('/home/minh/private/profile.json');
+    expect(serialized).not.toContain('https://example.invalid/private');
+    expect(report.warnings.join(' ')).toContain('profile-redacted');
+    expect(report.warnings.join(' ')).toContain('prompt-redacted');
+    expect(report.warnings.join(' ')).toContain('case-redacted');
+    expect(report.warnings.join(' ')).toContain('checkpoint-redacted');
+    expect(report.warnings.join(' ')).toContain('path-redacted');
+    expect(report.warnings.join(' ')).toContain('url-redacted');
+  });
+
+  it('passes personal-model release benchmark gates with complete reference-hardware measurements', () => {
+    const report = createPersonalModelReleaseBenchmarkReport({
+      generatedAt: '2026-06-26T00:00:00.000Z',
+      benchmarkId: 'v0-5-0-reference-pass',
+      evidenceLabel: 'Reference hardware aggregate run',
+      referenceHardware: {
+        label: 'Reference desktop Chrome',
+        browserName: 'Chrome',
+        operatingSystem: 'Linux',
+        cpuModel: 'Synthetic CPU label',
+        memoryGb: 16,
+        notes: ['Aggregate local benchmark run; no raw artifacts included.'],
+      },
+      measurements: referenceMeasurements(),
+    });
+
+    expect(report.status).toBe('passed');
+    expect(report.gate.checks.every((check) => check.status === 'passed')).toBe(true);
+    expect(report.measurements.find((metric) => metric.name === 'offlineReload')).toMatchObject({
+      value: true,
+      referenceHardwareEvidence: true,
+    });
+  });
+
+  it('fails personal-model release benchmark gates when hard budgets regress', () => {
+    const report = createPersonalModelReleaseBenchmarkReport({
+      generatedAt: '2026-06-26T00:00:00.000Z',
+      benchmarkId: 'v0-5-0-reference-fail',
+      evidenceLabel: 'Reference hardware aggregate regression',
+      referenceHardware: { label: 'Reference desktop', notes: [] },
+      measurements: referenceMeasurements([
+        { name: 'peakBrowserMemoryBytes', value: 2 * 1024 * 1024 * 1024 },
+        { name: 'localPhaseNetworkRequestCount', value: 1 },
+      ]),
+    });
+
+    expect(report.status).toBe('failed');
+    expect(report.gate.reasons).toContain('Peak browser memory exceeds the release budget.');
+    expect(report.gate.reasons).toContain(
+      'At least one local personal-model phase made a network request.',
+    );
+  });
+
+  it('treats synthetic or CI smoke benchmark values as insufficient release evidence', () => {
+    const report = createPersonalModelReleaseBenchmarkReport({
+      generatedAt: '2026-06-26T00:00:00.000Z',
+      benchmarkId: 'v0-5-0-synthetic-only',
+      evidenceLabel: 'Synthetic benchmark smoke',
+      referenceHardware: { label: 'CI browser', notes: [] },
+      measurements: referenceMeasurements(undefined, 'ci-smoke'),
+    });
+
+    expect(report.status).toBe('insufficient-evidence');
+    expect(report.gate.checks.every((check) => check.status === 'insufficient-evidence')).toBe(
+      true,
+    );
+  });
 });
+
+function referenceMeasurements(
+  overrides: readonly Partial<PersonalModelReleaseBenchmarkMeasurementInputV1>[] = [],
+  source: PersonalModelReleaseBenchmarkMeasurementInputV1['source'] = 'reference-hardware',
+): readonly PersonalModelReleaseBenchmarkMeasurementInputV1[] {
+  const base: PersonalModelReleaseBenchmarkMeasurementInputV1[] = [
+    { name: 'trainingDurationMs', value: 120_000, source },
+    { name: 'peakBrowserMemoryBytes', value: 900 * 1024 * 1024, source },
+    { name: 'peakAdditionalStorageBytes', value: 240 * 1024 * 1024, source },
+    { name: 'adapterRtfOverheadRatio', value: 0.08, source },
+    { name: 'profileSwapMs', value: 120, source },
+    { name: 'exportImportDurationMs', value: 6_000, source },
+    { name: 'checkpointLossDelta', value: 0.000_000_2, source },
+    { name: 'localPhaseNetworkRequestCount', value: 0, source },
+    { name: 'offlineReload', value: true, source },
+  ];
+  for (const override of overrides) {
+    const index = base.findIndex((measurement) => measurement.name === override.name);
+    if (index === -1) throw new Error(`Unknown test measurement ${String(override.name)}`);
+    base[index] = { ...base[index]!, ...override };
+  }
+  return base;
+}
