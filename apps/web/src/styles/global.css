@@ -1324,9 +1324,14 @@ button.danger,
   text-transform: uppercase;
 }
 
-.roadmap-card span[data-status='scaffolded'] {
+.roadmap-card span[data-status='shipped'] {
   color: #bbf7d0;
   background: rgba(34, 197, 94, 0.14);
+}
+
+.roadmap-card span[data-status='evidence-needed'] {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
 }
 
 @media (prefers-reduced-motion: reduce) {

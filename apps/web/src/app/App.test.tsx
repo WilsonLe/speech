@@ -30,5 +30,8 @@ describe('App', () => {
     expect(html).toContain('Training progress');
     expect(html).toContain('Prepare worker');
     expect(html).toContain('Implementation roadmap');
+    expect(html).toContain('Personal Models');
+    expect(html).toContain('Evidence-backed production claims');
+    expect(html).toContain('evidence-needed');
   });
 });
