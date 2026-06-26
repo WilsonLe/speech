@@ -24,9 +24,20 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   const secondTab = await page.context().newPage();
   await secondTab.goto('/');
 
+  await expect(
+    page.getByRole('button', { name: 'Restart browser training prototype' }),
+  ).toBeDisabled();
   await page.getByRole('button', { name: 'Run browser training prototype' }).click();
   let browserTrainingStatus = page.getByLabel('Browser training prototype status');
   let browserTrainingRecovery = page.getByLabel('Browser training recovery status');
+  let browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
+  await expect(browserTrainingProgress.getByText('Training adapter epochs')).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(browserTrainingProgress.getByText('Prepare worker', { exact: true })).toBeVisible();
+  await expect(
+    browserTrainingProgress.getByText('Coordinate local lock', { exact: true }),
+  ).toBeVisible();
   await expect(browserTrainingStatus.getByText('training', { exact: true })).toBeVisible({
     timeout: 10_000,
   });
@@ -38,9 +49,10 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   ).toBeVisible({ timeout: 10_000 });
 
   await secondTab.getByRole('button', { name: 'Run browser training prototype' }).click();
-  await expect(
-    secondTab.getByText(/Another tab is already training this profile\. Pause or cancel it/),
-  ).toBeVisible({ timeout: 10_000 });
+  await expect(secondTab.locator('.error-message')).toContainText(
+    /Another tab is already training this profile\. Pause or cancel it/,
+    { timeout: 10_000 },
+  );
   await expect(
     secondTab
       .getByLabel('Browser training recovery status')
@@ -57,13 +69,30 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
     page.getByText(/ASR runtime is active .* browser training will pause cooperatively/),
   ).toBeVisible();
 
+  browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
+  await expect(
+    browserTrainingProgress.getByText('Training paused with reload recovery'),
+  ).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByRole('button', { name: 'Restart browser training prototype' }),
+  ).toBeEnabled();
+
   await page.reload({ waitUntil: 'networkidle' });
   browserTrainingRecovery = page.getByLabel('Browser training recovery status');
+  browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
   await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    browserTrainingProgress.getByText('Ready to resume from reload recovery'),
+  ).toBeVisible({
     timeout: 10_000,
   });
   await page.getByRole('button', { name: 'Resume browser training prototype' }).click();
   browserTrainingStatus = page.getByLabel('Browser training prototype status');
+  browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
   await expect(browserTrainingStatus.getByText('Training worker', { exact: true })).toBeVisible({
     timeout: 10_000,
   });
@@ -77,6 +106,9 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(browserTrainingStatus.getByText('Loss reduction', { exact: true })).toBeVisible();
   await expect(
     browserTrainingStatus.getByText('required before activation', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    browserTrainingProgress.getByText('Training completed; activation gate still required'),
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Benchmark worker provider' }).click();

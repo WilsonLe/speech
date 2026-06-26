@@ -279,6 +279,121 @@ h2 {
   margin-top: 1.25rem;
 }
 
+.browser-training-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.browser-training-progress {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.34);
+}
+
+.browser-training-progress__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.browser-training-progress__header h3 {
+  margin: 0;
+  color: #f8fafc;
+}
+
+.browser-training-progress__header strong {
+  display: inline-flex;
+  min-width: 4rem;
+  min-height: 4rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  color: #082f49;
+  background: #67e8f9;
+  font-size: 1.25rem;
+}
+
+.browser-training-progress__bar {
+  overflow: hidden;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.browser-training-progress__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #34d399);
+}
+
+.training-phase-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.training-phase-list li {
+  display: grid;
+  gap: 0.65rem;
+  align-content: flex-start;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.training-phase-list li > span {
+  display: inline-flex;
+  width: 1.9rem;
+  height: 1.9rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #082f49;
+  background: #94a3b8;
+  font-weight: 800;
+}
+
+.training-phase-list li[data-status='active'] > span,
+.training-phase-list li[data-status='complete'] > span {
+  background: #67e8f9;
+}
+
+.training-phase-list li[data-status='attention'] > span {
+  color: #422006;
+  background: #fde68a;
+}
+
+.training-phase-list li[data-status='blocked'] > span {
+  color: #450a0a;
+  background: #fca5a5;
+}
+
+.training-phase-list strong,
+.training-phase-list small {
+  display: block;
+}
+
+.training-phase-list strong {
+  color: #f8fafc;
+}
+
+.training-phase-list small {
+  margin-top: 0.25rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+
 .runtime-warnings {
   margin: 0;
   border: 1px solid rgba(250, 204, 21, 0.24);
@@ -325,6 +440,12 @@ h2 {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+@media (max-width: 900px) {
+  .training-phase-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -1143,8 +1264,17 @@ button.danger,
   .model-card,
   .personal-models-nav,
   .personal-models-summary,
-  .preflight-grid {
+  .preflight-grid,
+  .training-phase-list {
     grid-template-columns: 1fr;
+  }
+
+  .browser-training-progress__header {
+    display: grid;
+  }
+
+  .browser-training-controls {
+    flex-direction: column;
   }
 
   .transcript-display {
@@ -1158,7 +1288,8 @@ button.danger,
   .model-card-actions button,
   .personal-models-nav a,
   .benchmark-actions button,
-  .update-message button {
+  .update-message button,
+  .browser-training-controls button {
     width: 100%;
   }
 

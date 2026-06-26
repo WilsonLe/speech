@@ -23,6 +23,8 @@ describe('App', () => {
     expect(html).toContain('Durable profile storage');
     expect(html).toContain('Training readiness coverage will appear');
     expect(html).toContain('Dedicated worker ONNX Runtime loader');
+    expect(html).toContain('Training progress');
+    expect(html).toContain('Prepare worker');
     expect(html).toContain('Implementation roadmap');
   });
 });
