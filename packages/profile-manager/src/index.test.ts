@@ -15,6 +15,7 @@ import {
   summarizeTrainingJobPromptIdentitySplitPlan,
   summarizeTrainingJobRevision,
   type EnrollmentCaptureMetadataV1,
+  type EnrollmentProfileActivationReviewV1,
   type OpfsDirectoryHandleLike,
   type OpfsFileHandleLike,
   type OpfsWritableFileStreamLike,
@@ -982,6 +983,72 @@ describe('enrollment profile store', () => {
     });
   });
 
+  it('requires activation reviews to pass or accept advanced override before enabling', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-reviewed', 'utt-reviewed', baseModel);
+
+    await expect(
+      store.enableProfile({
+        profileId: 'profile-reviewed',
+        activationReview: createActivationReview({ activationAllowed: true }),
+      }),
+    ).resolves.toMatchObject({ activeProfileId: 'profile-reviewed' });
+
+    await expect(
+      store.enableProfile({
+        profileId: 'profile-reviewed',
+        activationReview: createActivationReview({ activationAllowed: false }),
+      }),
+    ).rejects.toThrow(/activation gates pass/);
+
+    await expect(
+      store.enableProfile({
+        profileId: 'profile-reviewed',
+        activationReview: createActivationReview({
+          automaticActivationAllowed: true,
+          softGatePassed: false,
+        }),
+      }),
+    ).rejects.toThrow(/inconsistent automatic gate status/);
+
+    await expect(
+      store.enableProfile({
+        profileId: 'profile-reviewed',
+        activationReview: createActivationReview({
+          activationAllowed: true,
+          automaticActivationAllowed: false,
+          advancedOverrideAccepted: false,
+          softGatePassed: false,
+        }),
+      }),
+    ).rejects.toThrow(/Advanced activation override/);
+
+    await expect(
+      store.enableProfile({
+        profileId: 'profile-reviewed',
+        activationReview: createActivationReview({
+          activationAllowed: true,
+          automaticActivationAllowed: false,
+          advancedOverrideAccepted: true,
+          softGatePassed: false,
+        }),
+      }),
+    ).resolves.toMatchObject({ activeProfileId: 'profile-reviewed' });
+
+    await expect(
+      store.enableProfile({
+        profileId: 'profile-reviewed',
+        activationReview: createActivationReview({
+          activationAllowed: true,
+          automaticActivationAllowed: false,
+          advancedOverrideAccepted: true,
+          hardGatePassed: false,
+        }),
+      }),
+    ).rejects.toThrow(/hard activation gates failed/);
+  });
+
   it('exports and imports a checksummed sensitive profile package', async () => {
     const backend = new InMemoryProfileStorageBackend();
     const store = createStore(backend);
@@ -1101,6 +1168,34 @@ describe('enrollment profile store', () => {
     await expect(requestPersistentProfileStorage({})).resolves.toBe(false);
   });
 });
+
+function createActivationReview(
+  overrides: Partial<EnrollmentProfileActivationReviewV1> = {},
+): EnrollmentProfileActivationReviewV1 {
+  return {
+    schemaVersion: 1,
+    decisionType: 'personal-model-activation-decision',
+    status: 'automatic-activation-allowed',
+    activationAllowed: true,
+    automaticActivationAllowed: true,
+    advancedOverrideAccepted: false,
+    hardGatePassed: true,
+    softGatePassed: true,
+    privacy: {
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsCaseIds: false,
+      containsRawProfileId: false,
+      containsFeatureTensors: false,
+      containsCheckpoints: false,
+      containsAdapterWeights: false,
+      exposesRawVocabularyEntryIds: false,
+      localOnly: true,
+    },
+    ...overrides,
+  };
+}
 
 function createStore(backend: ProfileStorageBackend): EnrollmentProfileStore {
   return new EnrollmentProfileStore(backend, {

@@ -141,9 +141,33 @@ export interface EnrollmentProfileExportPackageV1 {
   readonly warnings: readonly string[];
 }
 
+export interface EnrollmentProfileActivationReviewV1 {
+  readonly schemaVersion: 1;
+  readonly decisionType: 'personal-model-activation-decision';
+  readonly status: string;
+  readonly activationAllowed: boolean;
+  readonly automaticActivationAllowed: boolean;
+  readonly advancedOverrideAccepted: boolean;
+  readonly hardGatePassed: boolean;
+  readonly softGatePassed: boolean;
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsCaseIds: false;
+    readonly containsRawProfileId: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawVocabularyEntryIds: false;
+    readonly localOnly: true;
+  };
+}
+
 export interface EnableEnrollmentProfileInput {
   readonly profileId: string;
   readonly expectedBaseModel?: ProfileBaseModelIdentity;
+  readonly activationReview?: EnrollmentProfileActivationReviewV1;
 }
 
 export interface ImportEnrollmentProfileInput {
@@ -1019,6 +1043,9 @@ export class EnrollmentProfileStore {
     }
     if (input.expectedBaseModel !== undefined) {
       assertBaseModelCompatible(summary.profile.baseModel, input.expectedBaseModel, profileId);
+    }
+    if (input.activationReview !== undefined) {
+      assertActivationReviewAllowsProfileEnable(input.activationReview);
     }
     const existing = await this.getActiveProfileState();
     const previousProfileId =
@@ -2880,7 +2907,7 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
+    'Private profile storage, activation-review guarded enables, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
 };
 
 async function writeJsonAtomically(
@@ -3085,6 +3112,43 @@ function assertBaseModelCompatible(
     actual.graphContractSha256 !== expected.graphContractSha256
   ) {
     throw new Error(`Profile ${profileId} base-model identity does not match the active model.`);
+  }
+}
+
+function assertActivationReviewAllowsProfileEnable(
+  review: EnrollmentProfileActivationReviewV1,
+): void {
+  if (review.schemaVersion !== 1 || review.decisionType !== 'personal-model-activation-decision') {
+    throw new Error('Unsupported personal-model activation review.');
+  }
+  if (!review.privacy.aggregateOnly || !review.privacy.localOnly) {
+    throw new Error('Personal-model activation review must be aggregate-only and local.');
+  }
+  if (
+    review.privacy.containsRawAudio ||
+    review.privacy.containsTranscriptText ||
+    review.privacy.containsCaseIds ||
+    review.privacy.containsRawProfileId ||
+    review.privacy.containsFeatureTensors ||
+    review.privacy.containsCheckpoints ||
+    review.privacy.containsAdapterWeights ||
+    review.privacy.exposesRawVocabularyEntryIds
+  ) {
+    throw new Error('Personal-model activation review exposes private artifacts.');
+  }
+  if (review.automaticActivationAllowed && (!review.hardGatePassed || !review.softGatePassed)) {
+    throw new Error('Personal-model activation review has inconsistent automatic gate status.');
+  }
+  if (!review.hardGatePassed) {
+    throw new Error('Cannot enable personal profile because hard activation gates failed.');
+  }
+  if (!review.activationAllowed) {
+    throw new Error(
+      'Cannot enable personal profile until activation gates pass or an explicit advanced override is accepted.',
+    );
+  }
+  if (!review.automaticActivationAllowed && !review.advancedOverrideAccepted) {
+    throw new Error('Advanced activation override must be accepted before enabling this profile.');
   }
 }
 

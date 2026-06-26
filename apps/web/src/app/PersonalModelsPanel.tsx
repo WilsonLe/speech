@@ -32,10 +32,12 @@ import {
 } from '../capabilities';
 import { createDefaultVocabularyStore, loadVocabularyStore } from './vocabulary-storage';
 import {
+  buildPersonalModelActivationReviewCard,
   buildPersonalModelProfileCard,
   defaultPersonalProfileId,
   summarizeActiveVocabulary,
   type ActiveVocabularySummaryV1,
+  type PersonalModelActivationReviewCardV1,
   type PersonalModelCardStatus,
   type PersonalModelProfileCardV1,
 } from './personal-models';
@@ -129,6 +131,15 @@ export function PersonalModelsPanel() {
         activeVocabulary: state.activeVocabulary,
       }),
     [state.activeState, state.activeVocabulary, state.summary],
+  );
+  const activationReview = useMemo(
+    () =>
+      buildPersonalModelActivationReviewCard({
+        profileCard: card,
+        activeState: state.activeState,
+        activationDecision: null,
+      }),
+    [card, state.activeState],
   );
   const readinessReport = useMemo(
     () =>
@@ -465,6 +476,8 @@ export function PersonalModelsPanel() {
         onRunRuntimeSelfTest={() => void runRuntimeSelfTest()}
       />
 
+      <PersonalModelActivationReviewPanel review={activationReview} />
+
       <div className="personal-model-card-list" aria-label="Personal model profile cards">
         <PersonalModelProfileCard card={card} />
       </div>
@@ -530,6 +543,87 @@ export function PersonalModelsPanel() {
       <p className="status-message">
         Card privacy: aggregate counts only; no raw audio, transcript text, feature tensors,
         checkpoints, adapter weights, vocabulary terms, or vocabulary entry IDs are displayed.
+      </p>
+    </section>
+  );
+}
+
+function PersonalModelActivationReviewPanel({
+  review,
+}: {
+  readonly review: PersonalModelActivationReviewCardV1;
+}) {
+  return (
+    <section className="activation-review-card" aria-labelledby="activation-review-title">
+      <div className="section-heading compact-heading">
+        <p className="eyebrow">Activation review</p>
+        <h3 id="activation-review-title">Comparison gates and rollback</h3>
+        <p>
+          Aggregate personal/anchor evaluation decides whether a candidate adapter can activate
+          automatically, needs explicit advanced override, or must stay blocked while the generic or
+          previous adapter remains available.
+        </p>
+      </div>
+      <div className="personal-models-summary" aria-label="Activation gate summary">
+        <StatusPill label="Gate status" value={formatActivationReviewStatus(review)} />
+        <StatusPill
+          label="Activation"
+          value={review.activationAllowed ? 'allowed at boundary' : 'not allowed'}
+        />
+        <StatusPill
+          label="Advanced override"
+          value={review.advancedOverrideAvailable ? 'available for soft gates' : 'not available'}
+        />
+        <StatusPill
+          label="Rollback"
+          value={
+            review.rollback.previousProfileAvailable ? 'previous retained' : 'generic fallback'
+          }
+        />
+      </div>
+      <dl className="model-card-meta personal-model-card-meta activation-review-meta">
+        <div>
+          <dt>Personal held-out cases</dt>
+          <dd>{review.comparison.personalHeldoutCases.toString()}</dd>
+        </div>
+        <div>
+          <dt>Anchor cases</dt>
+          <dd>{review.comparison.anchorCases.toString()}</dd>
+        </div>
+        <div>
+          <dt>Selected vocabulary</dt>
+          <dd>{review.comparison.selectedVocabularyEntryCount.toString()} entries</dd>
+        </div>
+        <div>
+          <dt>Personal WER improvement</dt>
+          <dd>
+            {formatNullablePercent(review.comparison.candidateVsGenericWerRelativeImprovement)}
+          </dd>
+        </div>
+        <div>
+          <dt>P1 WER delta</dt>
+          <dd>{formatNullableNumber(review.comparison.candidateVsP1WerDelta)}</dd>
+        </div>
+        <div>
+          <dt>Anchor WER delta</dt>
+          <dd>{formatNullableNumber(review.comparison.anchorWerDelta)}</dd>
+        </div>
+        <div>
+          <dt>RTF overhead vs P1</dt>
+          <dd>{formatNullablePercent(review.comparison.rtfOverheadRatioVsP1)}</dd>
+        </div>
+        <div>
+          <dt>Adapter size</dt>
+          <dd>{formatNullableBytes(review.comparison.candidateAdapterSizeBytes)}</dd>
+        </div>
+      </dl>
+      <p className="status-message">
+        <strong>{review.title}.</strong> {review.detail}
+      </p>
+      <p className="status-message">
+        Activation privacy: aggregate metrics only; no raw audio, transcript text, case IDs, feature
+        tensors, checkpoints, adapter weights, raw profile IDs, vocabulary terms, or vocabulary
+        entry IDs are displayed.
       </p>
     </section>
   );
@@ -788,6 +882,35 @@ function summarizeCheckStatuses(checks: readonly PersonalModelPreflightCheckV1[]
   if (actionNeeded > 0) return `${actionNeeded.toString()} actions needed`;
   if (fallbacks > 0) return `${fallbacks.toString()} fallbacks`;
   return 'ready';
+}
+
+function formatActivationReviewStatus(review: PersonalModelActivationReviewCardV1): string {
+  switch (review.status) {
+    case 'generic-fallback':
+      return 'generic fallback';
+    case 'awaiting-evaluation':
+      return 'awaiting evaluation';
+    case 'automatic-ready':
+      return 'automatic ready';
+    case 'advanced-override-required':
+      return 'override required';
+    case 'advanced-override-accepted':
+      return 'override accepted';
+    case 'blocked':
+      return 'blocked';
+  }
+}
+
+function formatNullableNumber(value: number | null): string {
+  return value === null ? 'not evaluated' : value.toFixed(6);
+}
+
+function formatNullablePercent(value: number | null): string {
+  return value === null ? 'not evaluated' : `${(value * 100).toFixed(2)}%`;
+}
+
+function formatNullableBytes(value: number | null): string {
+  return value === null ? 'not evaluated' : formatPreflightBytes(value);
 }
 
 function formatPreflightStatus(status: PersonalModelPreflightStatus): string {
