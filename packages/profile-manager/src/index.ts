@@ -181,9 +181,59 @@ export interface EnableEnrollmentProfileInput {
   readonly activationReview?: EnrollmentProfileActivationReviewV1;
 }
 
+export type EnrollmentProfileImportMode = 'dedupe' | 'replace' | 'import-as-new';
+
 export interface ImportEnrollmentProfileInput {
   readonly profilePackage: EnrollmentProfileExportPackageV1;
   readonly overwriteExisting?: boolean;
+  readonly mode?: EnrollmentProfileImportMode;
+  readonly targetProfileId?: string;
+  readonly targetDisplayName?: string;
+}
+
+export interface EnrollmentProfileImportResultV1 {
+  readonly schemaVersion: 1;
+  readonly operation: 'imported-new' | 'replaced-existing' | 'deduped-existing';
+  readonly displayName: string;
+  readonly nameCollisionResolved: boolean;
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsRawProfileId: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
+}
+
+export interface EnrollmentProfileImportCompletionV1 {
+  readonly schemaVersion: 1;
+  readonly operation: 'imported-new' | 'replaced-existing' | 'deduped-existing';
+  readonly sourceProfileId: string;
+  readonly targetProfileId: string;
+  readonly displayName: string;
+  readonly nameCollisionResolved: boolean;
+  readonly summary: EnrollmentProfileSummaryV1;
+}
+
+export interface RenameEnrollmentProfileInput {
+  readonly profileId: string;
+  readonly displayName: string;
+}
+
+export function redactEnrollmentProfileImportResult(
+  result: EnrollmentProfileImportCompletionV1,
+): EnrollmentProfileImportResultV1 {
+  return {
+    schemaVersion: result.schemaVersion,
+    operation: result.operation,
+    displayName: result.displayName,
+    nameCollisionResolved: result.nameCollisionResolved,
+    privacy: createProfileImportResultPrivacy(),
+  };
 }
 
 export interface PortableSpeechModelImportSmokeResultV1 {
@@ -1124,6 +1174,48 @@ export class EnrollmentProfileStore {
     };
   }
 
+  async listProfileSummaries(): Promise<EnrollmentProfileSummaryV1[]> {
+    const profileIds = new Set<string>();
+    for (const file of await this.backend.listFiles(['profiles'])) {
+      const profileId = file.path[1];
+      if (profileId !== undefined) profileIds.add(profileId);
+    }
+    const summaries: EnrollmentProfileSummaryV1[] = [];
+    for (const profileId of Array.from(profileIds).sort()) {
+      const summary = await this.getProfileSummary(profileId);
+      if (summary !== undefined) summaries.push(summary);
+    }
+    return summaries.sort((left, right) => {
+      const updated = right.profile.updatedAt.localeCompare(left.profile.updatedAt);
+      return updated === 0
+        ? left.profile.displayName.localeCompare(right.profile.displayName)
+        : updated;
+    });
+  }
+
+  async renameProfile(input: RenameEnrollmentProfileInput): Promise<EnrollmentProfileSummaryV1> {
+    const profileId = normalizeSegment(input.profileId, 'profileId');
+    const summary = await this.getProfileSummary(profileId);
+    if (summary === undefined) {
+      throw new Error(`Cannot rename missing enrollment profile ${profileId}.`);
+    }
+    const displayName = resolveUniqueProfileDisplayName(
+      normalizeProfileDisplayName(input.displayName),
+      await this.listProfileSummaries(),
+      profileId,
+    );
+    await this.rebuildProfileFiles(profileId, {
+      displayName,
+      sentenceBankVersion: summary.profile.enrollment.sentenceBankVersion,
+      ...(summary.profile.baseModel === undefined ? {} : { baseModel: summary.profile.baseModel }),
+    });
+    const renamed = await this.getProfileSummary(profileId);
+    if (renamed === undefined) {
+      throw new Error(`Renamed profile ${profileId} is missing profile metadata.`);
+    }
+    return renamed;
+  }
+
   async listEnrollmentUtterances(profileId: string): Promise<EnrollmentUtteranceV1[]> {
     const normalizedProfileId = normalizeSegment(profileId, 'profileId');
     const files = await this.backend.listFiles(profilePath(normalizedProfileId, 'utterances'));
@@ -1243,48 +1335,66 @@ export class EnrollmentProfileStore {
   }
 
   async importProfile(input: ImportEnrollmentProfileInput): Promise<EnrollmentProfileSummaryV1> {
+    return (await this.importProfilePackage(input)).summary;
+  }
+
+  async importProfilePackage(
+    input: ImportEnrollmentProfileInput,
+  ): Promise<EnrollmentProfileImportCompletionV1> {
     const profilePackage = input.profilePackage;
     validateProfileExportPackageShape(profilePackage);
-    const profileId = normalizeSegment(profilePackage.profileId, 'profileId');
+    const sourceProfileId = normalizeSegment(profilePackage.profileId, 'profileId');
     if (
-      profilePackage.profile.id !== profileId ||
-      profilePackage.checksums.profileId !== profileId
+      profilePackage.profile.id !== sourceProfileId ||
+      profilePackage.checksums.profileId !== sourceProfileId
     ) {
       throw new Error('Profile export package id fields must match.');
     }
-    const existing = await this.getProfileSummary(profileId);
-    if (existing !== undefined && input.overwriteExisting !== true) {
-      throw new Error(`Profile ${profileId} already exists. Set overwriteExisting to replace it.`);
+    const decodedFiles = await this.decodeProfileExportFiles(profilePackage, sourceProfileId);
+    validateProfilePackageConsistency(sourceProfileId, profilePackage, decodedFiles);
+
+    const mode = resolveProfileImportMode(input);
+    const duplicate = await this.findDuplicateProfile(profilePackage);
+    if (mode === 'dedupe' && duplicate !== undefined) {
+      return {
+        schemaVersion: 1,
+        operation: 'deduped-existing',
+        sourceProfileId,
+        targetProfileId: duplicate.profile.id,
+        displayName: duplicate.profile.displayName,
+        nameCollisionResolved: false,
+        summary: duplicate,
+      };
     }
-    const decodedFiles: Record<string, ArrayBuffer> = {};
-    for (const [path, file] of Object.entries(profilePackage.files)) {
-      if (path !== file.path) {
-        throw new Error(`Profile export file key ${path} does not match its path.`);
-      }
-      const segments = portablePathToSegments(file.path);
-      assertProfilePackagePath(profileId, segments);
-      const bytes = base64ToArrayBuffer(file.base64);
-      if (bytes.byteLength !== file.sizeBytes) {
-        throw new Error(`Profile export file ${file.path} size does not match metadata.`);
-      }
-      const sha256 = await this.digest(bytes);
-      if (sha256 !== file.sha256) {
-        throw new Error(`Profile export file ${file.path} checksum mismatch.`);
-      }
-      decodedFiles[file.path] = bytes;
+
+    const target = await this.resolveProfileImportTarget(
+      profilePackage,
+      input,
+      mode === 'legacy' ? 'replace' : mode,
+    );
+    const existing = await this.getProfileSummary(target.profileId);
+    if (existing !== undefined && mode !== 'replace') {
+      throw new Error(
+        `Profile ${target.profileId} already exists. Choose replace or import as a new profile.`,
+      );
     }
-    validateProfilePackageConsistency(profileId, profilePackage, decodedFiles);
     if (existing !== undefined) {
-      await this.deleteProfile(profileId);
+      await this.deleteProfile(target.profileId);
     }
-    for (const [path, bytes] of Object.entries(decodedFiles)) {
-      await writeFileAtomically(this.backend, portablePathToSegments(path), bytes);
-    }
-    const summary = await this.getProfileSummary(profileId);
+    await this.writeImportedProfilePackage(profilePackage, decodedFiles, target);
+    const summary = await this.getProfileSummary(target.profileId);
     if (summary === undefined) {
-      throw new Error(`Imported profile ${profileId} is missing profile metadata.`);
+      throw new Error(`Imported profile ${target.profileId} is missing profile metadata.`);
     }
-    return summary;
+    return {
+      schemaVersion: 1,
+      operation: existing === undefined ? 'imported-new' : 'replaced-existing',
+      sourceProfileId,
+      targetProfileId: target.profileId,
+      displayName: summary.profile.displayName,
+      nameCollisionResolved: target.nameCollisionResolved,
+      summary,
+    };
   }
 
   async importPortableSpeechModel(
@@ -1856,16 +1966,23 @@ export class EnrollmentProfileStore {
       activeState.activeProfileId === normalizedProfileId ||
       activeState.previousProfileId === normalizedProfileId
     ) {
+      const promotedPreviousProfileId =
+        activeState.activeProfileId === normalizedProfileId &&
+        activeState.previousProfileId !== undefined &&
+        activeState.previousProfileId !== normalizedProfileId &&
+        (await this.getProfileSummary(activeState.previousProfileId)) !== undefined
+          ? activeState.previousProfileId
+          : undefined;
+      const retainedActiveProfileId =
+        activeState.activeProfileId !== undefined &&
+        activeState.activeProfileId !== normalizedProfileId
+          ? activeState.activeProfileId
+          : promotedPreviousProfileId;
       const nextState: ActiveEnrollmentProfileStateV1 = {
         schemaVersion: 1,
-        ...(activeState.activeProfileId === normalizedProfileId ||
-        activeState.activeProfileId === undefined
+        ...(retainedActiveProfileId === undefined
           ? {}
-          : { activeProfileId: activeState.activeProfileId }),
-        ...(activeState.previousProfileId === normalizedProfileId ||
-        activeState.previousProfileId === undefined
-          ? {}
-          : { previousProfileId: activeState.previousProfileId }),
+          : { activeProfileId: retainedActiveProfileId }),
         updatedAt: this.options.now?.() ?? new Date().toISOString(),
       };
       await writeJsonAtomically(
@@ -1881,6 +1998,118 @@ export class EnrollmentProfileStore {
     for (const revision of revisions) {
       await this.backend.deleteDirectory(['training-jobs', revision.jobId]);
     }
+  }
+
+  private async decodeProfileExportFiles(
+    profilePackage: EnrollmentProfileExportPackageV1,
+    profileId: string,
+  ): Promise<Record<string, ArrayBuffer>> {
+    const decodedFiles: Record<string, ArrayBuffer> = {};
+    for (const [path, file] of Object.entries(profilePackage.files)) {
+      if (path !== file.path) {
+        throw new Error(`Profile export file key ${path} does not match its path.`);
+      }
+      const segments = portablePathToSegments(file.path);
+      assertProfilePackagePath(profileId, segments);
+      const bytes = base64ToArrayBuffer(file.base64);
+      if (bytes.byteLength !== file.sizeBytes) {
+        throw new Error(`Profile export file ${file.path} size does not match metadata.`);
+      }
+      const sha256 = await this.digest(bytes);
+      if (sha256 !== file.sha256) {
+        throw new Error(`Profile export file ${file.path} checksum mismatch.`);
+      }
+      decodedFiles[file.path] = bytes;
+    }
+    return decodedFiles;
+  }
+
+  private async findDuplicateProfile(
+    profilePackage: EnrollmentProfileExportPackageV1,
+  ): Promise<EnrollmentProfileSummaryV1 | undefined> {
+    const incomingFingerprint = fingerprintProfileContent(profilePackage);
+    for (const summary of await this.listProfileSummaries()) {
+      if (fingerprintProfileContent(summary) === incomingFingerprint) return summary;
+    }
+    return undefined;
+  }
+
+  private async resolveProfileImportTarget(
+    profilePackage: EnrollmentProfileExportPackageV1,
+    input: ImportEnrollmentProfileInput,
+    mode: EnrollmentProfileImportMode,
+  ): Promise<{
+    readonly profileId: string;
+    readonly displayName: string;
+    readonly nameCollisionResolved: boolean;
+  }> {
+    const existingSummaries = await this.listProfileSummaries();
+    const requestedDisplayName = normalizeProfileDisplayName(
+      input.targetDisplayName ?? profilePackage.profile.displayName,
+    );
+    const requestedProfileId =
+      input.targetProfileId === undefined
+        ? mode === 'import-as-new'
+          ? this.createImportedProfileId(requestedDisplayName)
+          : profilePackage.profileId
+        : normalizeSegment(input.targetProfileId, 'targetProfileId');
+    const profileId =
+      mode === 'import-as-new' && input.targetProfileId === undefined
+        ? resolveUniqueProfileId(requestedProfileId, existingSummaries)
+        : requestedProfileId;
+    const displayName = resolveUniqueProfileDisplayName(
+      requestedDisplayName,
+      existingSummaries,
+      mode === 'replace' ? profileId : undefined,
+    );
+    return {
+      profileId,
+      displayName,
+      nameCollisionResolved: displayName !== requestedDisplayName,
+    };
+  }
+
+  private async writeImportedProfilePackage(
+    profilePackage: EnrollmentProfileExportPackageV1,
+    decodedFiles: Readonly<Record<string, ArrayBuffer>>,
+    target: { readonly profileId: string; readonly displayName: string },
+  ): Promise<void> {
+    const utterances = profilePackage.utterances.map((utterance) =>
+      rewriteImportedUtterance(utterance, profilePackage.profileId, target.profileId),
+    );
+    for (const utterance of utterances) {
+      const sourcePath = replaceProfilePathPrefix(
+        utterance.audio.path,
+        target.profileId,
+        profilePackage.profileId,
+      );
+      const bytes = decodedFiles[sourcePath];
+      if (bytes === undefined) {
+        throw new Error(`Profile export is missing audio file ${sourcePath}.`);
+      }
+      await writeFileAtomically(this.backend, portablePathToSegments(utterance.audio.path), bytes);
+      await writeJsonAtomically(
+        this.backend,
+        profilePath(
+          target.profileId,
+          'utterances',
+          `${normalizeSegment(utterance.id, 'utteranceId')}.json`,
+        ),
+        utterance,
+      );
+    }
+    await this.rebuildProfileFiles(target.profileId, {
+      displayName: target.displayName,
+      sentenceBankVersion: profilePackage.profile.enrollment.sentenceBankVersion,
+      ...(profilePackage.profile.baseModel === undefined
+        ? {}
+        : { baseModel: profilePackage.profile.baseModel }),
+    });
+  }
+
+  private createImportedProfileId(displayName: string): string {
+    const slug = slugifyProfileId(displayName);
+    return `${slug}-${this.options.randomId?.() ?? `import-${Date.now().toString(36)}`}`;
   }
 
   private async rebuildProfileFiles(
@@ -3176,8 +3405,130 @@ export const packageInfo: ProfileManagerPackageInfo = {
   name: '@speech/profile-manager',
   status: 'active',
   description:
-    'Private profile storage, atomic portable model imports, activation-review guarded enables, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
+    'Private profile storage, multi-profile import/dedupe/naming, atomic portable model imports, activation-review guarded enables, frozen training-job revisions, FP16 feature shards, CTC frame-label alignment sets, prompt split planning, readiness reporting, import/export, rollback, and deletion.',
 };
+
+type ResolvedEnrollmentProfileImportMode = EnrollmentProfileImportMode | 'legacy';
+
+function resolveProfileImportMode(
+  input: ImportEnrollmentProfileInput,
+): ResolvedEnrollmentProfileImportMode {
+  if (input.mode !== undefined) return input.mode;
+  return input.overwriteExisting === true ? 'replace' : 'legacy';
+}
+
+function createProfileImportResultPrivacy(): EnrollmentProfileImportResultV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsRawProfileId: false,
+    containsFeatureTensors: false,
+    containsCheckpoints: false,
+    containsAdapterWeights: false,
+    containsPrivateVocabularyTerms: false,
+    localOnly: true,
+  };
+}
+
+function fingerprintProfileContent(
+  value: EnrollmentProfileExportPackageV1 | EnrollmentProfileSummaryV1,
+): string {
+  const { profile, utterances } = value;
+  return JSON.stringify({
+    baseModel: profile.baseModel ?? null,
+    enrollment: profile.enrollment,
+    utterances: utterances.map((utterance) => ({
+      promptId: utterance.promptId,
+      promptVersion: utterance.promptVersion,
+      language: utterance.language,
+      voiceCondition: utterance.voiceCondition,
+      repetitionIndex: utterance.repetitionIndex,
+      customVocabularyEntryIds: utterance.customVocabularyEntryIds ?? [],
+      audioSha256: utterance.audio.sha256,
+      durationMs: utterance.audio.durationMs,
+      sizeBytes: utterance.audio.sizeBytes,
+      acceptedBy: utterance.acceptedBy,
+    })),
+  });
+}
+
+function rewriteImportedUtterance(
+  utterance: EnrollmentUtteranceV1,
+  sourceProfileId: string,
+  targetProfileId: string,
+): EnrollmentUtteranceV1 {
+  return {
+    ...utterance,
+    profileId: targetProfileId,
+    audio: {
+      ...utterance.audio,
+      path: replaceProfilePathPrefix(utterance.audio.path, sourceProfileId, targetProfileId),
+    },
+  };
+}
+
+function replaceProfilePathPrefix(
+  path: string,
+  fromProfileId: string,
+  toProfileId: string,
+): string {
+  const fromPrefix = pathToPortableString(profilePath(fromProfileId));
+  const toPrefix = pathToPortableString(profilePath(toProfileId));
+  if (path === fromPrefix) return toPrefix;
+  if (!path.startsWith(`${fromPrefix}/`)) {
+    throw new Error(`Profile export file path ${path} is outside profile ${fromProfileId}.`);
+  }
+  return `${toPrefix}${path.slice(fromPrefix.length)}`;
+}
+
+function normalizeProfileDisplayName(value: string): string {
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  if (trimmed.length === 0) throw new Error('Profile display name must not be empty.');
+  if (trimmed.length > 80) throw new Error('Profile display name must be at most 80 characters.');
+  return trimmed;
+}
+
+function resolveUniqueProfileId(
+  requestedProfileId: string,
+  summaries: readonly EnrollmentProfileSummaryV1[],
+): string {
+  const existing = new Set(summaries.map((summary) => summary.profile.id));
+  if (!existing.has(requestedProfileId)) return requestedProfileId;
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${requestedProfileId}-${index.toString()}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  throw new Error('Could not resolve a unique imported profile id.');
+}
+
+function resolveUniqueProfileDisplayName(
+  requestedDisplayName: string,
+  summaries: readonly EnrollmentProfileSummaryV1[],
+  replacingProfileId?: string,
+): string {
+  const existing = new Set(
+    summaries
+      .filter((summary) => summary.profile.id !== replacingProfileId)
+      .map((summary) => summary.profile.displayName.toLowerCase()),
+  );
+  if (!existing.has(requestedDisplayName.toLowerCase())) return requestedDisplayName;
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${requestedDisplayName} (${index.toString()})`;
+    if (!existing.has(candidate.toLowerCase())) return candidate;
+  }
+  throw new Error('Could not resolve a unique imported profile display name.');
+}
+
+function slugifyProfileId(displayName: string): string {
+  const slug = displayName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return slug.length === 0 ? 'imported-profile' : slug;
+}
 
 async function writeJsonAtomically(
   backend: ProfileStorageBackend,

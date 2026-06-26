@@ -3,6 +3,8 @@ import type {
   EnrollmentCaptureMetadataV1,
   EnrollmentProfileActivationReviewV1,
   EnrollmentProfileExportPackageV1,
+  EnrollmentProfileImportMode,
+  EnrollmentProfileImportResultV1,
   EnrollmentProfileSummaryV1,
   EnrollmentUtteranceV1,
   PortableSpeechModelImportSummaryV1,
@@ -28,6 +30,13 @@ export interface ProfileStoreLoadResult {
   readonly summary?: EnrollmentProfileSummaryV1;
 }
 
+export interface ProfileStoreListResult {
+  readonly backendKind: ProfileStorageBackendKind;
+  readonly persistentStorageGranted: boolean;
+  readonly activeState: ActiveEnrollmentProfileStateV1;
+  readonly summaries: readonly EnrollmentProfileSummaryV1[];
+}
+
 export interface ProfileStoreSaveResult {
   readonly backendKind: ProfileStorageBackendKind;
   readonly persistentStorageGranted: boolean;
@@ -47,6 +56,11 @@ export interface ProfileStoreExportResult extends ProfileStoreActiveResult {
 }
 
 export interface ProfileStoreImportResult extends ProfileStoreActiveResult {
+  readonly summary: EnrollmentProfileSummaryV1;
+  readonly importResult: EnrollmentProfileImportResultV1;
+}
+
+export interface ProfileStoreRenameResult extends ProfileStoreActiveResult {
   readonly summary: EnrollmentProfileSummaryV1;
 }
 
@@ -116,6 +130,15 @@ export interface BuildTrainingJobPromptSplitOptions {
 export interface ImportProfileOptions {
   readonly profilePackage: EnrollmentProfileExportPackageV1;
   readonly overwriteExisting?: boolean;
+  readonly mode?: EnrollmentProfileImportMode;
+  readonly targetProfileId?: string;
+  readonly targetDisplayName?: string;
+  readonly timeoutMs?: number;
+}
+
+export interface RenameProfileOptions {
+  readonly profileId: string;
+  readonly displayName: string;
   readonly timeoutMs?: number;
 }
 
@@ -168,6 +191,52 @@ export function loadEnrollmentProfile(
       persistentStorageGranted: response.persistentStorageGranted,
       activeState: response.activeState,
       ...(response.summary === undefined ? {} : { summary: response.summary }),
+    };
+  });
+}
+
+export function listEnrollmentProfiles(
+  options: { readonly timeoutMs?: number } = {},
+): Promise<ProfileStoreListResult> {
+  return requestProfileStore(
+    {
+      type: 'LIST_PROFILES',
+      requestId: createRequestId('list'),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_LIST_READY') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      summaries: response.summaries,
+    };
+  });
+}
+
+export function renameEnrollmentProfile(
+  options: RenameProfileOptions,
+): Promise<ProfileStoreRenameResult> {
+  return requestProfileStore(
+    {
+      type: 'RENAME_PROFILE',
+      requestId: createRequestId('rename'),
+      profileId: options.profileId,
+      displayName: options.displayName,
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_RENAME_COMPLETE') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      summary: response.summary,
     };
   });
 }
@@ -232,6 +301,13 @@ export function importEnrollmentProfile(
       requestId: createRequestId('import'),
       profilePackage: options.profilePackage,
       overwriteExisting: options.overwriteExisting ?? false,
+      ...(options.mode === undefined ? {} : { mode: options.mode }),
+      ...(options.targetProfileId === undefined
+        ? {}
+        : { targetProfileId: options.targetProfileId }),
+      ...(options.targetDisplayName === undefined
+        ? {}
+        : { targetDisplayName: options.targetDisplayName }),
     },
     options.timeoutMs,
   ).then((response) => {
@@ -243,6 +319,7 @@ export function importEnrollmentProfile(
       persistentStorageGranted: response.persistentStorageGranted,
       activeState: response.activeState,
       summary: response.summary,
+      importResult: response.importResult,
     };
   });
 }

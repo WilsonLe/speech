@@ -33,6 +33,10 @@ test('renders the foundation PWA shell', async ({ page }) => {
   await expect(page.getByLabel('Personal model profile cards')).toContainText('generic fallback', {
     timeout: 10_000,
   });
+  await expect(page.getByLabel('Personal model profile lifecycle controls')).toContainText(
+    'Import behavior',
+  );
+  await expect(page.getByLabel('Import behavior')).toHaveValue('dedupe');
   await expect(
     page.getByRole('heading', { name: /offline readiness and model lifecycle/i }),
   ).toBeVisible();
