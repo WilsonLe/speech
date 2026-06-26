@@ -37,6 +37,12 @@ export interface PortableSpeechModelEvaluationV1 {
   readonly metricsFile: ProfileFileRef;
 }
 
+export interface PortableSpeechModelBundleNoticeV1 {
+  readonly noticesFile: ProfileFileRef;
+  readonly checksumsFile: ProfileFileRef;
+  readonly testVectors: readonly ProfileFileRef[];
+}
+
 /**
  * Privacy shape for a default portable bundle. Default exports exclude raw
  * audio, prepared features, optimizer/checkpoint state, and the shared base
@@ -68,6 +74,9 @@ export interface PortableSpeechModelManifestV1 {
   readonly adaptation: PortableSpeechModelAdaptationV1;
   readonly vocabulary?: PortableSpeechModelVocabularyV1;
   readonly evaluation: PortableSpeechModelEvaluationV1;
+  readonly noticesFile: ProfileFileRef;
+  readonly checksumsFile: ProfileFileRef;
+  readonly testVectors: readonly ProfileFileRef[];
   readonly privacy: PortableSpeechModelPrivacyV1;
   readonly files: readonly ProfileFileRef[];
 }
@@ -110,6 +119,9 @@ export function validatePortableSpeechModelManifestV1(
     validateVocabulary(value['vocabulary'], errors);
   }
   validateEvaluation(value['evaluation'], errors);
+  validateProfileFileRef(value['noticesFile'], 'noticesFile', errors);
+  validateProfileFileRef(value['checksumsFile'], 'checksumsFile', errors);
+  validateTestVectors(value['testVectors'], errors);
   validatePrivacy(value['privacy'], errors);
   validateFilesArray(value['files'], errors);
 
@@ -192,6 +204,16 @@ function validateEvaluation(value: unknown, errors: string[]): void {
   }
   validateProfileFileRef(value['summaryFile'], 'evaluation.summaryFile', errors);
   validateProfileFileRef(value['metricsFile'], 'evaluation.metricsFile', errors);
+}
+
+function validateTestVectors(value: unknown, errors: string[]): void {
+  if (!Array.isArray(value) || value.length === 0) {
+    errors.push('testVectors must be a non-empty array');
+    return;
+  }
+  value.forEach((entry, index) => {
+    validateProfileFileRef(entry, `testVectors[${index}]`, errors);
+  });
 }
 
 function validatePrivacy(value: unknown, errors: string[]): void {
