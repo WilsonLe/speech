@@ -1,0 +1,2059 @@
+{
+  "$schema": "https://wilsonle.dev/speech/v0.6-ui-inventory.schema.json",
+  "metadata": {
+    "inventoryId": "v0.6.0-ui-inventory-baseline",
+    "baselineRelease": "v0.5.0",
+    "baselineCommit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc",
+    "capturedDate": "2026-06-26",
+    "sourceIssue": "https://github.com/WilsonLe/speech/issues/211",
+    "scope": "Current v0.5.0 web application user-facing routes, screens, actions, state surfaces, and string inventory for v0.6.0 task-first redesign."
+  },
+  "allowedV06Destinations": [
+    "Dictate",
+    "Vocabulary",
+    "Models",
+    "SetupModel",
+    "Settings",
+    "Storage",
+    "Privacy",
+    "Shortcuts",
+    "Diagnostics",
+    "About",
+    "AppMenu",
+    "AdvancedDisclosure",
+    "Removed"
+  ],
+  "sourceCoverage": [
+    "apps/web/src/app/App.tsx",
+    "apps/web/src/app/BenchmarkPanel.tsx",
+    "apps/web/src/app/DiagnosticsPanel.tsx",
+    "apps/web/src/app/MicrophonePanel.tsx",
+    "apps/web/src/app/ModelRuntimePanel.tsx",
+    "apps/web/src/app/OfflineModelPanel.tsx",
+    "apps/web/src/app/PersonalModelsPanel.tsx",
+    "apps/web/src/app/TranscriptPanel.tsx",
+    "apps/web/src/app/VocabularyPanel.tsx",
+    "apps/web/src/app/browser-training-ui.ts",
+    "apps/web/src/app/milestones.ts",
+    "apps/web/src/app/personal-models-preflight.ts",
+    "apps/web/src/app/personal-models.ts",
+    "apps/web/src/app/pwa-lifecycle.ts",
+    "apps/web/src/app/transcript-state.ts",
+    "apps/web/src/app/vocabulary-storage.ts",
+    "apps/web/src/capabilities/probe.ts",
+    "apps/web/src/workers/benchmark.worker.ts",
+    "apps/web/src/workers/browser-training.worker.ts",
+    "apps/web/src/workers/enrollment-quality.worker.ts"
+  ],
+  "routes": [
+    {
+      "currentRoute": "/",
+      "currentBehaviour": "Single-page application shell with stacked sections and anchor links; no route router in v0.5.0.",
+      "v06Destination": "Dictate",
+      "plannedTreatment": "Default route becomes task-first Dictate workspace."
+    },
+    {
+      "currentRoute": "/#offline-model-title",
+      "currentBehaviour": "Anchor to Offline readiness/model lifecycle panel.",
+      "v06Destination": "SetupModel",
+      "plannedTreatment": "Redirect to /setup/model or Settings/Storage depending state."
+    },
+    {
+      "currentRoute": "/#diagnostics",
+      "currentBehaviour": "Anchor to browser capability diagnostics.",
+      "v06Destination": "Diagnostics",
+      "plannedTreatment": "Redirect to /settings/diagnostics."
+    },
+    {
+      "currentRoute": "/#benchmark",
+      "currentBehaviour": "Anchor to synthetic benchmark diagnostics.",
+      "v06Destination": "Diagnostics",
+      "plannedTreatment": "Redirect to /settings/diagnostics#benchmark."
+    },
+    {
+      "currentRoute": "/#personal-models-title",
+      "currentBehaviour": "Anchor to Personal Models profile cards.",
+      "v06Destination": "Models",
+      "plannedTreatment": "Redirect to /models."
+    },
+    {
+      "currentRoute": "/#vocabulary-title",
+      "currentBehaviour": "Anchor to Vocabulary sets/editor.",
+      "v06Destination": "Vocabulary",
+      "plannedTreatment": "Redirect to /vocabulary."
+    },
+    {
+      "currentRoute": "/#microphone-title",
+      "currentBehaviour": "Anchor to microphone/enrollment panel.",
+      "v06Destination": "Models",
+      "plannedTreatment": "Redirect to /models/:profileId/enroll or /settings/audio depending intent."
+    },
+    {
+      "currentRoute": "/#runtime-title",
+      "currentBehaviour": "Anchor to runtime/training prototype panel.",
+      "v06Destination": "Models",
+      "plannedTreatment": "Redirect to /models/:profileId/train or /settings/diagnostics depending state."
+    }
+  ],
+  "screens": [
+    {
+      "id": "hero",
+      "sourceFiles": ["apps/web/src/app/App.tsx"],
+      "currentTitle": "Local-first bilingual dictation",
+      "v06Destination": "Dictate",
+      "capabilities": ["overview links", "privacy baseline", "roadmap links"],
+      "primaryActions": [
+        "Manage offline model",
+        "View diagnostics",
+        "Personal models",
+        "Run benchmark"
+      ],
+      "plannedTreatment": "Remove dashboard/hero; replace with three-destination shell and Dictate default."
+    },
+    {
+      "id": "dictate-transcript",
+      "sourceFiles": [
+        "apps/web/src/app/TranscriptPanel.tsx",
+        "apps/web/src/app/transcript-state.ts"
+      ],
+      "currentTitle": "Focused push-to-talk dictation",
+      "v06Destination": "Dictate",
+      "capabilities": [
+        "push-to-talk",
+        "editable transcript",
+        "provisional suffix",
+        "copy/download/clear",
+        "language mode",
+        "local transcript download",
+        "latency diagnostics"
+      ],
+      "primaryActions": ["Hold to talk", "Copy", "Download .txt", "Clear"],
+      "plannedTreatment": "Keep core dictation; move diagnostics/settings/export details behind toolbar/menu."
+    },
+    {
+      "id": "vocabulary",
+      "sourceFiles": [
+        "apps/web/src/app/VocabularyPanel.tsx",
+        "apps/web/src/app/vocabulary-storage.ts"
+      ],
+      "currentTitle": "Local vocabulary sets",
+      "v06Destination": "Vocabulary",
+      "capabilities": [
+        "set CRUD",
+        "entry CRUD",
+        "enable/disable",
+        "aliases",
+        "weights/category/prompt priority",
+        "prompt preview",
+        "JSON/CSV import/export"
+      ],
+      "primaryActions": [
+        "Create set",
+        "Add entry",
+        "Export JSON",
+        "Export selected CSV",
+        "Import locally"
+      ],
+      "plannedTreatment": "Split into compact list and set editor routes; collapse expert fields."
+    },
+    {
+      "id": "models",
+      "sourceFiles": [
+        "apps/web/src/app/PersonalModelsPanel.tsx",
+        "apps/web/src/app/personal-models.ts",
+        "apps/web/src/app/personal-models-preflight.ts"
+      ],
+      "currentTitle": "Profile cards and local lifecycle",
+      "v06Destination": "Models",
+      "capabilities": [
+        "profile cards",
+        "readiness preflight",
+        "runtime self-test",
+        "activation review",
+        "rename",
+        "enable",
+        "export/import",
+        "delete",
+        "rollback",
+        "multi-profile import mode"
+      ],
+      "primaryActions": [
+        "Record enrollment",
+        "Train or resume",
+        "Refresh profile cards",
+        "Import profile package",
+        "Roll back active profile"
+      ],
+      "plannedTreatment": "Replace with compact Models list/detail and dedicated enrollment/training/import/export screens."
+    },
+    {
+      "id": "offline-model",
+      "sourceFiles": [
+        "apps/web/src/app/OfflineModelPanel.tsx",
+        "apps/web/src/app/pwa-lifecycle.ts"
+      ],
+      "currentTitle": "Offline readiness and model lifecycle",
+      "v06Destination": "SetupModel",
+      "capabilities": [
+        "service worker state",
+        "update activation",
+        "model catalog",
+        "manifest inspection",
+        "model install/delete",
+        "install progress"
+      ],
+      "primaryActions": ["Reload update", "Inspect model", "Install model", "Delete active model"],
+      "plannedTreatment": "Dictate setup state when model missing; Storage/Diagnostics for lifecycle details."
+    },
+    {
+      "id": "diagnostics",
+      "sourceFiles": [
+        "apps/web/src/app/DiagnosticsPanel.tsx",
+        "apps/web/src/capabilities/probe.ts"
+      ],
+      "currentTitle": "Browser capability report",
+      "v06Destination": "Diagnostics",
+      "capabilities": [
+        "capability report",
+        "execution-tier explanation",
+        "worker round-trip benchmark",
+        "storage quota",
+        "warnings",
+        "local JSON download"
+      ],
+      "primaryActions": ["Download capability report"],
+      "plannedTreatment": "Move behind app menu Settings/Diagnostics with grouped accordions."
+    },
+    {
+      "id": "benchmark",
+      "sourceFiles": [
+        "apps/web/src/app/BenchmarkPanel.tsx",
+        "apps/web/src/workers/benchmark.worker.ts"
+      ],
+      "currentTitle": "Benchmark and diagnostics export",
+      "v06Destination": "Diagnostics",
+      "capabilities": [
+        "synthetic worker benchmark",
+        "diagnostics export",
+        "custom-term aggregate metrics",
+        "privacy flags",
+        "warnings"
+      ],
+      "primaryActions": [
+        "Run synthetic benchmark",
+        "Download benchmark JSON",
+        "Download diagnostics bundle"
+      ],
+      "plannedTreatment": "Move under Diagnostics; keep dense technical detail nondefault."
+    },
+    {
+      "id": "microphone-enrollment",
+      "sourceFiles": [
+        "apps/web/src/app/MicrophonePanel.tsx",
+        "apps/web/src/workers/enrollment-quality.worker.ts"
+      ],
+      "currentTitle": "Microphone check, AudioWorklet capture, and enrollment take quality",
+      "v06Destination": "Models",
+      "capabilities": [
+        "microphone permission",
+        "audio processing toggles",
+        "AudioWorklet check",
+        "calibration",
+        "voice guidance",
+        "enrollment take recording/analysis",
+        "profile save/export/import/delete"
+      ],
+      "primaryActions": [
+        "Start microphone check",
+        "Stop microphone check",
+        "Record enrollment take",
+        "Accept take",
+        "Skip prompt",
+        "Export profile",
+        "Import profile",
+        "Delete profile"
+      ],
+      "plannedTreatment": "Split Audio settings from one-prompt enrollment flow."
+    },
+    {
+      "id": "runtime-training",
+      "sourceFiles": [
+        "apps/web/src/app/ModelRuntimePanel.tsx",
+        "apps/web/src/app/browser-training-ui.ts",
+        "apps/web/src/workers/browser-training.worker.ts"
+      ],
+      "currentTitle": "Dedicated worker ONNX Runtime loader",
+      "v06Destination": "Models",
+      "capabilities": [
+        "ASR worker runtime benchmark",
+        "adapter smoke test",
+        "browser training prototype",
+        "pause/cancel/restart/resume",
+        "checkpoint recovery",
+        "cross-tab coordination",
+        "ASR-priority pause",
+        "phase progress"
+      ],
+      "primaryActions": [
+        "Benchmark worker provider",
+        "Run browser training prototype",
+        "Pause browser training",
+        "Cancel browser training",
+        "Resume browser training prototype",
+        "Clear browser training recovery"
+      ],
+      "plannedTreatment": "Move runtime diagnostics to Diagnostics and training controls to /models/:profileId/train."
+    },
+    {
+      "id": "roadmap",
+      "sourceFiles": ["apps/web/src/app/milestones.ts", "apps/web/src/app/App.tsx"],
+      "currentTitle": "Implementation roadmap",
+      "v06Destination": "About",
+      "capabilities": ["release milestone status", "production evidence limitations"],
+      "primaryActions": [],
+      "plannedTreatment": "Move to About/release notes or remove from default UI."
+    }
+  ],
+  "workflowStates": [
+    {
+      "id": "transcript-status",
+      "sourceFiles": [
+        "apps/web/src/app/transcript-state.ts",
+        "apps/web/src/app/TranscriptPanel.tsx"
+      ],
+      "states": ["idle", "requesting", "listening", "stopping", "error"],
+      "v06Destination": "Dictate",
+      "plannedTreatment": "Visible only when it affects recording or recovery."
+    },
+    {
+      "id": "model-lifecycle",
+      "sourceFiles": [
+        "apps/web/src/app/OfflineModelPanel.tsx",
+        "apps/web/src/workers/model-lifecycle.worker.ts"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "ready",
+        "installing",
+        "error",
+        "manifest-ready",
+        "install-progress",
+        "install-complete",
+        "delete-complete"
+      ],
+      "v06Destination": "SetupModel",
+      "plannedTreatment": "Setup state on Dictate; details in Storage/Diagnostics."
+    },
+    {
+      "id": "personal-models",
+      "sourceFiles": [
+        "apps/web/src/app/PersonalModelsPanel.tsx",
+        "apps/web/src/workers/profile-store.worker.ts"
+      ],
+      "states": ["loading", "ready", "activating", "exporting", "importing", "deleting", "error"],
+      "v06Destination": "Models",
+      "plannedTreatment": "List/detail statuses and route-specific progress states."
+    },
+    {
+      "id": "benchmark",
+      "sourceFiles": [
+        "apps/web/src/app/BenchmarkPanel.tsx",
+        "apps/web/src/workers/benchmark.worker.ts"
+      ],
+      "states": ["idle", "running", "ready", "error"],
+      "v06Destination": "Diagnostics",
+      "plannedTreatment": "Diagnostics-only benchmark run state."
+    },
+    {
+      "id": "browser-training",
+      "sourceFiles": [
+        "apps/web/src/app/ModelRuntimePanel.tsx",
+        "apps/web/src/app/browser-training-ui.ts",
+        "apps/web/src/workers/browser-training.worker.ts"
+      ],
+      "states": [
+        "idle",
+        "training",
+        "complete",
+        "error",
+        "pause-requested",
+        "cancel-requested",
+        "recovery-stored",
+        "lock-acquired",
+        "lock-busy",
+        "asr-priority-paused"
+      ],
+      "v06Destination": "Models",
+      "plannedTreatment": "Training route phases Preparing/Training/Checking/Ready and recovery details."
+    },
+    {
+      "id": "microphone-enrollment",
+      "sourceFiles": ["apps/web/src/app/MicrophonePanel.tsx"],
+      "states": [
+        "idle",
+        "requesting",
+        "active",
+        "error",
+        "recording",
+        "analyzing",
+        "ready",
+        "accepted",
+        "skipped"
+      ],
+      "v06Destination": "Models",
+      "plannedTreatment": "Audio settings plus enrollment route states."
+    }
+  ],
+  "actions": [
+    {
+      "screenId": "dictate-transcript",
+      "label": "Hold to talk",
+      "type": "primary button",
+      "v06Destination": "Dictate",
+      "plannedTreatment": "one dominant record control"
+    },
+    {
+      "screenId": "dictate-transcript",
+      "label": "Copy",
+      "type": "secondary button",
+      "v06Destination": "Dictate",
+      "plannedTreatment": "visible only when transcript exists"
+    },
+    {
+      "screenId": "dictate-transcript",
+      "label": "Download .txt",
+      "type": "secondary button",
+      "v06Destination": "Dictate",
+      "plannedTreatment": "transcript menu"
+    },
+    {
+      "screenId": "dictate-transcript",
+      "label": "Clear",
+      "type": "secondary destructive button",
+      "v06Destination": "Dictate",
+      "plannedTreatment": "transcript menu with confirmation when meaningful content exists"
+    },
+    {
+      "screenId": "vocabulary",
+      "label": "Create set",
+      "type": "button",
+      "v06Destination": "Vocabulary",
+      "plannedTreatment": "New set primary route/action"
+    },
+    {
+      "screenId": "vocabulary",
+      "label": "Add/Update entry",
+      "type": "button",
+      "v06Destination": "Vocabulary",
+      "plannedTreatment": "term editor primary action"
+    },
+    {
+      "screenId": "vocabulary",
+      "label": "Export JSON / CSV",
+      "type": "button",
+      "v06Destination": "Vocabulary",
+      "plannedTreatment": "screen menu or dedicated export"
+    },
+    {
+      "screenId": "vocabulary",
+      "label": "Import locally",
+      "type": "button",
+      "v06Destination": "Vocabulary",
+      "plannedTreatment": "screen menu or dedicated import"
+    },
+    {
+      "screenId": "models",
+      "label": "Record enrollment",
+      "type": "navigation button",
+      "v06Destination": "Models",
+      "plannedTreatment": "state-dependent primary action"
+    },
+    {
+      "screenId": "models",
+      "label": "Train or resume",
+      "type": "navigation button",
+      "v06Destination": "Models",
+      "plannedTreatment": "state-dependent primary action"
+    },
+    {
+      "screenId": "models",
+      "label": "Rename / Enable / Export / Delete profile",
+      "type": "form/buttons",
+      "v06Destination": "Models",
+      "plannedTreatment": "row/detail actions, menus, or dedicated screens"
+    },
+    {
+      "screenId": "offline-model",
+      "label": "Install model / Delete active model / Reload update",
+      "type": "buttons",
+      "v06Destination": "SetupModel",
+      "plannedTreatment": "setup state and Storage management"
+    },
+    {
+      "screenId": "diagnostics",
+      "label": "Download capability report",
+      "type": "button",
+      "v06Destination": "Diagnostics",
+      "plannedTreatment": "Diagnostics action"
+    },
+    {
+      "screenId": "benchmark",
+      "label": "Run synthetic benchmark / Download reports",
+      "type": "buttons",
+      "v06Destination": "Diagnostics",
+      "plannedTreatment": "Diagnostics action"
+    },
+    {
+      "screenId": "microphone-enrollment",
+      "label": "Start/stop microphone check, record/accept/skip enrollment take",
+      "type": "buttons",
+      "v06Destination": "Models",
+      "plannedTreatment": "Audio settings and Enrollment wizard"
+    },
+    {
+      "screenId": "runtime-training",
+      "label": "Benchmark provider / run-pause-cancel-resume prototype",
+      "type": "buttons",
+      "v06Destination": "Models",
+      "plannedTreatment": "Diagnostics and Training route controls"
+    }
+  ],
+  "stringInventory": [
+    {
+      "id": "app.hero.eyebrow",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "wilsonle/speech",
+      "userNeed": "identify product/source",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to About/source metadata",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.hero.title",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Local-first bilingual dictation",
+      "userNeed": "identify current product task",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with Dictate screen heading",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.hero.copy",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Installable Vietnamese/English streaming speech-to-text PWA with on-device inference, low-flicker partials, private vocabulary steering, and guided voice personalization.",
+      "userNeed": "background explanation",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Delete from default UI; keep concise About copy",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.hero.action.offline",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Manage offline model",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace hero action with setup state or Storage/App menu action",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.hero.action.diagnostics",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "View diagnostics",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to app menu Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.hero.action.personal",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Personal models",
+      "userNeed": "navigation",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with persistent Models destination",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.hero.action.benchmark",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Run benchmark",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.privacy.title",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Privacy baseline",
+      "userNeed": "privacy boundary",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Privacy",
+      "proposedDisposition": "Move to Privacy screen",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.privacy.audio",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Audio and transcripts remain local unless you explicitly export them.",
+      "userNeed": "privacy boundary",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Privacy",
+      "proposedDisposition": "Keep concise Privacy screen/point-of-action copy",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.privacy.downloads",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Model downloads and app updates are lifecycle events, not live transcription telemetry.",
+      "userNeed": "privacy boundary",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Privacy",
+      "proposedDisposition": "Move to Privacy or Local status details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.privacy.voice",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Voice enrollment data is treated as sensitive personal data.",
+      "userNeed": "privacy boundary",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Privacy",
+      "proposedDisposition": "Keep at Models/export/delete points",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.runtime.title",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "Runtime contract",
+      "userNeed": "diagnostic context",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Move to Diagnostics technical details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.runtime.copy",
+      "currentLocation": "apps/web/src/app/App.tsx",
+      "currentText": "The first implementation stage keeps the UI separate from worker-owned audio, model, decoder, and profile state.",
+      "userNeed": "architecture explanation",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Delete from ordinary UI; preserve in docs/diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.roadmap.foundation",
+      "currentLocation": "apps/web/src/app/milestones.ts",
+      "currentText": "Foundation",
+      "userNeed": "release status",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "About",
+      "proposedDisposition": "Move to About/release notes",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.roadmap.capabilities",
+      "currentLocation": "apps/web/src/app/milestones.ts",
+      "currentText": "Capability diagnostics",
+      "userNeed": "release status",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "About",
+      "proposedDisposition": "Move to About/release notes",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.roadmap.audio",
+      "currentLocation": "apps/web/src/app/milestones.ts",
+      "currentText": "Audio transport",
+      "userNeed": "release status",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "About",
+      "proposedDisposition": "Move to About/release notes",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.roadmap.runtime",
+      "currentLocation": "apps/web/src/app/milestones.ts",
+      "currentText": "Streaming ASR runtime",
+      "userNeed": "release status",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "About",
+      "proposedDisposition": "Move to About/release notes",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.roadmap.personal",
+      "currentLocation": "apps/web/src/app/milestones.ts",
+      "currentText": "Personal Models",
+      "userNeed": "release status",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "About",
+      "proposedDisposition": "Move to About/release notes",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "app.roadmap.evidence",
+      "currentLocation": "apps/web/src/app/milestones.ts",
+      "currentText": "Evidence-backed production claims",
+      "userNeed": "release limitation",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "About",
+      "proposedDisposition": "Move to About/release notes",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.eyebrow",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Transcription workspace",
+      "userNeed": "identify current task",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with compact Dictate destination label",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.title",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Focused push-to-talk dictation",
+      "userNeed": "identify current task",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with task-first Dictate heading",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.help",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Hold the control or press Space while this PWA is focused. Audio stays in the local capture path; worker ASR output will replace the provisional suffix as model integration progresses.",
+      "userNeed": "instruction/privacy/background",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with one short empty-state instruction; move shortcut/privacy details to tooltip/Shortcuts/Privacy",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.status.model",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Model runtime not active",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with active model summary",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.editor.label",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Transcript output — committed text",
+      "userNeed": "accessibility label",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "assistive-only",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Keep but shorten persistent label",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.editor.placeholder",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Transcript will appear here.",
+      "userNeed": "instruction",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with Hold to speak / Press to record empty state",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.provisional.label",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Provisional transcript suffix",
+      "userNeed": "accessibility label",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "assistive-only",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Keep assistive label",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.record.hold",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Hold to talk",
+      "userNeed": "primary action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with large record control label",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.record.release",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Release to finalize",
+      "userNeed": "state/action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with Stop/Release state action",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.action.copy",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Copy",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Show only when transcript has content",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.action.download",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Download .txt",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to transcript menu",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.action.clear",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Clear",
+      "userNeed": "destructive action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to transcript menu with confirmation when meaningful content exists",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.error.recovery",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Release the push-to-talk control, verify microphone permission, and try again.",
+      "userNeed": "recovery",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Keep concise blocker/recovery copy",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.settings.title",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Transcript settings",
+      "userNeed": "choice group",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move settings to context toolbar/app Settings",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.settings.recognition",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Recognition mode",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Keep as Language control",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.settings.formatting",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Enable final formatting when formatter integration is active",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to Settings/advanced Dictate setting",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.settings.commands",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Enable spoken commands only after explicit opt-in",
+      "userNeed": "choice/privacy",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to Settings/advanced if retained",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.settings.timing",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Include local timing metadata in downloaded .txt files",
+      "userNeed": "choice/privacy",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to download details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.language.title",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Language-span diagnostics",
+      "userNeed": "diagnostic",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to Diagnostics/advanced transcript details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.privacy.title",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Privacy and export",
+      "userNeed": "privacy boundary",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to Privacy and transcript menu export disclosure",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.footer.shortcut",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Shortcut",
+      "userNeed": "accessibility hint",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to tooltip and Shortcuts screen",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.footer.first_partial",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "First partial",
+      "userNeed": "diagnostic",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.footer.finalization",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Finalization",
+      "userNeed": "diagnostic",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Move to Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.mode.vi",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Vietnamese",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with Tiếng Việt label per v0.6 terminology",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.mode.en",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "English",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Keep",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.mode.auto",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Auto/code-switch",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with Auto",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "dictate.mode.mixed",
+      "currentLocation": "apps/web/src/app/TranscriptPanel.tsx",
+      "currentText": "Mixed/code-switch",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Dictate",
+      "proposedDisposition": "Replace with Mixed",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.eyebrow",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Vocabulary steering",
+      "userNeed": "identify feature",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Replace with Vocabulary destination label",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.title",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Local vocabulary sets",
+      "userNeed": "identify current task",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Replace with compact Vocabulary title",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.copy",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Add names, products, acronyms, and mixed-language terms now. Entries stay in browser storage and will be swapped into the decoder at utterance boundaries when tokenizer-aware scoring lands.",
+      "userNeed": "background/privacy/technical",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Delete decoder copy; keep concise local-storage disclosure at import/export",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.summary.sets",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Sets",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Keep only where useful as compact count",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.summary.active",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Active entries",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Replace with row enabled state/term count",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.summary.revision",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Revision",
+      "userNeed": "diagnostic",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to advanced/diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.set.select",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Selected set",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Replace with list/detail route",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.set.enable",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Enable this set for future utterances",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Replace with row toggle label",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.set.new",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "New set name",
+      "userNeed": "field",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to /vocabulary/new or inline new-set flow",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.set.create",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Create set",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Replace with New set primary action",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.set.delete",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Delete selected set",
+      "userNeed": "destructive action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to row menu + confirmation",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.add",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Add entry",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Keep as Add term",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.edit",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Edit entry",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Keep in editor",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.phrase",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Phrase",
+      "userNeed": "field",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Rename to Term",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.display",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Display form",
+      "userNeed": "field",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Rename to Display as",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.language",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Language",
+      "userNeed": "field",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Keep",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.weight",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Weight",
+      "userNeed": "expert field",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "advanced",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to Advanced safe preset/raw expert disclosure",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.category",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Category",
+      "userNeed": "expert field",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "advanced",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to Advanced",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.priority",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Prompt priority",
+      "userNeed": "expert field",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "advanced",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to Advanced",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.aliases",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Spoken aliases (one per line or comma-separated)",
+      "userNeed": "field",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Keep as Spoken variants",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.enabled",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Enabled",
+      "userNeed": "field",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Keep where relevant",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.case",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Preserve exact display casing",
+      "userNeed": "expert field",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "advanced",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to Advanced",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.entry.empty",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "No terms yet. Add a name, acronym, or product phrase.",
+      "userNeed": "empty state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Shorten to one sentence + Add term",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.prompt.title",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Enrollment prompt preview",
+      "userNeed": "advanced/diagnostic",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "advanced",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to Models enrollment Advanced details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.export.privacy",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Exports are explicit local downloads. They may contain sensitive names or project terms.",
+      "userNeed": "privacy boundary",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Keep at export point",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.action.export_json",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Export JSON",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to screen menu or dedicated export",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.action.export_csv",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Export selected CSV",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to screen menu or dedicated export",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "vocab.action.import",
+      "currentLocation": "apps/web/src/app/VocabularyPanel.tsx",
+      "currentText": "Import locally",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Vocabulary",
+      "proposedDisposition": "Move to screen menu or dedicated import",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.eyebrow",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Personal models",
+      "userNeed": "identify feature",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Models destination label",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.title",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Profile cards and local lifecycle",
+      "userNeed": "identify current task",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Voice models list heading",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.copy",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Review local voice profiles, active vocabulary coverage, base-model compatibility, and explicit export/import/delete actions from one privacy-first area. Heavy profile work remains worker-owned; cards show aggregate status only.",
+      "userNeed": "background/privacy/technical",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Shorten default copy; move worker/aggregate details to Privacy/Technical details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.nav.record",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Record enrollment",
+      "userNeed": "navigation",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Become state-dependent Continue recording/New action",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.nav.train",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Train or resume",
+      "userNeed": "navigation",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Become model-row primary action",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.summary.cards",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Cards",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with list rows",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.summary.store",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Profile store",
+      "userNeed": "diagnostic",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Models",
+      "proposedDisposition": "Move to Technical details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.summary.persistent",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Persistent storage",
+      "userNeed": "diagnostic",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Models",
+      "proposedDisposition": "Move to Storage",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.preflight.title",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Browser personal-model readiness",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Ready to train/blockers",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.preflight.copy",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Independent local checks summarize browser capabilities, base-model companion state, storage/quota, runtime self-test, and missing-recording tasks without reading private audio, transcripts, feature tensors, checkpoints, adapter weights, or vocabulary terms.",
+      "userNeed": "privacy/technical",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Shorten; move detail to disclosures/Privacy",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.activation.title",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Comparison gates and rollback",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with outcome-first result title",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.activation.copy",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Aggregate personal/anchor evaluation decides whether a candidate adapter can activate automatically, needs explicit advanced override, or must stay blocked while the generic or previous adapter remains available.",
+      "userNeed": "background/technical",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with plain result copy and Details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.card.privacy",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Card privacy: aggregate counts only; no raw audio, transcript text, feature tensors, checkpoints, adapter weights, vocabulary terms, or vocabulary entry IDs are displayed.",
+      "userNeed": "privacy boundary",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Move to Privacy/Details; keep only where consequence matters",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.action.refresh",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Refresh profile cards",
+      "userNeed": "secondary action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Move to row/screen menu if needed",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.action.rollback",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Roll back active profile",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Keep in row/menu with confirmation/context",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.import.behavior",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Import behavior",
+      "userNeed": "choice",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Move into dedicated import flow",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.import.package",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Import profile package",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Import visible action",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.action.rename",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Rename profile",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Row menu/dialog",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.action.enable",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Enable personal profile",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Row primary action when ready",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.action.export",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Export sensitive profile package",
+      "userNeed": "action/privacy",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Dedicated export flow",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "models.action.delete",
+      "currentLocation": "apps/web/src/app/PersonalModelsPanel.tsx",
+      "currentText": "Delete local personal profile",
+      "userNeed": "destructive action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Row menu + confirmation",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "setup.eyebrow",
+      "currentLocation": "apps/web/src/app/OfflineModelPanel.tsx",
+      "currentText": "Offline app shell",
+      "userNeed": "identify feature",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "SetupModel",
+      "proposedDisposition": "Move to Local status/Settings storage",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "setup.title",
+      "currentLocation": "apps/web/src/app/OfflineModelPanel.tsx",
+      "currentText": "Offline readiness and model lifecycle",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "SetupModel",
+      "proposedDisposition": "Replace with setup-in-place model required state and Storage details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "setup.copy",
+      "currentLocation": "apps/web/src/app/OfflineModelPanel.tsx",
+      "currentText": "The service worker owns only app-shell caching and update prompts. Model files stay in the model-manager backend so app updates do not delete installed model versions.",
+      "userNeed": "technical background",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "SetupModel",
+      "proposedDisposition": "Move to Diagnostics/About docs",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "setup.model_catalog",
+      "currentLocation": "apps/web/src/app/OfflineModelPanel.tsx",
+      "currentText": "Model catalog",
+      "userNeed": "state/action group",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "SetupModel",
+      "proposedDisposition": "Show only when model setup/storage screen is open",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "setup.inspect",
+      "currentLocation": "apps/web/src/app/OfflineModelPanel.tsx",
+      "currentText": "Inspect manifests before downloading large model files. Installation runs in a dedicated worker and verifies size, checksum, license, and active-version state before activation.",
+      "userNeed": "technical/privacy",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "SetupModel",
+      "proposedDisposition": "Keep only Model details disclosure",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "diag.eyebrow",
+      "currentLocation": "apps/web/src/app/DiagnosticsPanel.tsx",
+      "currentText": "Runtime diagnostics",
+      "userNeed": "identify feature",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep Diagnostics app-menu destination",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "diag.title",
+      "currentLocation": "apps/web/src/app/DiagnosticsPanel.tsx",
+      "currentText": "Browser capability report",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "diag.copy",
+      "currentLocation": "apps/web/src/app/DiagnosticsPanel.tsx",
+      "currentText": "Probes browser APIs directly instead of sniffing user-agent strings. The report is local and downloadable as JSON.",
+      "userNeed": "diagnostic/privacy",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep or shorten in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "diag.action.download",
+      "currentLocation": "apps/web/src/app/DiagnosticsPanel.tsx",
+      "currentText": "Download capability report",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "diag.empty",
+      "currentLocation": "apps/web/src/app/DiagnosticsPanel.tsx",
+      "currentText": "Checking browser capabilities…",
+      "userNeed": "loading state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep concise diagnostics loading state",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "diag.warnings.empty",
+      "currentLocation": "apps/web/src/app/DiagnosticsPanel.tsx",
+      "currentText": "No capability warnings detected.",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep only in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "bench.eyebrow",
+      "currentLocation": "apps/web/src/app/BenchmarkPanel.tsx",
+      "currentText": "Benchmark",
+      "userNeed": "identify feature",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Move under Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "bench.title",
+      "currentLocation": "apps/web/src/app/BenchmarkPanel.tsx",
+      "currentText": "Benchmark and diagnostics export",
+      "userNeed": "state/action group",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Move under Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "bench.copy",
+      "currentLocation": "apps/web/src/app/BenchmarkPanel.tsx",
+      "currentText": "Run a repeatable synthetic benchmark in a dedicated worker and export local diagnostics as JSON. This page records timing, queue, memory, provider metadata, and privacy flags without capturing microphone audio or transcript content.",
+      "userNeed": "diagnostic/privacy",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep in Diagnostics disclosure",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "bench.action.run",
+      "currentLocation": "apps/web/src/app/BenchmarkPanel.tsx",
+      "currentText": "Run synthetic benchmark",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "bench.action.download_benchmark",
+      "currentLocation": "apps/web/src/app/BenchmarkPanel.tsx",
+      "currentText": "Download benchmark JSON",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "bench.action.download_bundle",
+      "currentLocation": "apps/web/src/app/BenchmarkPanel.tsx",
+      "currentText": "Download diagnostics bundle",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "bench.idle",
+      "currentLocation": "apps/web/src/app/BenchmarkPanel.tsx",
+      "currentText": "Benchmark has not run yet. Run it after closing other heavy local workloads for more stable timing.",
+      "userNeed": "empty state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep or shorten in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "mic.eyebrow",
+      "currentLocation": "apps/web/src/app/MicrophonePanel.tsx",
+      "currentText": "Microphone permission and capture",
+      "userNeed": "identify feature",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Split between Audio settings and enrollment flow",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "mic.title",
+      "currentLocation": "apps/web/src/app/MicrophonePanel.tsx",
+      "currentText": "Microphone check, AudioWorklet capture, and enrollment take quality",
+      "userNeed": "state/action group",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Split Audio settings from one-prompt enrollment",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "mic.idle",
+      "currentLocation": "apps/web/src/app/MicrophonePanel.tsx",
+      "currentText": "Start the microphone check, then record one in-memory enrollment take for local quality analysis.",
+      "userNeed": "instruction",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with enrollment prompt-specific instruction",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.eyebrow",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Model runtime",
+      "userNeed": "identify feature",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Move to Diagnostics/training details",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.title",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Dedicated worker ONNX Runtime loader",
+      "userNeed": "diagnostic",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Move to Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.copy",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "ONNX Runtime Web is loaded only inside the ASR worker. The UI thread can request a lightweight provider benchmark and fallback check, but it does not import ORT or instantiate model sessions. The check also loads a tiny generated residual-adapter graph in the worker and records aggregate adapter overhead without audio or transcript data. Browser personal-model training uses the repository-owned BrowserTrainingBackend boundary. The pinned ORT Web package does not expose the documented training WASM artifact or public JS training API, so follow-on work must use the fixed adapter-math backend unless a reviewed ORT Training artifact passes the worker proof.",
+      "userNeed": "technical background",
+      "audience": "expert",
+      "stateOrCondition": "default",
+      "visibility": "diagnostic",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Move to Diagnostics/Technical details; remove from ordinary workflow",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.action.benchmark",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Benchmark worker provider",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Diagnostics",
+      "proposedDisposition": "Keep in Diagnostics",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.action.train",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Run browser training prototype",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Train model on training route",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.action.restart",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Restart browser training prototype",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Restart training with confirmation",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.action.pause",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Pause browser training",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Pause",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.action.cancel",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Cancel browser training",
+      "userNeed": "destructive action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Cancel confirmation",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.action.resume",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Resume browser training prototype",
+      "userNeed": "action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Replace with Continue training",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.action.clear",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Clear browser training recovery",
+      "userNeed": "destructive action",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Move to Training details/recovery confirmation",
+      "testOwner": "v0.6-ui"
+    },
+    {
+      "id": "runtime.progress.title",
+      "currentLocation": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "currentText": "Training progress",
+      "userNeed": "state",
+      "audience": "all",
+      "stateOrCondition": "default",
+      "visibility": "visible",
+      "v06Destination": "Models",
+      "proposedDisposition": "Keep concept but map stages to Preparing/Training/Checking/Ready",
+      "testOwner": "v0.6-ui"
+    }
+  ],
+  "unresolvedQuestions": [],
+  "staticValidation": {
+    "testPath": "training/tests/test_v0_6_ui_inventory.py",
+    "checks": [
+      "inventory JSON parses and has expected baseline metadata",
+      "all referenced source files exist",
+      "every screen/action/string has an allowed v0.6 destination and non-empty disposition",
+      "required v0.5 screens/workflow states are inventoried",
+      "default hero/dashboard strings are explicitly planned for removal or relocation"
+    ]
+  }
+}
