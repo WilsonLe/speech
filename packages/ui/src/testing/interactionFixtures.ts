@@ -75,9 +75,24 @@ export const speechFormControlUsageRules = [
   'Every Select and RadioGroup must have a visible persistent label; placeholders are not labels.',
 ] as const;
 
+export const speechFeedbackUsageRules = [
+  'Use Notice, not Toast, for blockers, destructive consequences, privacy consequences, import failures, and training failures.',
+  'Use InlineError beside the field or control that the user can fix.',
+  'Use Toast only for transient noncritical confirmation that does not require recovery action.',
+  'Every Progress and LoadingState instance must expose a text equivalent; never show an indefinite spinner without a state label.',
+  'Use Status as supplemental text; pair status colour with visible wording.',
+] as const;
+
+export const speechFeedbackLiveRegionExamples = [
+  'polite transient confirmation',
+  'assertive blocking notice',
+  'off decorative status chip',
+] as const;
+
 export type SpeechButtonActivationKey = (typeof speechButtonActivationKeys)[number];
 export type SpeechButtonStateExample = (typeof speechButtonStateExamples)[number];
 export type SpeechAccordionFocusKey = (typeof speechAccordionFocusKeys)[number];
 export type SpeechMenuFocusKey = (typeof speechMenuFocusKeys)[number];
 export type SpeechDialogFocusKey = (typeof speechDialogFocusKeys)[number];
 export type SpeechFormControlFocusKey = (typeof speechFormControlFocusKeys)[number];
+export type SpeechFeedbackLiveRegionExample = (typeof speechFeedbackLiveRegionExamples)[number];

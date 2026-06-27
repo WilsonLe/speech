@@ -109,3 +109,24 @@ export const speechFormControlCssRequirements = [
   'prefers-reduced-motion: reduce',
   'forced-colors: active',
 ] as const;
+
+export const speechFeedbackAccessibilityChecklist = [
+  'InlineError renders visible field recovery text and uses an assertive alert by default.',
+  'Notice renders visible page-level blockers and status messages with a labelled region.',
+  'Toast renders transient noncritical confirmation as a polite status by default.',
+  'EmptyState renders a labelled section with optional visible actions.',
+  'LoadingState renders a labelled aria-busy status with a text label.',
+  'Progress renders a native <progress> element with a visible label and text equivalent.',
+  'Status renders compact state text without relying on colour alone.',
+] as const;
+
+export const speechFeedbackCssRequirements = [
+  '--speech-color-danger',
+  '--speech-color-warning',
+  '--speech-color-success',
+  '--speech-color-accent',
+  '--speech-shadow-popover',
+  'prefers-reduced-motion: reduce',
+  'forced-colors: active',
+  '[hidden]',
+] as const;
