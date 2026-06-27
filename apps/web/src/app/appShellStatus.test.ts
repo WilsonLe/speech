@@ -95,12 +95,12 @@ describe('app shell local status', () => {
       'About',
     ]);
     expect(appMenuDestinations.map((destination) => destination.href)).toEqual([
-      '#offline-model-title',
-      '#offline-model-title',
-      '#transcript-privacy-title',
-      '#dictate',
-      '#diagnostics-title',
-      '#roadmap-title',
+      '/settings',
+      '/settings/storage',
+      '/settings/privacy',
+      '/settings/shortcuts',
+      '/settings/diagnostics',
+      '/about',
     ]);
   });
 });

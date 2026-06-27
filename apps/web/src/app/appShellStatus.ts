@@ -27,39 +27,39 @@ export interface AppShellLocalStatusView {
 export interface AppMenuDestination {
   readonly id: 'settings' | 'storage' | 'privacy' | 'shortcuts' | 'diagnostics' | 'about';
   readonly label: string;
-  readonly href: `#${string}`;
+  readonly href: string;
 }
 
 export const appMenuDestinations = [
   {
     id: 'settings',
     label: 'Settings',
-    href: '#offline-model-title',
+    href: '/settings',
   },
   {
     id: 'storage',
     label: 'Storage',
-    href: '#offline-model-title',
+    href: '/settings/storage',
   },
   {
     id: 'privacy',
     label: 'Privacy',
-    href: '#transcript-privacy-title',
+    href: '/settings/privacy',
   },
   {
     id: 'shortcuts',
     label: 'Keyboard shortcuts',
-    href: '#dictate',
+    href: '/settings/shortcuts',
   },
   {
     id: 'diagnostics',
     label: 'Diagnostics',
-    href: '#diagnostics-title',
+    href: '/settings/diagnostics',
   },
   {
     id: 'about',
     label: 'About',
-    href: '#roadmap-title',
+    href: '/about',
   },
 ] as const satisfies readonly AppMenuDestination[];
 

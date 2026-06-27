@@ -30,18 +30,27 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await appMenu.click();
   const applicationMenu = page.getByRole('menu', { name: 'Application menu' });
   await expect(applicationMenu).toContainText('Settings');
+  await expect(applicationMenu.getByRole('menuitem', { name: 'Settings' })).toHaveAttribute(
+    'href',
+    '/settings',
+  );
   await expect(applicationMenu).toContainText('Storage');
   await expect(applicationMenu).toContainText('Privacy');
   await expect(applicationMenu).toContainText('Keyboard shortcuts');
   await expect(applicationMenu).toContainText('Diagnostics');
   await expect(applicationMenu).toContainText('About');
-  await page.keyboard.press('Escape');
-  await expect(applicationMenu).toBeHidden();
+  await applicationMenu.getByRole('menuitem', { name: 'Diagnostics' }).click();
+  await expect(page).toHaveURL(/\/settings\/diagnostics$/);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe('diagnostics-title');
 
   const primaryNav = page.getByRole('navigation', { name: 'Primary destinations' }).first();
   await primaryNav.getByRole('link', { name: 'Vocabulary' }).click();
+  await expect(page).toHaveURL(/\/vocabulary$/);
   await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('vocabulary-title');
   await primaryNav.getByRole('link', { name: 'Models' }).click();
+  await expect(page).toHaveURL(/\/models$/);
   await expect
     .poll(() => page.evaluate(() => document.activeElement?.id))
     .toBe('personal-models-title');
@@ -50,6 +59,10 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => document.activeElement?.id))
     .toBe('personal-models-title');
+
+  await page.goto('/?profileId=office&jobId=job-2&returnTo=https://example.com#runtime-title');
+  await expect(page).toHaveURL(/\/models\/office\/train\?jobId=job-2$/);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('runtime-title');
 
   await page.setViewportSize({ width: 360, height: 800 });
   const bottomNav = page.locator('.app-bottom-nav');

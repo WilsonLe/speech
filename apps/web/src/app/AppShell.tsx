@@ -25,23 +25,30 @@ import {
   type PwaLifecycleSnapshot,
 } from './pwa-lifecycle';
 import {
-  focusPrimaryDestinationHeading,
-  getInitialPrimaryDestinationId,
-  normalizeHashForPrimaryDestination,
+  createRouteRestorationPlan,
+  focusRouteHeading,
   primaryDestinations,
+  resolveAppRoute,
+  resolveNavigationHref,
   type PrimaryDestination,
   type PrimaryDestinationId,
+  type ResolvedAppRoute,
 } from './routeState';
 import {
   createModelLifecycleWorker,
   type ModelLifecycleResponse,
 } from '../workers/model-lifecycle-client';
 
-function getCurrentHash(): string | undefined {
+function getCurrentRoute(): ResolvedAppRoute {
   if (typeof window === 'undefined') {
-    return undefined;
+    return resolveAppRoute({ pathname: '/' });
   }
-  return window.location.hash;
+
+  return resolveAppRoute({
+    pathname: window.location.pathname,
+    search: window.location.search,
+    hash: window.location.hash,
+  });
 }
 
 function getInitialOnlineStatus(): boolean {
@@ -53,24 +60,43 @@ function getInitialOnlineStatus(): boolean {
 }
 
 export function AppShell({ children }: { readonly children: ReactNode }) {
-  const [activeDestination, setActiveDestination] = useState<PrimaryDestinationId>(() =>
-    getInitialPrimaryDestinationId(getCurrentHash()),
-  );
+  const [currentRoute, setCurrentRoute] = useState<ResolvedAppRoute>(() => getCurrentRoute());
   const [pwa, setPwa] = useState<PwaLifecycleSnapshot>(() => getPwaLifecycleSnapshot());
   const [online, setOnline] = useState(() => getInitialOnlineStatus());
   const [modelLifecycle, setModelLifecycle] = useState<AppShellModelLifecycleSummary>(
     loadingModelLifecycleSummary,
   );
 
-  const focusDestination = useCallback((destinationId: PrimaryDestinationId) => {
+  const focusRoute = useCallback((route: ResolvedAppRoute) => {
     if (typeof document === 'undefined' || typeof window === 'undefined') {
       return;
     }
 
     window.requestAnimationFrame(() => {
-      focusPrimaryDestinationHeading(destinationId, document);
+      focusRouteHeading(route, document);
     });
   }, []);
+
+  const commitRoute = useCallback(
+    (route: ResolvedAppRoute, mode: 'push' | 'replace') => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      const method = mode === 'replace' ? 'replaceState' : 'pushState';
+      if (window.location.pathname + window.location.search + window.location.hash !== route.href) {
+        window.history[method]({}, '', route.href);
+      }
+      setCurrentRoute(route);
+
+      const restoration = createRouteRestorationPlan(route);
+      if (restoration.scrollRestoration.startsWith('reset')) {
+        window.scrollTo({ top: 0, left: 0 });
+      }
+      focusRoute(route);
+    },
+    [focusRoute],
+  );
 
   useEffect(() => subscribePwaLifecycle(setPwa), []);
 
@@ -131,36 +157,80 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const currentHash = getCurrentHash();
-    if (currentHash) {
-      focusDestination(normalizeHashForPrimaryDestination(currentHash));
+    const initialRoute = getCurrentRoute();
+    if (
+      initialRoute.replaceHistory &&
+      window.location.pathname + window.location.search + window.location.hash !== initialRoute.href
+    ) {
+      window.history.replaceState({}, '', initialRoute.href);
+    }
+    if (initialRoute.href !== '/') {
+      focusRoute(initialRoute);
     }
 
-    const handleHashChange = () => {
-      const destinationId = normalizeHashForPrimaryDestination(getCurrentHash());
-      setActiveDestination(destinationId);
-      focusDestination(destinationId);
+    const handleHistoryNavigation = () => {
+      const route = getCurrentRoute();
+      if (route.replaceHistory) {
+        commitRoute(route, 'replace');
+        return;
+      }
+
+      setCurrentRoute(route);
+      focusRoute(route);
     };
-    window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handleHistoryNavigation);
+    window.addEventListener('hashchange', handleHistoryNavigation);
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('popstate', handleHistoryNavigation);
+      window.removeEventListener('hashchange', handleHistoryNavigation);
     };
-  }, [focusDestination]);
+  }, [commitRoute, focusRoute]);
 
   const handleDestinationClick = useCallback(
-    (destinationId: PrimaryDestinationId) => {
-      setActiveDestination(destinationId);
-      focusDestination(destinationId);
+    (event: MouseEvent<HTMLAnchorElement>, destinationId: PrimaryDestinationId) => {
+      event.preventDefault();
+      const destination = primaryDestinations.find((item) => item.id === destinationId);
+      if (!destination || typeof window === 'undefined') {
+        return;
+      }
+      const route = resolveAppRoute({ pathname: destination.href });
+      commitRoute(route, 'push');
     },
-    [focusDestination],
+    [commitRoute],
+  );
+
+  const handleFrameClick = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || typeof window === 'undefined' || event.button !== 0) {
+        return;
+      }
+
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+
+      const anchor = getClosestRouteAnchor(event.target);
+      if (!anchor || anchor.target || anchor.hasAttribute('download')) {
+        return;
+      }
+
+      const route = resolveNavigationHref(anchor.href, window.location.href);
+      if (!route) {
+        return;
+      }
+
+      event.preventDefault();
+      commitRoute(route, 'push');
+    },
+    [commitRoute],
   );
 
   const handleSkipToMain = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
       event.preventDefault();
-      focusDestination(activeDestination);
+      focusRoute(currentRoute);
     },
-    [activeDestination, focusDestination],
+    [currentRoute, focusRoute],
   );
 
   const localStatus = useMemo(
@@ -172,9 +242,10 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
     () => createAppMenuItems(pwa.updateAvailable),
     [pwa.updateAvailable],
   );
+  const activeDestination = currentRoute.primaryDestinationId;
 
   return (
-    <div className="app-frame">
+    <div className="app-frame" onClick={handleFrameClick}>
       <a className="skip-link" href="#app-main" onClick={handleSkipToMain}>
         Skip to main content
       </a>
@@ -182,8 +253,8 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
         <div className="app-frame-header__inner">
           <a
             className="app-brand"
-            href="#dictate"
-            onClick={() => handleDestinationClick('dictate')}
+            href="/"
+            onClick={(event) => handleDestinationClick(event, 'dictate')}
           >
             Speech
           </a>
@@ -287,9 +358,12 @@ function PrimaryNavigation({
   className,
   onDestinationClick,
 }: {
-  readonly activeDestination: PrimaryDestinationId;
+  readonly activeDestination: PrimaryDestinationId | undefined;
   readonly className: string;
-  readonly onDestinationClick: (destinationId: PrimaryDestinationId) => void;
+  readonly onDestinationClick: (
+    event: MouseEvent<HTMLAnchorElement>,
+    destinationId: PrimaryDestinationId,
+  ) => void;
 }) {
   return (
     <nav className={className} aria-label="Primary destinations">
@@ -336,15 +410,26 @@ function PrimaryNavigationLink({
 }: {
   readonly active: boolean;
   readonly destination: PrimaryDestination;
-  readonly onDestinationClick: (destinationId: PrimaryDestinationId) => void;
+  readonly onDestinationClick: (
+    event: MouseEvent<HTMLAnchorElement>,
+    destinationId: PrimaryDestinationId,
+  ) => void;
 }) {
   return (
     <a
       aria-current={active ? 'page' : undefined}
       href={destination.href}
-      onClick={() => onDestinationClick(destination.id)}
+      onClick={(event) => onDestinationClick(event, destination.id)}
     >
       {destination.label}
     </a>
   );
+}
+
+function getClosestRouteAnchor(target: EventTarget | null): HTMLAnchorElement | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  return target.closest('a[href]');
 }
