@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { RUNTIME_STATES } from '@speech/protocol';
 import { BenchmarkPanel } from './BenchmarkPanel';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
@@ -7,7 +8,10 @@ import { OfflineModelPanel } from './OfflineModelPanel';
 import { PersonalModelsPanel } from './PersonalModelsPanel';
 import { TranscriptPanel } from './TranscriptPanel';
 import { VocabularyPanel } from './VocabularyPanel';
+import { getBrowserHash, shouldRenderComponentGalleryRoute } from './component-gallery-route';
 import { roadmap } from './milestones';
+
+const ComponentGallery = import.meta.env.DEV ? lazy(() => import('./ComponentGallery')) : null;
 
 const privacyPoints = [
   'Audio and transcripts remain local unless you explicitly export them.',
@@ -16,6 +20,16 @@ const privacyPoints = [
 ];
 
 export function App() {
+  const galleryRoute = shouldRenderComponentGalleryRoute(getBrowserHash(), import.meta.env.DEV);
+
+  if (galleryRoute.shouldRender && ComponentGallery) {
+    return (
+      <Suspense fallback={<main className="app-shell">Loading component gallery</main>}>
+        <ComponentGallery />
+      </Suspense>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="hero" aria-labelledby="hero-title">
