@@ -48,10 +48,13 @@ import {
   createEnrollmentDetailsAvailabilityView,
   createEnrollmentFeedbackView,
   createEnrollmentPrimaryRecordActionView,
+  createEnrollmentPromptLiveText,
   createEnrollmentPromptProgressView,
+  createEnrollmentQualityFeedbackList,
   formatEnrollmentLanguageLabel,
   getEnrollmentConditionView,
   sanitizeEnrollmentStatusText,
+  summarizeEnrollmentQualityForDetails,
   type EnrollmentRecorderStatus,
 } from './enrollment-prompt-view';
 import { createMicrophoneBlockerView } from './microphone-state';
@@ -248,6 +251,10 @@ export function MicrophonePanel() {
     recorderStatus: recorderSummary.status,
     qualityReport,
     fallbackMessage: recorderSummary.message,
+  });
+  const enrollmentPromptLiveText = createEnrollmentPromptLiveText({
+    progress: enrollmentProgress,
+    condition: enrollmentConditionView,
   });
   const enrollmentActions = createEnrollmentDetailsAvailabilityView({
     recorderStatus: recorderSummary.status,
@@ -485,7 +492,7 @@ export function MicrophonePanel() {
       sampleRateHz,
       sampleCount: pcm.length,
       durationMs: (pcm.length / sampleRateHz) * 1_000,
-      message: 'Analyzing clipping, SNR, VAD, pace, and reference-alignment hints in a worker…',
+      message: 'Checking the recording locally…',
     });
 
     try {
@@ -566,7 +573,7 @@ export function MicrophonePanel() {
     setRecorderSummary((current) => ({
       ...current,
       status: 'analyzing',
-      message: 'Saving accepted take to worker-owned private profile storage…',
+      message: 'Saving accepted take locally…',
     }));
 
     try {
@@ -1004,7 +1011,10 @@ export function MicrophonePanel() {
             <p className="enrollment-condition-hint">{enrollmentConditionView.hint}</p>
           ) : null}
           <h3 id="enrollment-prompt-title">Read this prompt</h3>
-          <blockquote aria-live="polite">“{enrollmentPrompt}”</blockquote>
+          <blockquote>“{enrollmentPrompt}”</blockquote>
+          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {enrollmentPromptLiveText}
+          </p>
         </div>
 
         <div className="enrollment-recording-area" aria-labelledby="enrollment-prompt-title">
@@ -1437,18 +1447,22 @@ function TrainingReadinessReportSummary({
 }
 
 function QualityReportSummary({ report }: { readonly report: EnrollmentQualityReportV1 }) {
+  const feedbackItems = createEnrollmentQualityFeedbackList(report);
   return (
     <div className="quality-report" aria-label="Enrollment quality report">
       <h4>Quality report</h4>
-      <p>{report.summary}</p>
+      <p>{summarizeEnrollmentQualityForDetails(report)}</p>
+      {feedbackItems.length > 0 ? (
+        <ul className="quality-feedback-list" aria-label="Recording feedback">
+          {feedbackItems.map((item) => (
+            <li key={item.reason}>{item.text}</li>
+          ))}
+        </ul>
+      ) : null}
       <dl className="probe-list microphone-settings">
         <div>
           <dt>Quality status</dt>
           <dd>{report.status}</dd>
-        </div>
-        <div>
-          <dt>Reason codes</dt>
-          <dd>{report.reasonCodes.length > 0 ? report.reasonCodes.join(', ') : 'none'}</dd>
         </div>
         <div>
           <dt>Active speech</dt>

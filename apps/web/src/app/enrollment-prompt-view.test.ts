@@ -9,10 +9,13 @@ import {
   createEnrollmentDetailsAvailabilityView,
   createEnrollmentFeedbackView,
   createEnrollmentPrimaryRecordActionView,
+  createEnrollmentPromptLiveText,
   createEnrollmentPromptProgressView,
+  createEnrollmentQualityFeedbackList,
   formatEnrollmentLanguageLabel,
   getEnrollmentConditionView,
   sanitizeEnrollmentStatusText,
+  summarizeEnrollmentQualityForDetails,
 } from './enrollment-prompt-view';
 
 describe('enrollment prompt view helpers', () => {
@@ -103,11 +106,70 @@ describe('enrollment prompt view helpers', () => {
         fallbackMessage: 'unused',
       }),
     ).toMatchObject({ text: 'Clipped — move back.', tone: 'error', livePoliteness: 'assertive' });
+    expect(
+      createEnrollmentFeedbackView({
+        recorderStatus: 'ready',
+        qualityReport: qualityReport({
+          status: 'review',
+          reasonCodes: ['low-base-model-confidence'],
+        }),
+        fallbackMessage: 'unused',
+      }),
+    ).toMatchObject({ text: 'Recognizer unsure — you can still accept.', tone: 'warning' });
   });
 
-  it('sanitizes technical status text before it reaches the compact prompt UI', () => {
+  it('maps every quality reason to concise default UI copy', () => {
+    const report = qualityReport({
+      status: 'review',
+      reasonCodes: [
+        'no-audio',
+        'duration-too-short',
+        'duration-too-long',
+        'clipping',
+        'low-snr',
+        'condition-too-quiet',
+        'condition-too-loud',
+        'vad-missing-start',
+        'vad-missing-end',
+        'pace-too-slow',
+        'pace-too-fast',
+        'alignment-low',
+        'alignment-unavailable',
+        'low-base-model-confidence',
+      ],
+    });
+
+    expect(createEnrollmentQualityFeedbackList(report).map((item) => item.text)).toEqual([
+      'No speech — record again.',
+      'Too short — read the full prompt.',
+      'Too long — read only the prompt.',
+      'Clipped — move back.',
+      'Too much noise — try a quieter room.',
+      'Too quiet — move closer.',
+      'Too loud — move back.',
+      'Speech started late — record again.',
+      'Speech ended early — record again.',
+      'Too slow — read naturally.',
+      'Too fast — slow down.',
+      'Prompt match unclear — retry or accept.',
+      'Prompt check unavailable — you can still accept.',
+      'Recognizer unsure — you can still accept.',
+    ]);
+  });
+
+  it('sanitizes technical status text and details summaries before default copy', () => {
     expect(sanitizeEnrollmentStatusText('checksum abc123 failed in worker')).toBe('Record again.');
     expect(sanitizeEnrollmentStatusText('Try a quieter room.')).toBe('Try a quieter room.');
+    expect(
+      summarizeEnrollmentQualityForDetails(
+        qualityReport({ status: 'review', reasonCodes: ['low-base-model-confidence'] }),
+      ),
+    ).toBe('Review the take. You can accept it if it sounds right.');
+    expect(
+      summarizeEnrollmentQualityForDetails(
+        qualityReport({ status: 'retry', reasonCodes: ['duration-too-short'] }),
+      ),
+    ).toBe('Record again when ready.');
   });
 
   it('keeps secondary actions relevant to the current take state', () => {
@@ -135,6 +197,15 @@ describe('enrollment prompt view helpers', () => {
         microphoneActive: true,
       }),
     ).toEqual({ canReplay: true, canRetry: true, canSkip: true, canAccept: true, canPause: true });
+  });
+
+  it('announces prompt changes with restrained live text', () => {
+    expect(
+      createEnrollmentPromptLiveText({
+        progress: { current: 3, total: 24, label: '3 of 24' },
+        condition: { label: 'Loud', hint: 'Project your voice without straining.' },
+      }),
+    ).toBe('Prompt 3 of 24. Loud.');
   });
 
   it('uses default user-facing language labels', () => {
