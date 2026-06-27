@@ -23,9 +23,14 @@ describe('v0.6 primary destination route state', () => {
   it('maps legacy/current panel hashes to the owning primary destination', () => {
     expect(getInitialPrimaryDestinationId(undefined)).toBe('dictate');
     expect(getInitialPrimaryDestinationId('#transcript-title')).toBe('dictate');
+    expect(getInitialPrimaryDestinationId('#transcript-privacy-title')).toBe('dictate');
     expect(getInitialPrimaryDestinationId('#vocabulary-title')).toBe('vocabulary');
     expect(getInitialPrimaryDestinationId('#personal-models-title')).toBe('models');
+    expect(getInitialPrimaryDestinationId('#offline-model-title')).toBe('models');
+    expect(getInitialPrimaryDestinationId('#diagnostics-title')).toBe('models');
+    expect(getInitialPrimaryDestinationId('#benchmark-title')).toBe('models');
     expect(getInitialPrimaryDestinationId('#runtime-title')).toBe('models');
+    expect(getInitialPrimaryDestinationId('#roadmap-title')).toBe('models');
     expect(getInitialPrimaryDestinationId('#unknown-advanced-panel')).toBe('dictate');
   });
 

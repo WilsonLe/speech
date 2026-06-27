@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { App } from './App';
+
+const globalCss = readFileSync(resolve(process.cwd(), 'src/styles/global.css'), 'utf8');
 
 describe('App', () => {
   it('renders the task-first application shell and existing workflow panels', () => {
@@ -11,7 +15,19 @@ describe('App', () => {
     expect(html).toContain('href="#dictate"');
     expect(html).toContain('href="#vocabulary"');
     expect(html).toContain('href="#models"');
-    expect(html).toContain('aria-label="Local status summary"');
+    expect(html).toMatch(/Local status: (check|offline|ready|setup|update)\./i);
+    expect(html).toContain('Local status details');
+    expect(html).toContain('Model downloads');
+    expect(html).toContain('Audio, vocabulary, and personal models stay in this browser.');
+    expect(html).toContain('Application menu');
+    expect(html).toContain('Settings');
+    expect(html).toContain('Storage');
+    expect(html).toContain('Privacy');
+    expect(html).toContain('Keyboard shortcuts');
+    expect(html).toContain('Diagnostics');
+    expect(html).toContain('About');
+    const shellOnlyMarkup = html.slice(0, html.indexOf('id="dictate"'));
+    expect(shellOnlyMarkup).not.toMatch(/sha256|WebGPU|WASM|OPFS|provider/i);
     expect(html).not.toContain('Foundation actions');
     expect(html).not.toContain('Privacy baseline');
 
@@ -42,5 +58,12 @@ describe('App', () => {
     expect(html).toContain('Implementation roadmap');
     expect(html).toContain('Evidence-backed production claims');
     expect(html).toContain('evidence-needed');
+  });
+
+  it('keeps Local status tone styles attached to the button implementation', () => {
+    expect(globalCss).toContain(
+      ".app-local-status[data-tone='ready'] .app-local-status__button strong",
+    );
+    expect(globalCss).not.toContain(".app-local-status[data-tone='ready'] summary strong");
   });
 });

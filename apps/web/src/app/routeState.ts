@@ -36,12 +36,17 @@ const hashAliases: Readonly<Record<string, PrimaryDestinationId>> = {
   '#dictate': 'dictate',
   '#transcript-title': 'dictate',
   '#committed-transcript-text': 'dictate',
+  '#transcript-privacy-title': 'dictate',
   '#vocabulary': 'vocabulary',
   '#vocabulary-title': 'vocabulary',
   '#models': 'models',
   '#personal-models-title': 'models',
   '#microphone-title': 'models',
+  '#offline-model-title': 'models',
+  '#diagnostics-title': 'models',
+  '#benchmark-title': 'models',
   '#runtime-title': 'models',
+  '#roadmap-title': 'models',
 };
 
 export function normalizeHashForPrimaryDestination(hash: string | undefined): PrimaryDestinationId {
