@@ -57,7 +57,9 @@ describe('App', () => {
     expect(html).toContain('Import behavior');
     expect(html).toContain('Dedupe existing profile');
     expect(html).toContain('Import as new profile');
-    expect(html).toContain('Offline readiness and model lifecycle');
+    expect(html).toContain('Offline and updates');
+    expect(html).toContain('Offline is normal after app files and the speech model are installed.');
+    expect(html).toContain('Model lifecycle details');
     expect(html).toContain('Browser capability report');
     expect(html).toContain('Benchmark and diagnostics export');
     expect(html).toContain('Permission and capture check');

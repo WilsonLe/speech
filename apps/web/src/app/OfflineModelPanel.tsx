@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  activatePwaUpdate,
   getPwaLifecycleSnapshot,
   subscribePwaLifecycle,
   type PwaLifecycleSnapshot,
@@ -16,6 +15,11 @@ import type {
   ModelCatalogV1,
   ModelInstallProgress,
 } from '@speech/model-manager';
+import {
+  createOfflineModelSummary,
+  createOfflinePanelStateView,
+  type OfflinePanelStateView,
+} from './offline-state';
 
 type LifecycleStatus = 'idle' | 'loading' | 'ready' | 'installing' | 'error';
 
@@ -88,7 +92,7 @@ export function OfflineModelPanel() {
     };
   }, []);
 
-  const models = lifecycle.catalog?.models ?? [];
+  const models = useMemo(() => lifecycle.catalog?.models ?? [], [lifecycle.catalog]);
   const activeByModelId = useMemo(() => {
     const records = new Map<string, InstalledModelRecord>();
     for (const record of lifecycle.installed) {
@@ -96,6 +100,20 @@ export function OfflineModelPanel() {
     }
     return records;
   }, [lifecycle.installed]);
+  const offlineModelSummary = useMemo(
+    () =>
+      createOfflineModelSummary({
+        status: toOfflineModelStatus(lifecycle.status),
+        models,
+        installed: lifecycle.installed,
+        progress: lifecycle.progress,
+      }),
+    [lifecycle.installed, lifecycle.progress, lifecycle.status, models],
+  );
+  const offlineView = useMemo(
+    () => createOfflinePanelStateView({ online, pwa, modelSummary: offlineModelSummary }),
+    [offlineModelSummary, online, pwa],
+  );
 
   function inspectModel(modelId: string) {
     workerRef.current?.postMessage({ type: 'INSPECT_MODEL', modelId });
@@ -113,86 +131,87 @@ export function OfflineModelPanel() {
   return (
     <section className="panel offline-model" aria-labelledby="offline-model-title">
       <div className="section-heading">
-        <p className="eyebrow">Offline app shell</p>
-        <h2 id="offline-model-title">Offline readiness and model lifecycle</h2>
-        <p>
-          The service worker owns only app-shell caching and update prompts. Model files stay in the
-          model-manager backend so app updates do not delete installed model versions.
-        </p>
+        <p className="eyebrow">Local setup</p>
+        <h2 id="offline-model-title">Offline and updates</h2>
+        <p>Offline is normal after app files and the speech model are installed.</p>
       </div>
 
-      <div className="offline-grid" aria-label="Offline app shell status">
-        <StatusCard
-          label="Network"
-          value={online ? 'Online' : 'Offline'}
-          tone={online ? 'good' : 'warn'}
-        />
-        <StatusCard
-          label="Service worker"
-          value={formatRegistrationState(pwa)}
-          tone={pwa.registrationState === 'error' ? 'error' : 'neutral'}
-        />
-        <StatusCard
-          label="Offline app shell"
-          value={pwa.offlineReady ? 'Ready' : 'Preparing'}
-          tone={pwa.offlineReady ? 'good' : 'warn'}
-        />
-        <StatusCard
-          label="Model storage"
-          value={lifecycle.backendKind ?? 'loading'}
-          tone={lifecycle.backendKind === null ? 'warn' : 'neutral'}
-        />
-      </div>
+      <OfflineStatusSummary view={offlineView} />
 
-      {pwa.updateAvailable ? (
-        <div className="status-message update-message">
-          <span>
-            A new app shell is ready. It will not replace a running utterance automatically.
-          </span>
-          <button type="button" className="secondary" onClick={() => void activatePwaUpdate()}>
-            Reload update
-          </button>
+      <details className="model-lifecycle-disclosure" open={offlineView.detailsOpen}>
+        <summary>Model lifecycle details</summary>
+        <div className="model-lifecycle-heading">
+          <h3>Model catalog</h3>
+          <p>
+            Inspect manifests before downloading model files. Installation stays in a worker and
+            verifies size, checksum, license, and activation state.
+          </p>
         </div>
-      ) : null}
-      {pwa.errorMessage ? <p className="status-message error-message">{pwa.errorMessage}</p> : null}
 
-      <div className="model-lifecycle-heading">
-        <h3>Model catalog</h3>
-        <p>
-          Inspect manifests before downloading large model files. Installation runs in a dedicated
-          worker and verifies size, checksum, license, and active-version state before activation.
-        </p>
-      </div>
+        {lifecycle.errorMessage ? (
+          <p role="alert" className="status-message error-message">
+            Model setup needs attention. Retry when online or inspect the model details.
+          </p>
+        ) : null}
+        {lifecycle.progress ? (
+          <p className="status-message" aria-live="polite">
+            {formatProgress(lifecycle.progress)}
+          </p>
+        ) : null}
 
-      {lifecycle.errorMessage ? (
-        <p role="alert" className="status-message error-message">
-          {lifecycle.errorMessage}
-        </p>
-      ) : null}
-      {lifecycle.progress ? (
-        <p className="status-message" aria-live="polite">
-          {formatProgress(lifecycle.progress)}
-        </p>
-      ) : null}
-
-      <div className="model-card-list">
-        {models.length === 0 ? <p className="status-message">Loading model catalog…</p> : null}
-        {models.map((model) => (
-          <ModelCard
-            key={model.id}
-            model={model}
-            inspection={lifecycle.inspections[model.id]}
-            activeRecord={activeByModelId.get(model.id)}
-            installing={lifecycle.status === 'installing'}
-            online={online}
-            onInspect={() => inspectModel(model.id)}
-            onInstall={() => installModel(model.id)}
-            onDelete={() => deleteModel(model.id)}
-          />
-        ))}
-      </div>
+        <div className="model-card-list">
+          {models.length === 0 ? <p className="status-message">Loading model catalog…</p> : null}
+          {models.map((model) => (
+            <ModelCard
+              key={model.id}
+              model={model}
+              inspection={lifecycle.inspections[model.id]}
+              activeRecord={activeByModelId.get(model.id)}
+              installing={lifecycle.status === 'installing'}
+              online={online}
+              onInspect={() => inspectModel(model.id)}
+              onInstall={() => installModel(model.id)}
+              onDelete={() => deleteModel(model.id)}
+            />
+          ))}
+        </div>
+      </details>
     </section>
   );
+}
+
+function OfflineStatusSummary({ view }: { readonly view: OfflinePanelStateView }) {
+  return (
+    <div className="offline-status-summary" data-tone={view.tone} aria-live="polite">
+      <div>
+        <h3>{view.headline}</h3>
+        <p>{view.summary}</p>
+      </div>
+      <dl aria-label="Offline and update status">
+        {view.rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {view.blocker ? (
+        <p role="alert" className="status-message error-message">
+          {view.blocker}
+        </p>
+      ) : null}
+      {view.updateNotice ? (
+        <p className="status-message update-message">{view.updateNotice}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function toOfflineModelStatus(
+  status: LifecycleStatus,
+): 'loading' | 'ready' | 'installing' | 'error' {
+  if (status === 'installing' || status === 'ready' || status === 'error') return status;
+  return 'loading';
 }
 
 function reduceLifecycleMessage(
@@ -334,23 +353,6 @@ function ModelCard({
   );
 }
 
-function StatusCard({
-  label,
-  value,
-  tone,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly tone: 'neutral' | 'good' | 'warn' | 'error';
-}) {
-  return (
-    <div className="status-pill" data-tone={tone}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
 function formatManifestChecksumStatus(
   inspection: ManifestInspectionResult | undefined,
   hasManifest: boolean,
@@ -358,12 +360,6 @@ function formatManifestChecksumStatus(
   if (!hasManifest) return 'not available';
   if (inspection === undefined) return 'pending';
   return inspection.manifestSha256MatchesCatalog ? 'verified' : 'mismatch';
-}
-
-function formatRegistrationState(snapshot: PwaLifecycleSnapshot): string {
-  if (!snapshot.serviceWorkerSupported) return 'Unsupported';
-  if (snapshot.registrationScope !== null) return 'Registered';
-  return snapshot.registrationState;
 }
 
 function formatProgress(progress: ModelInstallProgress): string {

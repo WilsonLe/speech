@@ -39,6 +39,7 @@ import {
   rollbackEnrollmentProfile,
   saveAcceptedEnrollmentTake,
 } from '../workers/profile-store-client';
+import { createMicrophoneBlockerView } from './microphone-state';
 import {
   defaultPersonalProfileDisplayName,
   defaultPersonalProfileId,
@@ -136,7 +137,7 @@ const idleCaptureSummary: WorkletCaptureSummary = {
   peak: 0,
   rms: 0,
   clippingRatio: 0,
-  message: 'AudioWorklet capture is idle until you start a microphone check.',
+  message: 'Start a microphone check when needed.',
 };
 
 const idleEnrollmentRecorderSummary: EnrollmentRecorderSummary = {
@@ -219,6 +220,7 @@ export function MicrophonePanel() {
         : buildTrainingReadinessCoverageReportForProfile(profileStore.summary),
     [profileStore.summary],
   );
+  const microphoneBlocker = error ? createMicrophoneBlockerView(error) : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -272,7 +274,7 @@ export function MicrophonePanel() {
     setCaptureSummary({
       ...idleCaptureSummary,
       status: 'loading',
-      message: 'Loading AudioWorklet…',
+      message: 'Starting microphone check…',
     });
 
     try {
@@ -299,7 +301,7 @@ export function MicrophonePanel() {
         ...current,
         status: 'capturing',
         sampleRateHz: session.audioContextSampleRateHz,
-        message: 'AudioWorklet is capturing device-rate PCM and posting local metrics.',
+        message: 'Microphone check is running.',
       }));
     } catch (captureError) {
       workletController.current?.dispose();
@@ -311,7 +313,7 @@ export function MicrophonePanel() {
       setCaptureSummary({
         ...idleCaptureSummary,
         status: 'error',
-        message: 'AudioWorklet capture could not start.',
+        message: 'Microphone check could not start.',
       });
     }
   }
@@ -329,14 +331,14 @@ export function MicrophonePanel() {
         ? {
             ...current,
             status: 'idle',
-            message: 'Microphone stopped before the enrollment take was accepted or analyzed.',
+            message: 'Microphone stopped before the take was saved.',
           }
         : current,
     );
     setCaptureSummary((current) => ({
       ...current,
       status: 'stopped',
-      message: 'Capture stopped and microphone resources were released.',
+      message: 'Microphone stopped.',
     }));
   }
 
@@ -750,14 +752,14 @@ export function MicrophonePanel() {
           ...current,
           status: 'capturing',
           sampleRateHz: message.sampleRateHz,
-          message: 'AudioWorklet capture started.',
+          message: 'Microphone check started.',
         }));
         break;
       case 'CAPTURE_STOPPED':
         setCaptureSummary((current) => ({
           ...current,
           status: 'stopped',
-          message: 'AudioWorklet capture stopped.',
+          message: 'Microphone check stopped.',
         }));
         break;
       case 'LEVEL':
@@ -873,9 +875,10 @@ export function MicrophonePanel() {
         </button>
       </div>
 
-      {error ? (
+      {microphoneBlocker ? (
         <p role="alert" className="status-message error-message">
-          {error.message} {error.recoveryStep}
+          <strong>{microphoneBlocker.headline}.</strong> {microphoneBlocker.message}{' '}
+          {microphoneBlocker.action}
         </p>
       ) : null}
 
