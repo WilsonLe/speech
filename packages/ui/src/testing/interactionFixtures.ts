@@ -27,6 +27,30 @@ export const speechDisclosureUsageRules = [
   'Do not nest Accordion patterns or place long forms inside accordion panels.',
 ] as const;
 
+export const speechMenuFocusKeys = [
+  'ArrowDown',
+  'ArrowUp',
+  'Home',
+  'End',
+  'Escape',
+  'Tab',
+] as const;
+
+export const speechMenuUsageRules = [
+  'Use MenuButton for a temporary list of low-frequency actions or navigation for one context.',
+  'Do not place forms, nested submenus, required privacy terms, blockers, or destructive consequences only in a menu.',
+  'Destructive menu items must open a confirmation workflow rather than performing the destructive change directly.',
+  'Frequently used actions stay visible instead of moving into a menu for visual minimalism.',
+] as const;
+
+export const speechTooltipUsageRules = [
+  'Use Tooltip only for short supplemental text on compact controls or abbreviated statuses.',
+  'Do not put links, buttons, forms, required instructions, errors, privacy terms, or destructive consequences inside a tooltip.',
+  'Keep normal tooltip text within the v0.6 140-character budget.',
+  'Provide a visible label or dedicated help surface when touch users need the information to complete the task.',
+] as const;
+
 export type SpeechButtonActivationKey = (typeof speechButtonActivationKeys)[number];
 export type SpeechButtonStateExample = (typeof speechButtonStateExamples)[number];
 export type SpeechAccordionFocusKey = (typeof speechAccordionFocusKeys)[number];
+export type SpeechMenuFocusKey = (typeof speechMenuFocusKeys)[number];

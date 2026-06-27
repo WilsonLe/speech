@@ -5,6 +5,9 @@ export {
   speechDisclosureAccessibilityChecklist,
   speechDisclosureCssRequirements,
   speechIconButtonAccessibilityChecklist,
+  speechMenuButtonAccessibilityChecklist,
+  speechMenuCssRequirements,
+  speechTooltipAccessibilityChecklist,
 } from './accessibility';
 export {
   speechAccordionFocusKeys,
@@ -12,7 +15,11 @@ export {
   speechButtonPointerExpectations,
   speechButtonStateExamples,
   speechDisclosureUsageRules,
+  speechMenuFocusKeys,
+  speechMenuUsageRules,
+  speechTooltipUsageRules,
   type SpeechAccordionFocusKey,
   type SpeechButtonActivationKey,
   type SpeechButtonStateExample,
+  type SpeechMenuFocusKey,
 } from './interactionFixtures';
