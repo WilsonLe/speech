@@ -53,6 +53,15 @@ describe('v0.6 route migration and navigation guards', () => {
       stateSource: 'domain-storage',
     });
 
+    const newModel = resolveAppRoute({ pathname: '/models/new' });
+    expect(newModel.routeId).toBe('models-new');
+    expect(newModel.primaryDestinationId).toBe('models');
+    expect(newModel.headingId).toBe('create-model-flow-title');
+    expect(createRouteRestorationPlan(newModel)).toMatchObject({
+      headingId: 'create-model-flow-title',
+      scrollRestoration: 'reset-on-new-task',
+    });
+
     const training = resolveAppRoute({
       pathname: '/models/profile.local/train',
       search: '?jobId=job-1&returnTo=/models/profile.local',

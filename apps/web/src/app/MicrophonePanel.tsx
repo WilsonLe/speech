@@ -39,12 +39,12 @@ import {
   rollbackEnrollmentProfile,
   saveAcceptedEnrollmentTake,
 } from '../workers/profile-store-client';
-import { createMicrophoneBlockerView } from './microphone-state';
 import {
-  defaultPersonalProfileDisplayName,
-  defaultPersonalProfileId,
-  defaultPersonalSentenceBankVersion,
-} from './personal-models';
+  resolveCreateModelEnrollmentLanguage,
+  resolveCreateModelProfileDisplayName,
+} from './create-model-flow';
+import { createMicrophoneBlockerView } from './microphone-state';
+import { defaultPersonalProfileId, defaultPersonalSentenceBankVersion } from './personal-models';
 
 interface ToggleConfig {
   readonly key: keyof MicrophoneProcessingOptions;
@@ -159,7 +159,6 @@ const voiceConditions: readonly EnrollmentVoiceCondition[] = ['whisper', 'normal
 const enrollmentLanguages: readonly EnrollmentSentenceLanguage[] = ['vi', 'en', 'mixed'];
 const defaultEnrollmentPrompt = 'Tôi vừa update dashboard.';
 const defaultProfileId = defaultPersonalProfileId;
-const defaultProfileDisplayName = defaultPersonalProfileDisplayName;
 const defaultSentenceBankVersion = defaultPersonalSentenceBankVersion;
 const manualPromptId = 'manual-enrollment-prompt';
 const manualPromptVersion = 1;
@@ -191,7 +190,11 @@ export function MicrophonePanel() {
   const [roomNoiseRms, setRoomNoiseRms] = useState<number | null>(null);
   const [normalBaselineRms, setNormalBaselineRms] = useState<number | null>(null);
   const [voiceCondition, setVoiceCondition] = useState<EnrollmentVoiceCondition>('normal');
-  const [enrollmentLanguage, setEnrollmentLanguage] = useState<EnrollmentSentenceLanguage>('mixed');
+  const [enrollmentLanguage, setEnrollmentLanguage] = useState<EnrollmentSentenceLanguage>(() =>
+    resolveCreateModelEnrollmentLanguage(
+      typeof window === 'undefined' ? null : window.localStorage,
+    ),
+  );
   const [enrollmentPrompt, setEnrollmentPrompt] = useState(defaultEnrollmentPrompt);
   const [recorderSummary, setRecorderSummary] = useState<EnrollmentRecorderSummary>(
     idleEnrollmentRecorderSummary,
@@ -221,6 +224,17 @@ export function MicrophonePanel() {
     [profileStore.summary],
   );
   const microphoneBlocker = error ? createMicrophoneBlockerView(error) : null;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    function handleCreateModelDraftUpdate() {
+      setEnrollmentLanguage(resolveCreateModelEnrollmentLanguage(window.localStorage));
+    }
+    window.addEventListener('speech-create-model-draft-updated', handleCreateModelDraftUpdate);
+    return () => {
+      window.removeEventListener('speech-create-model-draft-updated', handleCreateModelDraftUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -507,7 +521,9 @@ export function MicrophonePanel() {
       const saveBuffer = copyFloat32ArrayToArrayBuffer(pcm);
       const result = await saveAcceptedEnrollmentTake({
         profileId: defaultProfileId,
-        profileDisplayName: defaultProfileDisplayName,
+        profileDisplayName: resolveCreateModelProfileDisplayName(
+          typeof window === 'undefined' ? null : window.localStorage,
+        ),
         sentenceBankVersion: defaultSentenceBankVersion,
         promptId: manualPromptId,
         promptVersion: manualPromptVersion,

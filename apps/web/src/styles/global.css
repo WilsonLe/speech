@@ -1779,6 +1779,130 @@ button.danger,
   min-width: min(100%, 16rem);
 }
 
+.create-model-flow {
+  display: grid;
+  gap: 1rem;
+  margin: 1.25rem 0;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 1.1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.32);
+}
+
+.create-model-flow__header {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.create-model-flow__header .button {
+  width: max-content;
+}
+
+.create-model-flow__header h3 {
+  margin: 0;
+  color: #f8fafc;
+}
+
+.create-model-flow__progress,
+.create-model-flow__details p {
+  margin: 0;
+  color: #cbd5e1;
+}
+
+.create-model-flow__card {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.create-model-flow__field {
+  display: grid;
+  gap: 0.5rem;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.create-model-flow__field input {
+  width: min(100%, 28rem);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 0.85rem;
+  padding: 0.8rem 0.9rem;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.82);
+  font: inherit;
+}
+
+.create-model-flow__field input:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.create-model-flow__review dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.create-model-flow__review dl div {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.create-model-flow__review dt {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.create-model-flow__review dd {
+  margin: 0.35rem 0 0;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.create-model-flow__details {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.create-model-flow__details summary {
+  color: #f8fafc;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.create-model-flow__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.create-model-flow__step-dot {
+  width: 0.8rem;
+  min-width: 0;
+  height: 0.8rem;
+  min-height: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: rgba(148, 163, 184, 0.45);
+}
+
+.create-model-flow__step-dot[aria-current='step'] {
+  background: var(--speech-color-accent);
+}
+
 .model-list-row {
   display: grid;
   grid-template-columns: minmax(14rem, 1.3fr) minmax(12rem, 1fr) max-content;
@@ -2291,6 +2415,7 @@ button.danger,
   .model-list-row,
   .model-list-header,
   .model-import-options,
+  .create-model-flow__review dl,
   .model-detail-summary,
   .model-detail-summary__meta,
   .model-detail-metrics,
@@ -2342,6 +2467,11 @@ button.danger,
   }
 
   .vocabulary-entry-editor__heading,
+  .create-model-flow {
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+
+  .create-model-flow__actions,
   .model-list-toolbar,
   .model-list-actions,
   .model-list-meta {
@@ -2378,6 +2508,8 @@ button.danger,
   .model-list-actions .speech-button,
   .model-list-actions .button,
   .model-import-options button,
+  .create-model-flow__actions .button,
+  .create-model-flow__actions button:not(.create-model-flow__step-dot),
   .personal-models-nav a,
   .benchmark-actions button,
   .update-message button,
