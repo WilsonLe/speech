@@ -13,6 +13,7 @@ import {
   type PcmCaptureWorkletMessage,
 } from '@speech/audio';
 import {
+  defaultTrainingReadinessPolicyV1,
   evaluateVoiceConditionGuidance,
   formatDb,
   formatDbRange,
@@ -43,6 +44,16 @@ import {
   resolveCreateModelEnrollmentLanguage,
   resolveCreateModelProfileDisplayName,
 } from './create-model-flow';
+import {
+  createEnrollmentDetailsAvailabilityView,
+  createEnrollmentFeedbackView,
+  createEnrollmentPrimaryRecordActionView,
+  createEnrollmentPromptProgressView,
+  formatEnrollmentLanguageLabel,
+  getEnrollmentConditionView,
+  sanitizeEnrollmentStatusText,
+  type EnrollmentRecorderStatus,
+} from './enrollment-prompt-view';
 import { createMicrophoneBlockerView } from './microphone-state';
 import { defaultPersonalProfileId, defaultPersonalSentenceBankVersion } from './personal-models';
 
@@ -72,15 +83,6 @@ interface ActiveEnrollmentTakeBuffer {
   sampleCount: number;
   sampleRateHz: number | null;
 }
-
-type EnrollmentRecorderStatus =
-  | 'idle'
-  | 'recording'
-  | 'analyzing'
-  | 'ready'
-  | 'accepted'
-  | 'skipped'
-  | 'error';
 
 interface EnrollmentRecorderSummary {
   readonly status: EnrollmentRecorderStatus;
@@ -224,6 +226,40 @@ export function MicrophonePanel() {
     [profileStore.summary],
   );
   const microphoneBlocker = error ? createMicrophoneBlockerView(error) : null;
+  const acceptedTakes = profileStore.summary?.profile.enrollment.acceptedUtterances ?? 0;
+  const enrollmentProgress = createEnrollmentPromptProgressView({
+    acceptedTakes,
+    readinessReport: trainingReadinessReport,
+    fallbackPolicy: defaultTrainingReadinessPolicyV1,
+  });
+  const hasAcceptedCurrentCondition =
+    profileStore.summary?.utterances.some(
+      (utterance) => utterance.voiceCondition === voiceCondition,
+    ) ?? false;
+  const enrollmentConditionView = getEnrollmentConditionView(voiceCondition, {
+    isFirstPromptInCondition: !hasAcceptedCurrentCondition,
+    hasFailedTake: qualityReport?.status === 'retry' || recorderSummary.status === 'error',
+  });
+  const enrollmentPrimaryAction = createEnrollmentPrimaryRecordActionView({
+    microphoneStatus: status,
+    recorderStatus: recorderSummary.status,
+  });
+  const enrollmentFeedback = createEnrollmentFeedbackView({
+    recorderStatus: recorderSummary.status,
+    qualityReport,
+    fallbackMessage: recorderSummary.message,
+  });
+  const enrollmentActions = createEnrollmentDetailsAvailabilityView({
+    recorderStatus: recorderSummary.status,
+    hasCapturedTake: lastTakePcm.current !== null,
+    hasQualityReport: qualityReport !== null,
+    canSave:
+      qualityReport !== null &&
+      lastTakePcm.current !== null &&
+      profileStore.status !== 'saving' &&
+      profileStore.status !== 'deleting',
+    microphoneActive: status === 'active',
+  });
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -281,6 +317,22 @@ export function MicrophonePanel() {
       void controller.stop();
     };
   }, [controller]);
+
+  function handleEnrollmentPrimaryRecordAction() {
+    switch (enrollmentPrimaryAction.intent) {
+      case 'start-microphone':
+        void startMicrophoneCheck();
+        break;
+      case 'record':
+        startEnrollmentTake();
+        break;
+      case 'stop':
+        void stopAndAnalyzeEnrollmentTake();
+        break;
+      case 'checking':
+        break;
+    }
+  }
 
   async function startMicrophoneCheck() {
     setStatus('requesting');
@@ -551,7 +603,7 @@ export function MicrophonePanel() {
       setRecorderSummary((current) => ({
         ...current,
         status: 'accepted',
-        message: `Accepted take ${result.utterance.id} saved locally with checksum ${result.utterance.audio.sha256.slice(0, 12)}…`,
+        message: 'Accepted take saved locally.',
       }));
     } catch (storeError) {
       setProfileStore((current) => ({
@@ -932,298 +984,321 @@ export function MicrophonePanel() {
       </dl>
       <p className="status-message">{captureSummary.message}</p>
 
-      <div
-        className="status-message enrollment-calibration"
-        aria-label="Enrollment calibration guidance"
-      >
-        <h3>Calibration and voice guidance</h3>
-        <p>
-          For enrollment, capture a short room-noise sample, then set a normal speaking baseline.
-          Guidance uses only local RMS, peak, and clipping metrics from the AudioWorklet; no
-          calibration audio is persisted.
-        </p>
-        <p>
-          Enrollment requests should prefer browser processing off when supported. Current track AGC
-          setting:{' '}
-          {snapshot ? formatSetting(snapshot.actualSettings.autoGainControl) : 'not reported'}.
-        </p>
-        <div className="hero-actions" aria-label="Enrollment calibration controls">
+      <div className="enrollment-prompt-screen" aria-label="Enrollment recorder">
+        <div className="enrollment-prompt-screen__topline">
+          <span>{enrollmentProgress.label}</span>
           <button
             type="button"
             className="secondary"
-            onClick={saveRoomNoiseSample}
-            disabled={status !== 'active' || captureSummary.rms <= 0}
+            onClick={() => void stopMicrophoneCheck()}
+            disabled={!enrollmentActions.canPause}
           >
-            Use current level as room-noise sample
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={saveNormalBaseline}
-            disabled={status !== 'active' || captureSummary.rms <= 0}
-          >
-            Set normal baseline from current level
+            Pause
           </button>
         </div>
-        <label className="select-field">
-          <span>Voice condition</span>
-          <select
-            value={voiceCondition}
-            onChange={(event) => setVoiceCondition(event.target.value as EnrollmentVoiceCondition)}
-          >
-            {voiceConditions.map((condition) => (
-              <option key={condition} value={condition}>
-                {condition}
-              </option>
-            ))}
-          </select>
-        </label>
-        <dl className="probe-list microphone-settings" aria-label="Enrollment calibration metrics">
-          <div>
-            <dt>Room noise RMS</dt>
-            <dd>{roomNoiseRms !== null ? roomNoiseRms.toFixed(3) : 'not set'}</dd>
-          </div>
-          <div>
-            <dt>Normal baseline RMS</dt>
-            <dd>{normalBaselineRms !== null ? normalBaselineRms.toFixed(3) : 'not set'}</dd>
-          </div>
-          <div>
-            <dt>Current relative level</dt>
-            <dd>{formatDb(voiceGuidance.relativeDb)}</dd>
-          </div>
-          <div>
-            <dt>Advisory band</dt>
-            <dd>{formatDbRange(voiceGuidance.target)}</dd>
-          </div>
-          <div>
-            <dt>Estimated SNR</dt>
-            <dd>{formatDb(voiceGuidance.snrDb)}</dd>
-          </div>
-          <div>
-            <dt>Guidance status</dt>
-            <dd>{voiceGuidance.status}</dd>
-          </div>
-        </dl>
-        <p className="status-message">{voiceGuidance.message}</p>
-        {voiceCondition === 'projected' ? (
-          <p className="status-message">
-            Projected means loud and clear, like addressing a room. Do not strain, scream, or
-            sustain a shout.
-          </p>
-        ) : null}
-      </div>
 
-      <div className="status-message enrollment-recorder" aria-label="Enrollment recorder">
-        <h3>Enrollment recorder and quality analyzer</h3>
-        <p>
-          Record a single guided take into memory, analyze it in a dedicated worker, then replay,
-          retry, skip, or explicitly save the accepted take to the private enrollment profile store.
-          OPFS is preferred; an in-memory fallback is reported when the browser context cannot
-          expose OPFS to the worker.
-        </p>
-        <label className="text-field">
-          <span>Reference prompt</span>
-          <textarea
-            value={enrollmentPrompt}
-            rows={2}
-            onChange={(event) => setEnrollmentPrompt(event.target.value)}
-          />
-        </label>
-        <label className="select-field">
-          <span>Prompt language</span>
-          <select
-            value={enrollmentLanguage}
-            onChange={(event) =>
-              setEnrollmentLanguage(event.target.value as EnrollmentSentenceLanguage)
-            }
-          >
-            {enrollmentLanguages.map((language) => (
-              <option key={language} value={language}>
-                {language}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="hero-actions" aria-label="Enrollment recorder controls">
-          <button
-            type="button"
-            onClick={startEnrollmentTake}
-            disabled={status !== 'active' || recorderSummary.status === 'recording'}
-          >
-            Start enrollment take
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void stopAndAnalyzeEnrollmentTake()}
-            disabled={recorderSummary.status !== 'recording'}
-          >
-            Stop and analyze take
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void replayLastTake()}
-            disabled={!lastTakePcm.current || recorderSummary.status === 'recording'}
-          >
-            Replay captured take
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={retryEnrollmentTake}
-            disabled={recorderSummary.status === 'recording'}
-          >
-            Retry take
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={skipEnrollmentPrompt}
-            disabled={recorderSummary.status === 'recording'}
-          >
-            Skip prompt
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void manuallyAcceptTake()}
-            disabled={
-              !qualityReport ||
-              !lastTakePcm.current ||
-              recorderSummary.status === 'recording' ||
-              profileStore.status === 'saving' ||
-              profileStore.status === 'deleting'
-            }
-          >
-            Manually accept and save take
-          </button>
+        <div className="enrollment-prompt-screen__body">
+          <p className="eyebrow">Enrollment</p>
+          <p className="enrollment-condition-label">{enrollmentConditionView.label}</p>
+          {enrollmentConditionView.hint ? (
+            <p className="enrollment-condition-hint">{enrollmentConditionView.hint}</p>
+          ) : null}
+          <h3 id="enrollment-prompt-title">Read this prompt</h3>
+          <blockquote aria-live="polite">“{enrollmentPrompt}”</blockquote>
         </div>
-        <dl className="probe-list microphone-settings" aria-label="Enrollment recorder metrics">
-          <div>
-            <dt>Recorder status</dt>
-            <dd>{recorderSummary.status}</dd>
-          </div>
-          <div>
-            <dt>Take samples</dt>
-            <dd>{recorderSummary.sampleCount}</dd>
-          </div>
-          <div>
-            <dt>Take duration</dt>
-            <dd>{formatMs(recorderSummary.durationMs)}</dd>
-          </div>
-          <div>
-            <dt>Take sample rate</dt>
-            <dd>
-              {recorderSummary.sampleRateHz ? `${recorderSummary.sampleRateHz} Hz` : 'not set'}
-            </dd>
-          </div>
-        </dl>
-        <p className="status-message">{recorderSummary.message}</p>
-        <div className="profile-store-status" aria-label="Enrollment profile storage">
-          <h4>Durable profile storage</h4>
-          <p>
-            Accepted takes are stored locally only after an explicit save. Use delete to remove the
-            stored enrollment recordings and derived profile files for this local profile.
+
+        <div className="enrollment-recording-area" aria-labelledby="enrollment-prompt-title">
+          <button
+            type="button"
+            className="enrollment-record-button"
+            onClick={handleEnrollmentPrimaryRecordAction}
+            disabled={enrollmentPrimaryAction.disabled}
+            aria-describedby="enrollment-feedback"
+          >
+            {enrollmentPrimaryAction.label}
+          </button>
+          <p
+            id="enrollment-feedback"
+            className="enrollment-feedback"
+            data-tone={enrollmentFeedback.tone}
+            aria-live={enrollmentFeedback.livePoliteness}
+          >
+            {enrollmentFeedback.text}
           </p>
-          <dl className="probe-list microphone-settings">
-            <div>
-              <dt>Profile store status</dt>
-              <dd>{profileStore.status}</dd>
-            </div>
-            <div>
-              <dt>Storage backend</dt>
-              <dd>{formatProfileStoreBackend(profileStore.backendKind)}</dd>
-            </div>
-            <div>
-              <dt>Persistent storage</dt>
-              <dd>{formatPersistentStorage(profileStore.persistentStorageGranted)}</dd>
-            </div>
-            <div>
-              <dt>Active profile</dt>
-              <dd>{profileStore.activeState?.activeProfileId ?? 'none'}</dd>
-            </div>
-            <div>
-              <dt>Rollback profile</dt>
-              <dd>{profileStore.activeState?.previousProfileId ?? 'none'}</dd>
-            </div>
-            <div>
-              <dt>Stored accepted takes</dt>
-              <dd>{profileStore.summary?.profile.enrollment.acceptedUtterances ?? 0}</dd>
-            </div>
-            <div>
-              <dt>Stored accepted seconds</dt>
-              <dd>
-                {(profileStore.summary?.profile.enrollment.acceptedSeconds ?? 0).toFixed(2)} s
-              </dd>
-            </div>
-            <div>
-              <dt>Stored profile bytes</dt>
-              <dd>{getStoredProfileBytes(profileStore.summary).toLocaleString()} bytes</dd>
-            </div>
-          </dl>
-          {trainingReadinessReport ? (
-            <TrainingReadinessReportSummary report={trainingReadinessReport} />
-          ) : (
-            <p className="status-message" aria-label="Training readiness report">
-              Training readiness coverage will appear after accepted takes are stored locally.
-            </p>
-          )}
-          <p className="status-message">{profileStore.message}</p>
-          <div className="hero-actions" aria-label="Enrollment profile lifecycle controls">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void enableStoredProfile()}
-              disabled={!profileStore.summary || profileStore.status !== 'ready'}
-            >
-              Enable local profile
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void rollbackStoredProfile()}
-              disabled={
-                !profileStore.activeState?.previousProfileId || profileStore.status !== 'ready'
-              }
-            >
-              Roll back active profile
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void exportStoredProfile()}
-              disabled={!profileStore.summary || profileStore.status !== 'ready'}
-            >
-              Export sensitive profile package
-            </button>
-            <label className="secondary file-button">
-              Import profile package
-              <input
-                type="file"
-                accept="application/json,.json,.speechprofile"
-                onChange={(event) => void importStoredProfile(event)}
-                disabled={profileStore.status !== 'ready' && profileStore.status !== 'error'}
-              />
-            </label>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void deleteStoredProfile()}
-              disabled={
-                profileStore.summary === null ||
-                profileStore.status === 'saving' ||
-                profileStore.status === 'activating' ||
-                profileStore.status === 'exporting' ||
-                profileStore.status === 'importing' ||
-                profileStore.status === 'deleting'
-              }
-            >
-              Delete stored enrollment profile
-            </button>
-          </div>
         </div>
-        {qualityReport ? <QualityReportSummary report={qualityReport} /> : null}
+
+        <div className="enrollment-secondary-actions" aria-label="Enrollment take actions">
+          {enrollmentActions.canReplay ? (
+            <button type="button" className="secondary" onClick={() => void replayLastTake()}>
+              Replay
+            </button>
+          ) : null}
+          {enrollmentActions.canRetry ? (
+            <button type="button" className="secondary" onClick={retryEnrollmentTake}>
+              Retry
+            </button>
+          ) : null}
+          {enrollmentActions.canAccept ? (
+            <button type="button" className="secondary" onClick={() => void manuallyAcceptTake()}>
+              Accept
+            </button>
+          ) : null}
+          {enrollmentActions.canSkip ? (
+            <button type="button" className="secondary" onClick={skipEnrollmentPrompt}>
+              Skip
+            </button>
+          ) : null}
+        </div>
+
+        <details className="enrollment-details">
+          <summary>Recording details</summary>
+          <div className="enrollment-details__content">
+            <section aria-label="Enrollment prompt options" className="enrollment-detail-card">
+              <h4>Prompt options</h4>
+              <label className="text-field">
+                <span>Prompt text</span>
+                <textarea
+                  value={enrollmentPrompt}
+                  rows={2}
+                  onChange={(event) => setEnrollmentPrompt(event.target.value)}
+                />
+              </label>
+              <label className="select-field">
+                <span>Prompt language</span>
+                <select
+                  value={enrollmentLanguage}
+                  onChange={(event) =>
+                    setEnrollmentLanguage(event.target.value as EnrollmentSentenceLanguage)
+                  }
+                >
+                  {enrollmentLanguages.map((language) => (
+                    <option key={language} value={language}>
+                      {formatEnrollmentLanguageLabel(language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="select-field">
+                <span>Voice condition</span>
+                <select
+                  value={voiceCondition}
+                  onChange={(event) =>
+                    setVoiceCondition(event.target.value as EnrollmentVoiceCondition)
+                  }
+                >
+                  {voiceConditions.map((condition) => (
+                    <option key={condition} value={condition}>
+                      {
+                        getEnrollmentConditionView(condition, {
+                          isFirstPromptInCondition: true,
+                          hasFailedTake: false,
+                        }).label
+                      }
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+
+            <section
+              aria-label="Enrollment calibration guidance"
+              className="enrollment-detail-card"
+            >
+              <h4>Recording setup</h4>
+              <p>
+                Use room-noise and normal-voice samples only when the recording advice seems wrong.
+                These samples are local level readings only; calibration audio is not stored.
+              </p>
+              <p>
+                Browser processing is preferred off for enrollment. Current automatic gain setting:{' '}
+                {snapshot ? formatSetting(snapshot.actualSettings.autoGainControl) : 'not reported'}
+                .
+              </p>
+              <div className="hero-actions" aria-label="Enrollment calibration controls">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={saveRoomNoiseSample}
+                  disabled={status !== 'active' || captureSummary.rms <= 0}
+                >
+                  Use current level as room noise
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={saveNormalBaseline}
+                  disabled={status !== 'active' || captureSummary.rms <= 0}
+                >
+                  Set normal voice baseline
+                </button>
+              </div>
+              <dl
+                className="probe-list microphone-settings"
+                aria-label="Enrollment calibration metrics"
+              >
+                <div>
+                  <dt>Room noise RMS</dt>
+                  <dd>{roomNoiseRms !== null ? roomNoiseRms.toFixed(3) : 'not set'}</dd>
+                </div>
+                <div>
+                  <dt>Normal baseline RMS</dt>
+                  <dd>{normalBaselineRms !== null ? normalBaselineRms.toFixed(3) : 'not set'}</dd>
+                </div>
+                <div>
+                  <dt>Current relative level</dt>
+                  <dd>{formatDb(voiceGuidance.relativeDb)}</dd>
+                </div>
+                <div>
+                  <dt>Advisory band</dt>
+                  <dd>{formatDbRange(voiceGuidance.target)}</dd>
+                </div>
+                <div>
+                  <dt>Estimated SNR</dt>
+                  <dd>{formatDb(voiceGuidance.snrDb)}</dd>
+                </div>
+                <div>
+                  <dt>Guidance status</dt>
+                  <dd>{voiceGuidance.status}</dd>
+                </div>
+              </dl>
+              <p className="status-message">{voiceGuidance.message}</p>
+            </section>
+
+            <section aria-label="Enrollment recorder metrics" className="enrollment-detail-card">
+              <h4>Take status</h4>
+              <dl className="probe-list microphone-settings">
+                <div>
+                  <dt>Recorder status</dt>
+                  <dd>{recorderSummary.status}</dd>
+                </div>
+                <div>
+                  <dt>Take samples</dt>
+                  <dd>{recorderSummary.sampleCount}</dd>
+                </div>
+                <div>
+                  <dt>Take duration</dt>
+                  <dd>{formatMs(recorderSummary.durationMs)}</dd>
+                </div>
+                <div>
+                  <dt>Take sample rate</dt>
+                  <dd>
+                    {recorderSummary.sampleRateHz
+                      ? `${recorderSummary.sampleRateHz} Hz`
+                      : 'not set'}
+                  </dd>
+                </div>
+              </dl>
+              <p className="status-message">
+                {sanitizeEnrollmentStatusText(recorderSummary.message)}
+              </p>
+              {qualityReport ? <QualityReportSummary report={qualityReport} /> : null}
+            </section>
+
+            <section className="profile-store-status" aria-label="Enrollment profile storage">
+              <h4>Stored recordings</h4>
+              <p>
+                Accepted takes are stored locally only after Accept. Delete removes the recordings
+                and derived profile files for this local voice model.
+              </p>
+              <dl className="probe-list microphone-settings">
+                <div>
+                  <dt>Profile store status</dt>
+                  <dd>{profileStore.status}</dd>
+                </div>
+                <div>
+                  <dt>Storage backend</dt>
+                  <dd>{formatProfileStoreBackend(profileStore.backendKind)}</dd>
+                </div>
+                <div>
+                  <dt>Persistent storage</dt>
+                  <dd>{formatPersistentStorage(profileStore.persistentStorageGranted)}</dd>
+                </div>
+                <div>
+                  <dt>Active profile</dt>
+                  <dd>{profileStore.activeState?.activeProfileId ? 'active locally' : 'none'}</dd>
+                </div>
+                <div>
+                  <dt>Rollback profile</dt>
+                  <dd>{profileStore.activeState?.previousProfileId ? 'available' : 'none'}</dd>
+                </div>
+                <div>
+                  <dt>Stored accepted takes</dt>
+                  <dd>{profileStore.summary?.profile.enrollment.acceptedUtterances ?? 0}</dd>
+                </div>
+                <div>
+                  <dt>Stored accepted seconds</dt>
+                  <dd>
+                    {(profileStore.summary?.profile.enrollment.acceptedSeconds ?? 0).toFixed(2)} s
+                  </dd>
+                </div>
+                <div>
+                  <dt>Stored profile bytes</dt>
+                  <dd>{getStoredProfileBytes(profileStore.summary).toLocaleString()} bytes</dd>
+                </div>
+              </dl>
+              {trainingReadinessReport ? (
+                <TrainingReadinessReportSummary report={trainingReadinessReport} />
+              ) : (
+                <p className="status-message" aria-label="Training readiness report">
+                  Training readiness coverage will appear after accepted takes are stored locally.
+                </p>
+              )}
+              <p className="status-message">{profileStore.message}</p>
+              <div className="hero-actions" aria-label="Enrollment profile lifecycle controls">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void enableStoredProfile()}
+                  disabled={!profileStore.summary || profileStore.status !== 'ready'}
+                >
+                  Enable local profile
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void rollbackStoredProfile()}
+                  disabled={
+                    !profileStore.activeState?.previousProfileId || profileStore.status !== 'ready'
+                  }
+                >
+                  Roll back active profile
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void exportStoredProfile()}
+                  disabled={!profileStore.summary || profileStore.status !== 'ready'}
+                >
+                  Export sensitive profile package
+                </button>
+                <label className="secondary file-button">
+                  Import profile package
+                  <input
+                    type="file"
+                    accept="application/json,.json,.speechprofile"
+                    onChange={(event) => void importStoredProfile(event)}
+                    disabled={profileStore.status !== 'ready' && profileStore.status !== 'error'}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void deleteStoredProfile()}
+                  disabled={
+                    profileStore.summary === null ||
+                    profileStore.status === 'saving' ||
+                    profileStore.status === 'activating' ||
+                    profileStore.status === 'exporting' ||
+                    profileStore.status === 'importing' ||
+                    profileStore.status === 'deleting'
+                  }
+                >
+                  Delete stored enrollment profile
+                </button>
+              </div>
+            </section>
+          </div>
+        </details>
       </div>
 
       {snapshot ? (

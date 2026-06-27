@@ -100,9 +100,10 @@ test.describe('cross-browser personal-model fault injection', () => {
     test.setTimeout(60_000);
     await page.goto('/');
 
+    await openRecordingDetails(page);
     const profileStore = page.getByLabel('Enrollment profile storage');
     await expect(profileStore).toContainText('ready', { timeout: 10_000 });
-    await deleteStoredProfileIfPresent(profileStore);
+    await deleteStoredProfileIfPresent(page, profileStore);
     const exportedProfilePath = await saveOneAcceptedTakeAndExport(page, profileStore);
 
     const personalModels = page.locator('section.personal-models');
@@ -168,18 +169,23 @@ test.describe('cross-browser personal-model fault injection', () => {
 });
 
 async function saveOneAcceptedTakeAndExport(page: Page, profileStore: Locator): Promise<string> {
-  await page.getByRole('button', { name: /start microphone check/i }).click();
   const recorder = page.getByLabel('Enrollment recorder', { exact: true });
-  await recorder.getByRole('button', { name: /start enrollment take/i }).click();
-  await expect(recorder).toContainText('recording');
+  await recorder.getByRole('button', { name: 'Start microphone' }).click();
+  await expect(recorder.getByRole('button', { name: 'Record' })).toBeEnabled({
+    timeout: 10_000,
+  });
+  await recorder.getByRole('button', { name: 'Record' }).click();
+  await expect(recorder).toContainText('Recording');
   await expect
-    .poll(async () => readMetric(recorder, 'Take samples'), { timeout: 10_000 })
+    .poll(async () => readMetric(page.getByLabel('Enrollment recorder metrics'), 'Take samples'), {
+      timeout: 10_000,
+    })
     .toBeGreaterThan(0);
-  await recorder.getByRole('button', { name: /stop and analyze take/i }).click();
+  await recorder.getByRole('button', { name: 'Stop' }).click();
   await expect(page.getByLabel('Enrollment quality report')).toContainText('Quality report', {
     timeout: 10_000,
   });
-  const acceptAndSave = recorder.getByRole('button', { name: /manually accept and save take/i });
+  const acceptAndSave = recorder.getByRole('button', { name: 'Accept' });
   await expect(acceptAndSave).toBeEnabled({ timeout: 10_000 });
   await acceptAndSave.click();
   await expect(profileStore).toContainText(/Accepted take saved/i, { timeout: 10_000 });
@@ -202,13 +208,24 @@ async function requireDownloadPath(download: Download): Promise<string> {
   return path;
 }
 
-async function deleteStoredProfileIfPresent(profileStore: Locator): Promise<void> {
+async function deleteStoredProfileIfPresent(page: Page, profileStore: Locator): Promise<void> {
+  await openRecordingDetails(page);
   const deleteButton = profileStore.getByRole('button', {
     name: /delete stored enrollment profile/i,
   });
-  if (await deleteButton.isEnabled()) {
+  if (await deleteButton.isEnabled({ timeout: 1_000 }).catch(() => false)) {
     await deleteButton.click();
     await expect(profileStore).toContainText(/deleted locally/i, { timeout: 10_000 });
+  }
+}
+
+async function openRecordingDetails(page: Page): Promise<void> {
+  const details = page.locator('details.enrollment-details');
+  if (
+    (await details.count()) > 0 &&
+    !(await details.evaluate((node) => node.hasAttribute('open')))
+  ) {
+    await page.getByText('Recording details', { exact: true }).click();
   }
 }
 
