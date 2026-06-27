@@ -75,6 +75,33 @@ export interface PersonalModelActivationReviewCardV1 {
   };
 }
 
+export type PersonalModelListPrimaryActionV1 =
+  | 'continue-recording'
+  | 'continue-training'
+  | 'review-result'
+  | 'use-model'
+  | 'none';
+
+export interface PersonalModelListRowV1 {
+  readonly schemaVersion: 1;
+  readonly displayName: string;
+  readonly activeLabel: 'Active' | 'Inactive' | 'Generic';
+  readonly statusLabel: 'Ready' | 'Recording needed' | 'Draft';
+  readonly primaryAction: PersonalModelListPrimaryActionV1;
+  readonly primaryActionLabel: string;
+  readonly primaryActionDisabled: boolean;
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsModelIds: false;
+    readonly containsStoragePaths: false;
+    readonly containsHashes: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
+}
+
 export interface PersonalModelProfileCardV1 {
   readonly schemaVersion: 1;
   readonly displayName: string;
@@ -214,6 +241,48 @@ export function buildPersonalModelProfileCard({
   };
 }
 
+export function buildPersonalModelListRow(
+  card: PersonalModelProfileCardV1,
+): PersonalModelListRowV1 {
+  if (card.status === 'no-profile') {
+    return {
+      schemaVersion: 1,
+      displayName: card.displayName,
+      activeLabel: 'Generic',
+      statusLabel: 'Recording needed',
+      primaryAction: 'continue-recording',
+      primaryActionLabel: 'Continue recording',
+      primaryActionDisabled: false,
+      privacy: createAggregateListRowPrivacy(),
+    };
+  }
+
+  const recordingNeeded = card.storage.acceptedUtterances === 0;
+  if (recordingNeeded) {
+    return {
+      schemaVersion: 1,
+      displayName: card.displayName,
+      activeLabel: card.active ? 'Active' : 'Inactive',
+      statusLabel: 'Recording needed',
+      primaryAction: 'continue-recording',
+      primaryActionLabel: 'Continue recording',
+      primaryActionDisabled: false,
+      privacy: createAggregateListRowPrivacy(),
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    displayName: card.displayName,
+    activeLabel: card.active ? 'Active' : 'Inactive',
+    statusLabel: 'Ready',
+    primaryAction: 'use-model',
+    primaryActionLabel: card.active ? 'Using model' : 'Use model',
+    primaryActionDisabled: card.active,
+    privacy: createAggregateListRowPrivacy(),
+  };
+}
+
 export function buildPersonalModelActivationReviewCard({
   profileCard,
   activeState,
@@ -335,6 +404,19 @@ function emptyActivationComparison(): PersonalModelActivationReviewCardV1['compa
     anchorWerDelta: null,
     rtfOverheadRatioVsP1: null,
     candidateAdapterSizeBytes: null,
+  };
+}
+
+function createAggregateListRowPrivacy(): PersonalModelListRowV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsModelIds: false,
+    containsStoragePaths: false,
+    containsHashes: false,
+    containsPrivateVocabularyTerms: false,
+    localOnly: true,
   };
 }
 

@@ -1017,6 +1017,19 @@ describe('enrollment profile store', () => {
     });
   });
 
+  it('deactivates an active profile while retaining local profile data for rollback or reuse', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-a', 'utt-a', baseModel);
+
+    await store.enableProfile({ profileId: 'profile-a', expectedBaseModel: baseModel });
+    await expect(store.deactivateProfile('profile-a')).resolves.toMatchObject({
+      previousProfileId: 'profile-a',
+    });
+    expect((await store.getActiveProfileState()).activeProfileId).toBeUndefined();
+    expect(await store.getProfileSummary('profile-a')).toBeDefined();
+  });
+
   it('requires activation reviews to pass or accept advanced override before enabling', async () => {
     const backend = new InMemoryProfileStorageBackend();
     const store = createStore(backend);

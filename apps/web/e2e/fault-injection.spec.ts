@@ -91,9 +91,7 @@ test.describe('cross-browser personal-model fault injection', () => {
 
     await expect(personalModels.locator('.error-message')).toBeVisible({ timeout: 10_000 });
     await expect(personalModels.locator('.error-message')).not.toContainText(hostileProfileId);
-    await expect(personalModels.getByLabel('Personal model profile cards')).toContainText(
-      'generic fallback',
-    );
+    await expect(personalModels.getByLabel('Personal voice model rows')).toContainText('Generic');
   });
 
   test('covers profile export/import, activation, rollback, and deletion under fake media', async ({
@@ -108,13 +106,15 @@ test.describe('cross-browser personal-model fault injection', () => {
     const exportedProfilePath = await saveOneAcceptedTakeAndExport(page, profileStore);
 
     const personalModels = page.locator('section.personal-models');
-    await personalModels.getByRole('button', { name: 'Refresh profile cards' }).click();
-    await expect(personalModels.getByLabel('Personal model profile cards')).toContainText(
+    await personalModels.getByRole('button', { name: 'Refresh' }).click();
+    await expect(personalModels.getByLabel('Personal voice model rows')).toContainText(
       'Local enrollment profile',
       { timeout: 10_000 },
     );
     await personalModels.getByLabel('Import behavior').selectOption('import-as-new');
-    await personalModels.locator('input[type="file"]').setInputFiles(exportedProfilePath);
+    await personalModels
+      .locator('.model-list-toolbar input[type="file"]')
+      .setInputFiles(exportedProfilePath);
     await expect(
       personalModels.getByText(
         /Profile import verified checksums.*(created a new local profile|resolved a display-name collision)/i,
@@ -122,33 +122,38 @@ test.describe('cross-browser personal-model fault injection', () => {
     ).toBeVisible({ timeout: 10_000 });
 
     const profileRows = personalModels
-      .locator('.personal-model-card-row')
+      .locator('.model-list-row')
       .filter({ hasText: 'Local enrollment profile' });
     await expect(profileRows).toHaveCount(2);
 
     const inactiveEnableButton = profileRows
-      .locator('button:has-text("Enable personal profile"):not(:disabled)')
+      .locator('button:has-text("Use model"):not(:disabled)')
       .first();
     await inactiveEnableButton.click();
     await expect(
       personalModels.getByText('Personal profile lifecycle state refreshed from local storage.'),
     ).toBeVisible({ timeout: 10_000 });
-    await expect(
-      personalModels.locator('.personal-model-card-header span[data-status="active"]'),
-    ).toHaveCount(1);
+    await expect(personalModels.locator('.model-list-row .status-chip.success')).toHaveCount(1);
 
-    await personalModels.getByRole('button', { name: 'Roll back active profile' }).click();
+    const activeRow = personalModels
+      .locator('.model-list-row')
+      .filter({ hasText: 'Active' })
+      .first();
+    await activeRow.getByRole('button', { name: 'More' }).click();
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('menuitem', { name: 'Roll back…' }).click();
     await expect(
       personalModels.getByText('Personal profile lifecycle state refreshed from local storage.'),
     ).toBeVisible({ timeout: 10_000 });
-    await expect(
-      personalModels.locator('.personal-model-card-header span[data-status="active"]'),
-    ).toHaveCount(1);
+    await expect(personalModels.locator('.model-list-row .status-chip.success')).toHaveCount(1);
 
-    await profileRows
-      .locator('button:has-text("Delete local personal profile"):not(:disabled)')
-      .first()
-      .click();
+    const deletableRow = personalModels
+      .locator('.model-list-row')
+      .filter({ hasText: 'Local enrollment profile' })
+      .first();
+    await deletableRow.getByRole('button', { name: 'More' }).click();
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('menuitem', { name: /Delete Local enrollment profile/ }).click();
     await expect(
       personalModels.getByText(
         'Stored profile recordings, derived files, and local active pointers were deleted.',

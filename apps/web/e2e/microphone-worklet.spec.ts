@@ -48,14 +48,12 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
     .poll(async () => readMetric(profileStore, 'Stored accepted takes'), { timeout: 10_000 })
     .toBeGreaterThan(0);
   const personalModels = page.locator('section.personal-models');
-  const personalModelCards = page.getByLabel('Personal model profile cards');
-  await personalModels.getByRole('button', { name: /refresh profile cards/i }).click();
-  await expect(personalModelCards).toContainText('Local enrollment profile', { timeout: 10_000 });
-  await expect
-    .poll(async () => readMetric(personalModelCards, 'Stored takes'), { timeout: 10_000 })
-    .toBeGreaterThan(0);
-  await expect(personalModelCards).toContainText('Generic base model fallback');
-  await expect(personalModelCards).toContainText('enabled entries');
+  const personalModelRows = page.getByLabel('Personal voice model rows');
+  await personalModels.getByRole('button', { name: /refresh/i }).click();
+  await expect(personalModelRows).toContainText('Local enrollment profile', { timeout: 10_000 });
+  await expect(personalModelRows).toContainText(/\d+ recordings/);
+  await expect(personalModelRows).toContainText('Ready');
+  await expect(personalModelRows).toContainText(/\d+ vocabulary/);
   const readiness = page.getByLabel('Training readiness report');
   await expect(readiness).toContainText('Training readiness report');
   await expect(readiness).toContainText('needs-more-data');

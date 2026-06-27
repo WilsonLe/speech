@@ -76,9 +76,7 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(setup.getByRole('button', { name: 'Install model', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /hold to speak/i })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Vocabulary sets' })).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: /profile cards and local lifecycle/i }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Voice models' })).toBeVisible();
   await expect(page.getByLabel('Personal Models navigation')).toContainText('Record enrollment');
   await expect(page.getByLabel('Personal model readiness summary')).toContainText('Capabilities', {
     timeout: 10_000,
@@ -95,12 +93,10 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(page.getByLabel('Activation gate summary')).toContainText('generic fallback', {
     timeout: 10_000,
   });
-  await expect(page.getByLabel('Personal model profile cards')).toContainText('generic fallback', {
+  await expect(page.getByLabel('Personal voice model rows')).toContainText('Generic', {
     timeout: 10_000,
   });
-  await expect(page.getByLabel('Personal model profile lifecycle controls')).toContainText(
-    'Import behavior',
-  );
+  await expect(page.getByLabel('Model import options')).toContainText('Import behavior');
   await expect(page.getByLabel('Import behavior')).toHaveValue('dedupe');
   await expect(page.getByRole('heading', { name: /offline and updates/i })).toBeVisible();
   await expect(

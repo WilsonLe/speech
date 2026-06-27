@@ -49,6 +49,7 @@ export type ProfileStoreWorkerRequest =
       readonly activationReview?: EnrollmentProfileActivationReviewV1;
     }
   | { readonly type: 'ROLLBACK_PROFILE'; readonly requestId: string }
+  | { readonly type: 'DEACTIVATE_PROFILE'; readonly requestId: string; readonly profileId: string }
   | { readonly type: 'EXPORT_PROFILE'; readonly requestId: string; readonly profileId: string }
   | {
       readonly type: 'MIGRATE_SPEECH_PROFILE_MANIFEST_TO_V2';
@@ -299,6 +300,18 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
       case 'ROLLBACK_PROFILE': {
         const { store, backendKind, persistentStorageGranted } = await getStoreContext();
         const activeState = await store.rollbackActiveProfile();
+        post({
+          type: 'PROFILE_STORE_ACTIVE_PROFILE_UPDATED',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState,
+        });
+        return;
+      }
+      case 'DEACTIVATE_PROFILE': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const activeState = await store.deactivateProfile(message.profileId);
         post({
           type: 'PROFILE_STORE_ACTIVE_PROFILE_UPDATED',
           requestId: message.requestId,

@@ -1716,7 +1716,9 @@ button.danger,
 
 .personal-models-nav,
 .personal-models-summary,
-.personal-model-card-list {
+.personal-model-card-list,
+.model-list,
+.model-list-panel {
   display: grid;
   gap: 0.85rem;
 }
@@ -1729,6 +1731,94 @@ button.danger,
 .personal-models-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 1.25rem 0;
+}
+
+.model-list-panel {
+  margin: 1.25rem 0;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 1.1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.model-list-header,
+.model-list-toolbar,
+.model-import-options,
+.model-list-actions,
+.model-list-status,
+.model-list-meta {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.model-list-header {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.model-list-header h3,
+.model-list-row h4 {
+  margin: 0;
+  color: #f8fafc;
+}
+
+.model-list-toolbar,
+.model-list-actions,
+.model-list-status,
+.model-list-meta,
+.model-import-options {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.model-import-options {
+  justify-content: space-between;
+}
+
+.compact-select {
+  min-width: min(100%, 16rem);
+}
+
+.model-list-row {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1.3fr) minmax(12rem, 1fr) max-content;
+  gap: 1rem;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  padding: 0.9rem;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.model-list-main {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.model-list-main h4 {
+  overflow-wrap: anywhere;
+}
+
+.model-list-meta {
+  color: #cbd5e1;
+  font-size: 0.86rem;
+}
+
+.status-chip {
+  width: max-content;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.16);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-chip.success {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.14);
 }
 
 .personal-model-card-row {
@@ -2085,6 +2175,9 @@ button.danger,
   .vocabulary-entry,
   .offline-grid,
   .model-card,
+  .model-list-row,
+  .model-list-header,
+  .model-import-options,
   .personal-models-nav,
   .personal-models-summary,
   .preflight-grid,
@@ -2132,7 +2225,10 @@ button.danger,
     width: 100%;
   }
 
-  .vocabulary-entry-editor__heading {
+  .vocabulary-entry-editor__heading,
+  .model-list-toolbar,
+  .model-list-actions,
+  .model-list-meta {
     display: grid;
   }
 
@@ -2161,6 +2257,11 @@ button.danger,
   .inline-form button,
   .model-card-actions button,
   .profile-card-actions button,
+  .model-list-toolbar .speech-button,
+  .model-list-toolbar .file-button,
+  .model-list-actions .speech-button,
+  .model-list-actions .button,
+  .model-import-options button,
   .personal-models-nav a,
   .benchmark-actions button,
   .update-message button,
