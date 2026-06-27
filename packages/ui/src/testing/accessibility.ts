@@ -23,3 +23,28 @@ export const speechButtonCssRequirements = [
   'prefers-reduced-motion: reduce',
   'forced-colors: active',
 ] as const;
+
+export const speechDisclosureAccessibilityChecklist = [
+  'Disclosure renders a native <details> with a <summary> trigger.',
+  'Disclosure trigger exposes aria-expanded and aria-controls for assistive technology fixtures.',
+  'Disclosure content remains in the native details panel and must not hide required blockers by default.',
+  'Disclosure focus-visible styling uses repository focus-ring tokens.',
+] as const;
+
+export const speechAccordionAccessibilityChecklist = [
+  'Accordion renders one heading button per panel with aria-expanded and aria-controls.',
+  'Collapsed accordion panels use hidden so their contents are not focusable.',
+  'Accordion arrow-key, Home, and End focus movement follows the WAI-ARIA accordion pattern.',
+  'Do not nest Accordion inside Accordion or put required fields/blockers only in a collapsed panel.',
+  'Accordion CSS covers focus-visible, reduced-motion, forced-colours, and touch-target states.',
+] as const;
+
+export const speechDisclosureCssRequirements = [
+  '--speech-size-touch-target',
+  '--speech-focus-ring-color',
+  '--speech-focus-ring-width',
+  '--speech-focus-ring-offset',
+  'prefers-reduced-motion: reduce',
+  'forced-colors: active',
+  '[hidden]',
+] as const;
