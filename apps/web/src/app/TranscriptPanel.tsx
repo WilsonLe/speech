@@ -9,6 +9,22 @@ import {
 import { MenuButton, type MenuButtonItem } from '@speech/ui';
 import pcmCaptureWorkletUrl from '../worklets/pcm-capture.worklet.ts?worker&url';
 import {
+  createModelLifecycleWorker,
+  type ModelLifecycleModel,
+  type ModelLifecycleResponse,
+} from '../workers/model-lifecycle-client';
+import {
+  formatDictateSetupProgress,
+  formatDictateSetupSize,
+  formatDictateSetupVersion,
+  initialDictateModelSetupState,
+  needsDictateModelInspection,
+  reduceDictateModelSetupMessage,
+  startDictateModelInspection,
+  startDictateModelInstall,
+  type DictateModelSetupState,
+} from './dictate-model-setup';
+import {
   buildTranscriptDownloadText,
   clearTranscript,
   editTranscriptCommittedText,
@@ -52,11 +68,16 @@ const defaultTranscriptSettings: TranscriptSettingsState = {
 export function TranscriptPanel() {
   const microphoneController = useMemo(() => new MicrophoneCaptureController(), []);
   const workletController = useRef<PcmCaptureWorkletController | null>(null);
+  const modelLifecycleWorkerRef = useRef<Worker | null>(null);
   const workspaceRef = useRef<TranscriptWorkspaceState>(initialTranscriptWorkspaceState);
+  const modelSetupRef = useRef<DictateModelSetupState>(initialDictateModelSetupState);
   const stopRequestedRef = useRef(false);
   const stoppingRef = useRef(false);
   const [workspace, setWorkspace] = useState<TranscriptWorkspaceState>(
     initialTranscriptWorkspaceState,
+  );
+  const [modelSetup, setModelSetup] = useState<DictateModelSetupState>(
+    initialDictateModelSetupState,
   );
   const [settings, setSettings] = useState<TranscriptSettingsState>(defaultTranscriptSettings);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -69,6 +90,87 @@ export function TranscriptPanel() {
     },
     [],
   );
+
+  const updateModelSetup = useCallback(
+    (updater: (current: DictateModelSetupState) => DictateModelSetupState) => {
+      const next = updater(modelSetupRef.current);
+      modelSetupRef.current = next;
+      setModelSetup(next);
+      return next;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (typeof Worker === 'undefined') {
+      updateModelSetup((current) => ({
+        ...current,
+        status: 'error',
+        errorMessage: 'Model setup requires a browser worker.',
+        retryAction: 'inspect',
+      }));
+      return undefined;
+    }
+
+    const worker = createModelLifecycleWorker();
+    modelLifecycleWorkerRef.current = worker;
+    worker.addEventListener('message', handleWorkerMessage);
+    worker.addEventListener('error', handleWorkerError);
+    worker.postMessage({ type: 'INIT' });
+
+    function handleWorkerMessage(event: MessageEvent<ModelLifecycleResponse>) {
+      const message = event.data;
+      const next = updateModelSetup((current) => reduceDictateModelSetupMessage(current, message));
+      if (message.type === 'READY' && needsDictateModelInspection(next)) {
+        const { setupModel } = next;
+        if (setupModel !== null) {
+          worker.postMessage({ type: 'INSPECT_MODEL', modelId: setupModel.id });
+        }
+      }
+    }
+
+    function handleWorkerError(event: ErrorEvent) {
+      updateModelSetup((current) => ({
+        ...current,
+        status: 'error',
+        progress: null,
+        errorMessage: event.message,
+        retryAction: 'inspect',
+      }));
+    }
+
+    return () => {
+      worker.postMessage({ type: 'DISPOSE' });
+      worker.removeEventListener('message', handleWorkerMessage);
+      worker.removeEventListener('error', handleWorkerError);
+      worker.terminate();
+      if (modelLifecycleWorkerRef.current === worker) {
+        modelLifecycleWorkerRef.current = null;
+      }
+    };
+  }, [updateModelSetup]);
+
+  const inspectSetupModel = useCallback(() => {
+    const setupModel = modelSetupRef.current.setupModel;
+    if (setupModel === null || setupModel.manifestUrl === undefined) return;
+    updateModelSetup(startDictateModelInspection);
+    modelLifecycleWorkerRef.current?.postMessage({ type: 'INSPECT_MODEL', modelId: setupModel.id });
+  }, [updateModelSetup]);
+
+  const installSetupModel = useCallback(() => {
+    const setupModel = modelSetupRef.current.setupModel;
+    if (setupModel === null || modelSetupRef.current.inspection === null) return;
+    updateModelSetup(startDictateModelInstall);
+    modelLifecycleWorkerRef.current?.postMessage({ type: 'INSTALL_MODEL', modelId: setupModel.id });
+  }, [updateModelSetup]);
+
+  const retrySetupModel = useCallback(() => {
+    if (modelSetupRef.current.retryAction === 'install') {
+      installSetupModel();
+      return;
+    }
+    inspectSetupModel();
+  }, [inspectSetupModel, installSetupModel]);
 
   const stopPushToTalk = useCallback(async () => {
     stopRequestedRef.current = true;
@@ -259,6 +361,16 @@ export function TranscriptPanel() {
     }
     updateWorkspace(clearTranscript);
     setCopyStatus(null);
+  }
+
+  if (modelSetup.status !== 'ready') {
+    return (
+      <DictateModelSetupPanel
+        setup={modelSetup}
+        onInstall={installSetupModel}
+        onRetry={retrySetupModel}
+      />
+    );
   }
 
   const transcriptActionItems: readonly MenuButtonItem[] = hasTranscriptText
@@ -538,6 +650,140 @@ export function TranscriptPanel() {
       </details>
     </section>
   );
+}
+
+function DictateModelSetupPanel({
+  setup,
+  onInstall,
+  onRetry,
+}: {
+  readonly setup: DictateModelSetupState;
+  readonly onInstall: () => void;
+  readonly onRetry: () => void;
+}) {
+  const model = setup.setupModel;
+  const installing = setup.status === 'installing';
+  const installDisabled = setup.inspection === null || installing || model === null;
+  return (
+    <section
+      className="panel transcript dictate-workspace dictate-setup"
+      id="dictate"
+      aria-labelledby="transcript-title"
+    >
+      <div className="dictate-setup-card" aria-live="polite">
+        <p className="eyebrow">Dictate</p>
+        <h2 id="transcript-title">{setupTitle(setup.status)}</h2>
+        <p className="dictate-setup-card__summary">
+          {formatDictateSetupVersion(model)} · {formatDictateSetupSize(setup.inspection)} · Works
+          offline after install
+        </p>
+
+        {installing ? (
+          <div className="dictate-setup-progress" role="status" aria-label="Model setup progress">
+            <span>{formatDictateSetupProgress(setup.progress)}</span>
+          </div>
+        ) : null}
+
+        {setup.errorMessage ? (
+          <p className="status-message error-message" role="alert">
+            {setup.errorMessage}
+          </p>
+        ) : null}
+
+        <div className="dictate-setup-actions">
+          {setup.status === 'error' ? (
+            <button type="button" onClick={onRetry} disabled={model === null}>
+              Retry setup
+            </button>
+          ) : (
+            <button type="button" onClick={onInstall} disabled={installDisabled}>
+              {installing ? 'Installing model' : 'Install model'}
+            </button>
+          )}
+        </div>
+
+        {setup.status === 'setup-required' && setup.inspection === null ? (
+          <p className="status-message">Checking model details…</p>
+        ) : null}
+      </div>
+
+      <details className="dictate-details dictate-model-details">
+        <summary>Model details</summary>
+        <div className="dictate-model-details__body">
+          {model === null ? (
+            <p>No installable speech model is available in the local catalog.</p>
+          ) : (
+            <ModelDetails model={model} setup={setup} />
+          )}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function ModelDetails({
+  model,
+  setup,
+}: {
+  readonly model: ModelLifecycleModel;
+  readonly setup: DictateModelSetupState;
+}) {
+  return (
+    <>
+      <dl className="dictate-model-details__meta" aria-label="Required speech model details">
+        <div>
+          <dt>Model</dt>
+          <dd>{model.displayName}</dd>
+        </div>
+        <div>
+          <dt>Version</dt>
+          <dd>{model.version}</dd>
+        </div>
+        <div>
+          <dt>License</dt>
+          <dd>{model.license.spdx ?? model.license.name}</dd>
+        </div>
+        <div>
+          <dt>Languages</dt>
+          <dd>{model.languages.join(', ')}</dd>
+        </div>
+        <div>
+          <dt>Download</dt>
+          <dd>{formatDictateSetupSize(setup.inspection)}</dd>
+        </div>
+        <div>
+          <dt>Files</dt>
+          <dd>
+            {setup.inspection === null
+              ? 'Checking'
+              : `${setup.inspection.inferenceFileCount.toString()} required files`}
+          </dd>
+        </div>
+      </dl>
+      {model.runtime.notes.length > 0 ? (
+        <ul className="dictate-model-details__notes" aria-label="Model provenance notes">
+          {model.runtime.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
+function setupTitle(status: DictateModelSetupState['status']): string {
+  switch (status) {
+    case 'checking':
+      return 'Checking speech model';
+    case 'setup-required':
+      return 'Speech model required';
+    case 'installing':
+      return 'Installing speech model';
+    case 'error':
+      return 'Speech model setup needs attention';
+    case 'ready':
+      return 'Dictate';
+  }
 }
 
 function formatCaptureStatus(status: TranscriptWorkspaceState['status']): string {
