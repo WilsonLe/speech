@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { MenuButton, type MenuButtonItem } from '@speech/ui';
 import type { VocabularyEntryLanguage, VocabularyEntryV1 } from '@speech/protocol';
 import { validateVocabularyStoreSnapshot } from '@speech/context-bias';
 import { scheduleCustomVocabularyPrompts } from '@speech/enrollment';
@@ -44,8 +45,11 @@ export function VocabularyPanel() {
   const [selectedSetId, setSelectedSetId] = useState('set-work');
   const [draft, setDraft] = useState<VocabularyEntryDraft>(emptyDraft);
   const [newSetName, setNewSetName] = useState('');
+  const [setSearch, setSetSearch] = useState('');
   const [importFormat, setImportFormat] = useState<'json' | 'csv'>('json');
   const [importText, setImportText] = useState('');
+  const [managementOpen, setManagementOpen] = useState(false);
+  const [pendingRecordingRevision, setPendingRecordingRevision] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState('Vocabulary is stored only in this browser.');
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -78,6 +82,13 @@ export function VocabularyPanel() {
     (count, set) => count + (set.enabled ? set.entries.filter((entry) => entry.enabled).length : 0),
     0,
   );
+  const enabledSetCount = snapshot.sets.filter((set) => set.enabled).length;
+  const filteredSets = useMemo(() => {
+    const query = setSearch.trim().toLocaleLowerCase();
+    if (query.length === 0) return snapshot.sets;
+
+    return snapshot.sets.filter((set) => set.displayName.toLocaleLowerCase().includes(query));
+  }, [setSearch, snapshot.sets]);
   const storeValidation = useMemo(() => validateStoreMessage(snapshot), [snapshot]);
   const customPromptPreview = useMemo(
     () =>
@@ -101,6 +112,9 @@ export function VocabularyPanel() {
           result.snapshot.activeSetIds[0] ?? result.snapshot.sets[0]?.id ?? 'set-work',
         );
       }
+      if (result.snapshot.revision !== snapshot.revision) {
+        setPendingRecordingRevision(result.snapshot.revision);
+      }
     }
     setStatusMessage(result.message);
   }
@@ -113,12 +127,6 @@ export function VocabularyPanel() {
       if (created !== undefined) setSelectedSetId(created.id);
       setNewSetName('');
     }
-  }
-
-  function deleteSelectedSet() {
-    if (selectedSet === undefined) return;
-    applyResult(deleteVocabularySet(snapshot, selectedSet.id));
-    setDraft(emptyDraft);
   }
 
   function submitEntry() {
@@ -165,6 +173,30 @@ export function VocabularyPanel() {
     setStatusMessage('Exported selected vocabulary set as CSV.');
   }
 
+  const screenMenuItems: readonly MenuButtonItem[] = [
+    {
+      id: 'open-import-export',
+      label: 'Import or export…',
+      onSelect: () => setManagementOpen(true),
+    },
+    {
+      id: 'export-all-json',
+      label: 'Export all JSON',
+      onSelect: exportJson,
+    },
+    {
+      id: 'export-selected-csv',
+      label: 'Export selected CSV',
+      disabled: selectedSet === undefined,
+      onSelect: exportCsv,
+    },
+  ];
+
+  function openSet(setId: string) {
+    setSelectedSetId(setId);
+    setDraft(emptyDraft);
+  }
+
   function importVocabulary() {
     if (selectedSet === undefined) return;
     const result =
@@ -177,61 +209,42 @@ export function VocabularyPanel() {
 
   return (
     <section className="panel vocabulary" id="vocabulary" aria-labelledby="vocabulary-title">
-      <div className="section-heading">
-        <p className="eyebrow">Vocabulary steering</p>
-        <h2 id="vocabulary-title">Local vocabulary sets</h2>
-        <p>
-          Add names, products, acronyms, and mixed-language terms now. Entries stay in browser
-          storage and will be swapped into the decoder at utterance boundaries when tokenizer-aware
-          scoring lands.
-        </p>
+      <div className="section-heading vocabulary-heading">
+        <div>
+          <p className="eyebrow">Vocabulary</p>
+          <h2 id="vocabulary-title">Vocabulary sets</h2>
+          <p>Words the recognizer should favour stay on this device.</p>
+        </div>
+        <MenuButton
+          buttonSize="sm"
+          buttonVariant="secondary"
+          items={screenMenuItems}
+          label="More"
+          menuLabel="Vocabulary screen actions"
+        />
       </div>
 
       <div className="vocabulary-summary" aria-label="Vocabulary summary">
         <StatusMetric label="Sets" value={snapshot.sets.length.toString()} />
-        <StatusMetric label="Active entries" value={activeEntryCount.toString()} />
-        <StatusMetric label="Revision" value={snapshot.revision.toString()} />
+        <StatusMetric label="On" value={enabledSetCount.toString()} />
+        <StatusMetric label="Words" value={activeEntryCount.toString()} />
       </div>
 
-      <div className="vocabulary-layout">
-        <article className="vocabulary-card" aria-labelledby="vocabulary-sets-title">
+      {pendingRecordingRevision === null ? null : (
+        <p className="status-message vocabulary-boundary" aria-live="polite">
+          Applies next recording.
+        </p>
+      )}
+
+      <article
+        className="vocabulary-card vocabulary-set-browser"
+        aria-labelledby="vocabulary-sets-title"
+      >
+        <div className="vocabulary-set-browser__header">
           <h3 id="vocabulary-sets-title">Sets</h3>
-          <label htmlFor="vocabulary-set-select">
-            Selected set
-            <select
-              id="vocabulary-set-select"
-              value={selectedSet?.id ?? ''}
-              onChange={(event) => {
-                const { value } = event.currentTarget;
-                setSelectedSetId(value);
-                setDraft(emptyDraft);
-              }}
-            >
-              {snapshot.sets.map((set) => (
-                <option key={set.id} value={set.id}>
-                  {set.displayName} ({set.entries.length})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {selectedSet !== undefined ? (
-            <label>
-              <input
-                type="checkbox"
-                checked={selectedSet.enabled}
-                onChange={(event) => {
-                  const { checked } = event.currentTarget;
-                  applyResult(setVocabularySetEnabled(snapshot, selectedSet.id, checked));
-                }}
-              />
-              Enable this set for future utterances
-            </label>
-          ) : null}
-
-          <div className="inline-form">
+          <div className="inline-form vocabulary-new-set">
             <label htmlFor="new-vocabulary-set-name">
-              New set name
+              New set
               <input
                 id="new-vocabulary-set-name"
                 value={newSetName}
@@ -242,22 +255,138 @@ export function VocabularyPanel() {
               />
             </label>
             <button type="button" className="secondary" onClick={createSet}>
-              Create set
+              New set
             </button>
           </div>
+        </div>
 
-          <button
-            type="button"
-            className="secondary danger"
-            onClick={deleteSelectedSet}
-            disabled={snapshot.sets.length <= 1}
-          >
-            Delete selected set
-          </button>
+        <label className="vocabulary-search" htmlFor="vocabulary-set-search">
+          Search
+          <input
+            id="vocabulary-set-search"
+            value={setSearch}
+            onChange={(event) => setSetSearch(event.currentTarget.value)}
+            placeholder="Find a set"
+          />
+        </label>
+
+        {filteredSets.length > 0 ? (
+          <div className="vocabulary-set-list" aria-label="Vocabulary sets">
+            {filteredSets.map((set) => {
+              const isSelected = set.id === selectedSet?.id;
+              const enabledEntries = set.entries.filter((entry) => entry.enabled).length;
+              const rowMenuItems: readonly MenuButtonItem[] = [
+                { id: `open-${set.id}`, label: 'Open', onSelect: () => openSet(set.id) },
+                {
+                  id: `toggle-${set.id}`,
+                  label: set.enabled ? 'Turn off' : 'Turn on',
+                  onSelect: () =>
+                    applyResult(setVocabularySetEnabled(snapshot, set.id, !set.enabled)),
+                },
+                {
+                  id: `export-${set.id}`,
+                  label: 'Export CSV',
+                  onSelect: () => {
+                    downloadTextFile(
+                      `speech-vocabulary-${set.id}.csv`,
+                      serializeVocabularyCsv(set),
+                      'text/csv;charset=utf-8',
+                    );
+                    setStatusMessage('Exported selected vocabulary set as CSV.');
+                  },
+                },
+                {
+                  id: `delete-${set.id}`,
+                  label: 'Delete…',
+                  destructive: true,
+                  disabled: snapshot.sets.length <= 1,
+                  onSelect: () => {
+                    applyResult(deleteVocabularySet(snapshot, set.id));
+                    setDraft(emptyDraft);
+                  },
+                },
+              ];
+
+              return (
+                <div
+                  className="vocabulary-set-row"
+                  data-selected={isSelected ? 'true' : undefined}
+                  key={set.id}
+                >
+                  <button
+                    type="button"
+                    className="vocabulary-set-row__open"
+                    onClick={() => openSet(set.id)}
+                    aria-current={isSelected ? 'true' : undefined}
+                    aria-label={`Open ${set.displayName}`}
+                  >
+                    <span className="vocabulary-set-row__name">{set.displayName}</span>
+                    <span className="vocabulary-set-row__meta">
+                      {set.enabled ? 'On' : 'Off'} · {set.entries.length} words · {enabledEntries}{' '}
+                      active
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary vocabulary-set-row__toggle"
+                    onClick={() =>
+                      applyResult(setVocabularySetEnabled(snapshot, set.id, !set.enabled))
+                    }
+                    aria-label={`${set.enabled ? 'Turn off' : 'Turn on'} ${set.displayName}`}
+                  >
+                    {set.enabled ? 'On' : 'Off'}
+                  </button>
+                  <MenuButton
+                    buttonSize="sm"
+                    buttonVariant="ghost"
+                    items={rowMenuItems}
+                    label="More"
+                    menuLabel={`Actions for ${set.displayName}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="vocabulary-empty">
+            <p>No sets match this search.</p>
+            <button type="button" className="secondary" onClick={() => setSetSearch('')}>
+              Clear search
+            </button>
+          </div>
+        )}
+      </article>
+
+      <div className="vocabulary-layout vocabulary-editor-layout">
+        <article
+          className="vocabulary-card vocabulary-selected-set"
+          aria-labelledby="vocabulary-selected-title"
+        >
+          <h3 id="vocabulary-selected-title">{selectedSet?.displayName ?? 'Selected set'}</h3>
+          {selectedSet !== undefined ? (
+            <>
+              <p>
+                {selectedSet.entries.length} words · {selectedSet.enabled ? 'On' : 'Off'}
+              </p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={selectedSet.enabled}
+                  onChange={(event) => {
+                    const { checked } = event.currentTarget;
+                    applyResult(setVocabularySetEnabled(snapshot, selectedSet.id, checked));
+                  }}
+                />
+                Use for next recordings
+              </label>
+            </>
+          ) : (
+            <p>Select a vocabulary set to edit its words.</p>
+          )}
         </article>
 
         <article className="vocabulary-card" aria-labelledby="vocabulary-entry-form-title">
-          <h3 id="vocabulary-entry-form-title">{draft.id ? 'Edit entry' : 'Add entry'}</h3>
+          <h3 id="vocabulary-entry-form-title">{draft.id ? 'Edit word' : 'Add word'}</h3>
           <div className="vocabulary-form-grid">
             <label htmlFor="vocabulary-phrase">
               Phrase
@@ -385,7 +514,7 @@ export function VocabularyPanel() {
           </div>
           <div className="vocabulary-actions">
             <button type="button" onClick={submitEntry} disabled={selectedSet === undefined}>
-              {draft.id ? 'Update entry' : 'Add entry'}
+              {draft.id ? 'Update word' : 'Add word'}
             </button>
             <button type="button" className="secondary" onClick={() => setDraft(emptyDraft)}>
               Reset form
@@ -449,13 +578,8 @@ export function VocabularyPanel() {
         )}
       </article>
 
-      <article className="vocabulary-card" aria-labelledby="vocabulary-custom-prompts-title">
-        <h3 id="vocabulary-custom-prompts-title">Enrollment prompt preview</h3>
-        <p>
-          High-priority enabled terms are expanded into deterministic Vietnamese, English, or mixed
-          prompt templates. Review every generated sentence before recording; terms remain active
-          through vocabulary steering even when they are not selected for recording.
-        </p>
+      <details className="vocabulary-card vocabulary-details">
+        <summary>Enrollment prompts</summary>
         {customPromptPreview.prompts.length > 0 ? (
           <div className="vocabulary-entry-list" aria-label="Custom vocabulary prompt preview">
             {customPromptPreview.prompts.map((prompt) => (
@@ -467,85 +591,84 @@ export function VocabularyPanel() {
                     {prompt.language} · {prompt.customVocabulary.voiceCondition} ·{' '}
                     {prompt.customVocabulary.position}
                   </p>
-                  <p>
-                    Entry {prompt.customVocabulary.vocabularyEntryId} · review required before
-                    recording
-                  </p>
                 </div>
               </article>
             ))}
           </div>
         ) : (
-          <p className="status-message">
-            Add and enable vocabulary entries to preview local enrollment prompts.
-          </p>
+          <p className="status-message">Add enabled words to preview local enrollment prompts.</p>
         )}
         <p className="status-message">
           Selected entries: {customPromptPreview.selectedEntryIds.length}. Skipped entries:{' '}
           {customPromptPreview.skippedEntryIds.length}. {customPromptPreview.warnings[0]}
         </p>
-      </article>
+      </details>
 
-      <div className="vocabulary-layout">
-        <article className="vocabulary-card" aria-labelledby="vocabulary-export-title">
-          <h3 id="vocabulary-export-title">Export</h3>
-          <p>
-            Exports are explicit local downloads. They may contain sensitive names or project terms.
-          </p>
-          <div className="vocabulary-actions">
-            <button type="button" className="secondary" onClick={exportJson}>
-              Export JSON
-            </button>
+      <details
+        className="vocabulary-card vocabulary-details"
+        open={managementOpen}
+        onToggle={(event) => setManagementOpen(event.currentTarget.open)}
+      >
+        <summary>Import and export</summary>
+        <div className="vocabulary-layout">
+          <section aria-labelledby="vocabulary-export-title">
+            <h3 id="vocabulary-export-title">Export</h3>
+            <p>Downloads may contain sensitive names or project terms.</p>
+            <div className="vocabulary-actions">
+              <button type="button" className="secondary" onClick={exportJson}>
+                Export all JSON
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={exportCsv}
+                disabled={selectedSet === undefined}
+              >
+                Export selected CSV
+              </button>
+            </div>
+          </section>
+
+          <section aria-labelledby="vocabulary-import-title">
+            <h3 id="vocabulary-import-title">Import</h3>
+            <label htmlFor="vocabulary-import-format">
+              Format
+              <select
+                id="vocabulary-import-format"
+                value={importFormat}
+                onChange={(event) => {
+                  setImportFormat(event.currentTarget.value as 'json' | 'csv');
+                }}
+              >
+                <option value="json">JSON store, set, or entries</option>
+                <option value="csv">CSV entries for selected set</option>
+              </select>
+            </label>
+            <label htmlFor="vocabulary-import-text">
+              Paste import data
+              <textarea
+                id="vocabulary-import-text"
+                value={importText}
+                onChange={(event) => {
+                  setImportText(event.currentTarget.value);
+                }}
+                placeholder={
+                  importFormat === 'json'
+                    ? '[{"phrase":"Wilson","displayForm":"Wilson","language":"en","weight":5}]'
+                    : 'id,phrase,displayForm,language,spokenAliases,weight,category,enabled,exactCase,promptPriority'
+                }
+              />
+            </label>
             <button
               type="button"
-              className="secondary"
-              onClick={exportCsv}
-              disabled={selectedSet === undefined}
+              onClick={importVocabulary}
+              disabled={importText.trim().length === 0 || selectedSet === undefined}
             >
-              Export selected CSV
+              Import locally
             </button>
-          </div>
-        </article>
-
-        <article className="vocabulary-card" aria-labelledby="vocabulary-import-title">
-          <h3 id="vocabulary-import-title">Import</h3>
-          <label htmlFor="vocabulary-import-format">
-            Import format
-            <select
-              id="vocabulary-import-format"
-              value={importFormat}
-              onChange={(event) => {
-                setImportFormat(event.currentTarget.value as 'json' | 'csv');
-              }}
-            >
-              <option value="json">JSON store, set, or entries</option>
-              <option value="csv">CSV entries for selected set</option>
-            </select>
-          </label>
-          <label htmlFor="vocabulary-import-text">
-            Paste import data
-            <textarea
-              id="vocabulary-import-text"
-              value={importText}
-              onChange={(event) => {
-                setImportText(event.currentTarget.value);
-              }}
-              placeholder={
-                importFormat === 'json'
-                  ? '[{"phrase":"Wilson","displayForm":"Wilson","language":"en","weight":5}]'
-                  : 'id,phrase,displayForm,language,spokenAliases,weight,category,enabled,exactCase,promptPriority'
-              }
-            />
-          </label>
-          <button
-            type="button"
-            onClick={importVocabulary}
-            disabled={importText.trim().length === 0 || selectedSet === undefined}
-          >
-            Import locally
-          </button>
-        </article>
-      </div>
+          </section>
+        </div>
+      </details>
 
       <p className="status-message" aria-live="polite">
         {statusMessage}
