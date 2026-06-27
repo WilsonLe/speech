@@ -48,3 +48,29 @@ export const speechDisclosureCssRequirements = [
   'forced-colors: active',
   '[hidden]',
 ] as const;
+
+export const speechMenuButtonAccessibilityChecklist = [
+  'MenuButton trigger renders a native <button> with aria-haspopup="menu".',
+  'MenuButton menu renders role="menu" and action/navigation children as role="menuitem".',
+  'MenuButton closes on Escape, returns focus to the trigger, and closes when focus leaves the widget.',
+  'MenuButton supports ArrowDown, ArrowUp, Home, and End movement without nested submenus.',
+  'MenuButton examples must keep long forms, required consequences, and destructive confirmations outside the menu.',
+] as const;
+
+export const speechTooltipAccessibilityChecklist = [
+  'Tooltip connects supplemental text to the trigger with aria-describedby and role="tooltip".',
+  'Tooltip opens on focus and pointer hover, dismisses on Escape, and keeps focus on the trigger.',
+  'Tooltip content is plain text and must not contain required instructions, errors, or destructive consequences.',
+  'Tooltip CSS covers hidden content, reduced motion, forced colours, viewport-safe width, and pointer-safe behaviour.',
+] as const;
+
+export const speechMenuCssRequirements = [
+  '--speech-size-touch-target',
+  '--speech-focus-ring-color',
+  '--speech-focus-ring-width',
+  '--speech-focus-ring-offset',
+  '--speech-shadow-popover',
+  'prefers-reduced-motion: reduce',
+  'forced-colors: active',
+  '[hidden]',
+] as const;
