@@ -890,6 +890,18 @@ h2 {
   color: #f8fafc;
 }
 
+.quality-feedback-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding-inline-start: 1.25rem;
+  color: #e2e8f0;
+}
+
+.quality-feedback-list li::marker {
+  color: #38bdf8;
+}
+
 .text-field {
   display: grid;
   gap: 0.35rem;

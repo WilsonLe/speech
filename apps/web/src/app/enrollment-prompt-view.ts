@@ -1,6 +1,7 @@
 import type {
   EnrollmentQualityReportV1,
   EnrollmentSentenceLanguage,
+  EnrollmentTakeQualityReasonCode,
   EnrollmentVoiceCondition,
   TrainingReadinessCoverageReportV1,
   TrainingReadinessPolicyV1,
@@ -36,6 +37,11 @@ export interface EnrollmentFeedbackView {
   readonly text: string;
   readonly tone: 'neutral' | 'good' | 'warning' | 'error';
   readonly livePoliteness: 'polite' | 'assertive';
+}
+
+export interface EnrollmentQualityReasonFeedbackView {
+  readonly reason: EnrollmentTakeQualityReasonCode;
+  readonly text: string;
 }
 
 export interface EnrollmentDetailsAvailabilityView {
@@ -133,9 +139,8 @@ export function createEnrollmentFeedbackView(options: {
       return { text: 'Good', tone: 'good', livePoliteness: 'polite' };
     }
 
-    const reason = report.reasonCodes[0] ?? 'record-again';
     return {
-      text: mapQualityReasonToFeedback(reason),
+      text: createEnrollmentQualityFeedbackList(report)[0]?.text ?? 'Record again.',
       tone: report.status === 'retry' ? 'error' : 'warning',
       livePoliteness: 'assertive',
     };
@@ -185,6 +190,33 @@ export function createEnrollmentDetailsAvailabilityView(options: {
   };
 }
 
+export function createEnrollmentPromptLiveText(options: {
+  readonly progress: EnrollmentPromptProgressView;
+  readonly condition: EnrollmentConditionView;
+}): string {
+  return `Prompt ${options.progress.label}. ${options.condition.label}.`;
+}
+
+export function createEnrollmentQualityFeedbackList(
+  report: EnrollmentQualityReportV1,
+): readonly EnrollmentQualityReasonFeedbackView[] {
+  if (report.status === 'pass') return [];
+  const seen = new Set<EnrollmentTakeQualityReasonCode>();
+  const feedback: EnrollmentQualityReasonFeedbackView[] = [];
+  for (const reason of report.reasonCodes) {
+    if (seen.has(reason)) continue;
+    seen.add(reason);
+    feedback.push({ reason, text: mapQualityReasonToFeedback(reason) });
+  }
+  return feedback;
+}
+
+export function summarizeEnrollmentQualityForDetails(report: EnrollmentQualityReportV1): string {
+  if (report.status === 'pass') return 'Good. The take passed local checks.';
+  if (report.status === 'retry') return 'Record again when ready.';
+  return 'Review the take. You can accept it if it sounds right.';
+}
+
 export function sanitizeEnrollmentStatusText(message: string): string {
   const lower = message.toLowerCase();
   if (
@@ -200,29 +232,35 @@ export function sanitizeEnrollmentStatusText(message: string): string {
   return message.trim();
 }
 
-function mapQualityReasonToFeedback(reason: string): string {
-  const normalized = reason.toLowerCase();
-  if (normalized.includes('quiet') || normalized.includes('low-level')) {
-    return 'Too quiet — move closer.';
+function mapQualityReasonToFeedback(reason: EnrollmentTakeQualityReasonCode): string {
+  switch (reason) {
+    case 'no-audio':
+      return 'No speech — record again.';
+    case 'duration-too-short':
+      return 'Too short — read the full prompt.';
+    case 'duration-too-long':
+      return 'Too long — read only the prompt.';
+    case 'clipping':
+      return 'Clipped — move back.';
+    case 'low-snr':
+      return 'Too much noise — try a quieter room.';
+    case 'condition-too-quiet':
+      return 'Too quiet — move closer.';
+    case 'condition-too-loud':
+      return 'Too loud — move back.';
+    case 'vad-missing-start':
+      return 'Speech started late — record again.';
+    case 'vad-missing-end':
+      return 'Speech ended early — record again.';
+    case 'pace-too-slow':
+      return 'Too slow — read naturally.';
+    case 'pace-too-fast':
+      return 'Too fast — slow down.';
+    case 'alignment-low':
+      return 'Prompt match unclear — retry or accept.';
+    case 'alignment-unavailable':
+      return 'Prompt check unavailable — you can still accept.';
+    case 'low-base-model-confidence':
+      return 'Recognizer unsure — you can still accept.';
   }
-  if (normalized.includes('clipp') || normalized.includes('peak')) {
-    return 'Clipped — move back.';
-  }
-  if (normalized.includes('noise') || normalized.includes('snr')) {
-    return 'Too much noise — try a quieter room.';
-  }
-  if (
-    normalized.includes('late') ||
-    normalized.includes('speech-start') ||
-    normalized.includes('vad')
-  ) {
-    return 'Speech started late — record again.';
-  }
-  if (normalized.includes('short') || normalized.includes('duration')) {
-    return 'Too short — read the full prompt.';
-  }
-  if (normalized.includes('pace') || normalized.includes('fast')) {
-    return 'Too fast — slow down.';
-  }
-  return 'Record again.';
 }
