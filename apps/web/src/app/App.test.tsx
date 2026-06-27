@@ -47,7 +47,9 @@ describe('App', () => {
     expect(html).not.toContain('Download .txt');
     expect(html).not.toContain('Clear transcript');
     expect(html).toContain('id="vocabulary"');
-    expect(html).toContain('Local vocabulary sets');
+    expect(html).toContain('Vocabulary sets');
+    expect(html).toContain('New set');
+    expect(html).toContain('Import and export');
     expect(html).toContain('id="models"');
     expect(html).toContain('Profile cards and local lifecycle');
     expect(html).toContain('Personal Models navigation');

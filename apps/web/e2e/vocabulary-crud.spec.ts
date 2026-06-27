@@ -6,11 +6,26 @@ async function readDownloadText(download: Download): Promise<string> {
   return await import('node:fs/promises').then((fs) => fs.readFile(path, 'utf8'));
 }
 
-test('manages local vocabulary entries and imports/exports JSON and CSV', async ({ page }) => {
+test('manages compact vocabulary sets and preserves local import/export semantics', async ({
+  page,
+}) => {
   await page.goto('/');
 
-  const panel = page.getByRole('region', { name: /local vocabulary sets/i });
-  await expect(panel.getByText(/local vocabulary store/i)).toBeVisible();
+  const panel = page.getByRole('region', { name: /vocabulary sets/i });
+  await expect(panel.getByRole('heading', { name: 'Vocabulary sets' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: /open work/i })).toBeVisible();
+  await expect(panel.getByRole('button', { name: /turn off work/i })).toBeVisible();
+
+  await page.locator('#new-vocabulary-set-name').fill('Contacts');
+  await panel.getByRole('button', { name: 'New set', exact: true }).click();
+  await expect(panel.getByRole('button', { name: /open contacts/i })).toBeVisible();
+  await expect(panel.getByText('Applies next recording.')).toBeVisible();
+
+  await page.locator('#vocabulary-set-search').fill('Work');
+  await expect(panel.getByRole('button', { name: /open work/i })).toBeVisible();
+  await expect(panel.getByRole('button', { name: /open contacts/i })).toHaveCount(0);
+  await page.locator('#vocabulary-set-search').fill('Contacts');
+  await panel.getByRole('button', { name: /open contacts/i }).click();
 
   await page.locator('#vocabulary-phrase').fill('Pangea Chat');
   await page.locator('#vocabulary-display-form').fill('Pangea Chat');
@@ -19,7 +34,7 @@ test('manages local vocabulary entries and imports/exports JSON and CSV', async 
   await page.locator('#vocabulary-weight').fill('7');
   await page.locator('#vocabulary-category').fill('Work');
   await page.locator('#vocabulary-priority').fill('10');
-  await panel.getByRole('button', { name: 'Add entry' }).click();
+  await panel.getByRole('button', { name: 'Add word' }).click();
 
   const entry = panel.getByRole('article', { name: /vocabulary entry pangea chat/i });
   await expect(entry).toBeVisible();
@@ -27,17 +42,23 @@ test('manages local vocabulary entries and imports/exports JSON and CSV', async 
 
   await entry.getByRole('button', { name: 'Edit' }).click();
   await page.locator('#vocabulary-display-form').fill('Pangea Chat Pro');
-  await panel.getByRole('button', { name: 'Update entry' }).click();
+  await panel.getByRole('button', { name: 'Update word' }).click();
   await expect(
     panel.getByRole('article', { name: /vocabulary entry pangea chat pro/i }),
   ).toBeVisible();
+
+  await panel.getByText('Enrollment prompts').click();
   const promptPreview = panel.getByLabel(/custom vocabulary prompt preview/i);
   await expect(promptPreview.getByText(/Pangea Chat Pro/).first()).toBeVisible();
-  await expect(promptPreview.getByText(/review required before recording/i).first()).toBeVisible();
+
+  await panel.getByRole('button', { name: 'More' }).first().click();
+  await expect(panel.getByRole('menuitem', { name: 'Import or export…' })).toBeVisible();
+  await panel.getByRole('menuitem', { name: 'Import or export…' }).click();
+  await expect(panel.getByText('Downloads may contain sensitive names')).toBeVisible();
 
   const [jsonDownload] = await Promise.all([
     page.waitForEvent('download'),
-    panel.getByRole('button', { name: 'Export JSON' }).click(),
+    panel.getByRole('button', { name: 'Export all JSON' }).click(),
   ]);
   const jsonText = await readDownloadText(jsonDownload);
   expect(JSON.parse(jsonText)).toMatchObject({ schemaVersion: 1 });

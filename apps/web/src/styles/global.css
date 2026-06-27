@@ -1236,6 +1236,17 @@ h2 {
   font-weight: 800;
 }
 
+.vocabulary-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.vocabulary-heading > div {
+  min-width: 0;
+}
+
 .vocabulary-summary,
 .vocabulary-layout,
 .vocabulary-form-grid,
@@ -1248,7 +1259,11 @@ h2 {
 
 .vocabulary-summary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 1.25rem 0;
+  margin: 1.25rem 0 0.75rem;
+}
+
+.vocabulary-boundary {
+  margin-top: 0;
 }
 
 .vocabulary-layout {
@@ -1262,6 +1277,11 @@ h2 {
   border-radius: 1rem;
   padding: 1rem;
   background: rgba(2, 6, 23, 0.42);
+}
+
+.vocabulary-set-browser,
+.vocabulary-details {
+  margin-top: 1rem;
 }
 
 .vocabulary-card h3,
@@ -1282,6 +1302,115 @@ h2 {
   margin-bottom: 0.85rem;
   color: #cbd5e1;
   font-weight: 700;
+}
+
+.vocabulary-set-browser__header {
+  display: flex;
+  gap: 1rem;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.vocabulary-new-set {
+  min-width: min(100%, 24rem);
+  margin-left: auto;
+}
+
+.vocabulary-search {
+  margin: 1rem 0;
+}
+
+.vocabulary-set-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.vocabulary-set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.6rem;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 0.85rem;
+  padding: 0.55rem;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.vocabulary-set-row[data-selected='true'] {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(30, 64, 175, 0.18);
+}
+
+.vocabulary-set-row__open {
+  display: grid;
+  min-width: 0;
+  border: 0;
+  padding: 0.35rem 0.45rem;
+  color: inherit;
+  text-align: start;
+  background: transparent;
+}
+
+.vocabulary-set-row__open:hover,
+.vocabulary-set-row__open:focus-visible {
+  color: #f8fafc;
+}
+
+.vocabulary-set-row__open:focus-visible,
+.vocabulary-set-row__toggle:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.vocabulary-set-row__name {
+  overflow: hidden;
+  color: #f8fafc;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vocabulary-set-row__meta {
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vocabulary-set-row__toggle {
+  min-width: 4rem;
+}
+
+.vocabulary-empty {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  color: #cbd5e1;
+}
+
+.vocabulary-editor-layout {
+  grid-template-columns: minmax(14rem, 0.55fr) minmax(0, 1.45fr);
+}
+
+.vocabulary-selected-set label {
+  margin-top: 0.75rem;
+}
+
+.vocabulary-details > summary {
+  cursor: pointer;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.vocabulary-details > summary:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.vocabulary-details[open] > summary {
+  margin-bottom: 1rem;
 }
 
 .vocabulary-card input,
@@ -1913,6 +2042,29 @@ button.danger,
     align-items: stretch;
   }
 
+  .vocabulary-heading,
+  .vocabulary-set-browser__header,
+  .vocabulary-empty {
+    display: grid;
+  }
+
+  .vocabulary-new-set,
+  .vocabulary-heading .speech-menu-button,
+  .vocabulary-heading .speech-button,
+  .vocabulary-search {
+    width: 100%;
+  }
+
+  .vocabulary-set-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vocabulary-set-row__toggle,
+  .vocabulary-set-row .speech-menu-button,
+  .vocabulary-set-row .speech-button {
+    width: 100%;
+  }
+
   .dictate-toolbar__field,
   .dictate-toolbar__link,
   .dictate-copy,
@@ -1932,6 +2084,7 @@ button.danger,
 
   .vocabulary-actions button,
   .vocabulary-entry-actions button,
+  .vocabulary-set-row__toggle,
   .inline-form button,
   .model-card-actions button,
   .profile-card-actions button,
