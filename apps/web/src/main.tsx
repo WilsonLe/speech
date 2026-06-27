@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './app/App';
 import { initPwaLifecycle } from './app/pwa-lifecycle';
 import '@speech/ui/tokens.css';
+import '@speech/ui/primitives.css';
 import './styles/global.css';
 
 const root = document.getElementById('root');

@@ -10,3 +10,4 @@ applyTo: 'apps/web/src/app/OfflineModelPanel.tsx,apps/web/src/app/pwa-lifecycle.
 - Run model catalog loading, manifest inspection, hashing, install, activation, and deletion from a dedicated worker rather than the React/main thread.
 - Inspect and verify manifest metadata before enabling large model downloads. Do not download external model files in smoke tests.
 - Browser tests for offline behavior should first wait for service-worker readiness/control, then assert a precached reload while the context is offline.
+- App-shell Local status may summarize network, app-shell readiness, update availability, and required model-download count, but detailed service-worker/model lifecycle data stays in the dedicated offline/model lifecycle screen and worker.

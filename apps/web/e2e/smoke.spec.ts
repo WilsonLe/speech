@@ -14,7 +14,29 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(
     page.getByRole('navigation', { name: 'Primary destinations' }).first(),
   ).toContainText('Models');
-  await expect(page.getByLabel('Local status summary')).toContainText('Local');
+  const localStatus = page.getByRole('button', { name: /local status:/i });
+  await expect(localStatus).toContainText('Local');
+  await localStatus.click();
+  await expect(page.getByRole('group', { name: 'Local status details' })).toContainText(
+    'Model downloads',
+  );
+  await expect(page.getByRole('group', { name: 'Local status details' })).toContainText(
+    'Audio, vocabulary, and personal models stay in this browser.',
+  );
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('group', { name: 'Local status details' })).toBeHidden();
+
+  const appMenu = page.getByRole('button', { name: 'Menu' });
+  await appMenu.click();
+  const applicationMenu = page.getByRole('menu', { name: 'Application menu' });
+  await expect(applicationMenu).toContainText('Settings');
+  await expect(applicationMenu).toContainText('Storage');
+  await expect(applicationMenu).toContainText('Privacy');
+  await expect(applicationMenu).toContainText('Keyboard shortcuts');
+  await expect(applicationMenu).toContainText('Diagnostics');
+  await expect(applicationMenu).toContainText('About');
+  await page.keyboard.press('Escape');
+  await expect(applicationMenu).toBeHidden();
 
   const primaryNav = page.getByRole('navigation', { name: 'Primary destinations' }).first();
   await primaryNav.getByRole('link', { name: 'Vocabulary' }).click();

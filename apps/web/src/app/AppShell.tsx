@@ -1,4 +1,29 @@
-import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
+import { MenuButton, type MenuButtonItem } from '@speech/ui';
+import {
+  appMenuDestinations,
+  createAppShellLocalStatusView,
+  createModelLifecycleErrorSummary,
+  createModelLifecycleSummary,
+  loadingModelLifecycleSummary,
+  type AppShellLocalStatusView,
+  type AppShellModelLifecycleSummary,
+} from './appShellStatus';
+import {
+  activatePwaUpdate,
+  getPwaLifecycleSnapshot,
+  subscribePwaLifecycle,
+  type PwaLifecycleSnapshot,
+} from './pwa-lifecycle';
 import {
   focusPrimaryDestinationHeading,
   getInitialPrimaryDestinationId,
@@ -7,6 +32,10 @@ import {
   type PrimaryDestination,
   type PrimaryDestinationId,
 } from './routeState';
+import {
+  createModelLifecycleWorker,
+  type ModelLifecycleResponse,
+} from '../workers/model-lifecycle-client';
 
 function getCurrentHash(): string | undefined {
   if (typeof window === 'undefined') {
@@ -15,9 +44,22 @@ function getCurrentHash(): string | undefined {
   return window.location.hash;
 }
 
+function getInitialOnlineStatus(): boolean {
+  if (typeof navigator === 'undefined') {
+    return true;
+  }
+
+  return navigator.onLine;
+}
+
 export function AppShell({ children }: { readonly children: ReactNode }) {
   const [activeDestination, setActiveDestination] = useState<PrimaryDestinationId>(() =>
     getInitialPrimaryDestinationId(getCurrentHash()),
+  );
+  const [pwa, setPwa] = useState<PwaLifecycleSnapshot>(() => getPwaLifecycleSnapshot());
+  const [online, setOnline] = useState(() => getInitialOnlineStatus());
+  const [modelLifecycle, setModelLifecycle] = useState<AppShellModelLifecycleSummary>(
+    loadingModelLifecycleSummary,
   );
 
   const focusDestination = useCallback((destinationId: PrimaryDestinationId) => {
@@ -28,6 +70,64 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
     window.requestAnimationFrame(() => {
       focusPrimaryDestinationHeading(destinationId, document);
     });
+  }, []);
+
+  useEffect(() => subscribePwaLifecycle(setPwa), []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return undefined;
+    }
+
+    function handleOnlineChange() {
+      setOnline(navigator.onLine);
+    }
+
+    window.addEventListener('online', handleOnlineChange);
+    window.addEventListener('offline', handleOnlineChange);
+    return () => {
+      window.removeEventListener('online', handleOnlineChange);
+      window.removeEventListener('offline', handleOnlineChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof Worker === 'undefined') {
+      return undefined;
+    }
+
+    const worker = createModelLifecycleWorker();
+    worker.addEventListener('message', handleWorkerMessage);
+    worker.addEventListener('error', handleWorkerError);
+    worker.postMessage({ type: 'INIT' });
+
+    function handleWorkerMessage(event: MessageEvent<ModelLifecycleResponse>) {
+      const message = event.data;
+      if (message.type === 'READY') {
+        setModelLifecycle(createModelLifecycleSummary(message.catalog.models, message.installed));
+        return;
+      }
+
+      if (message.type === 'INSTALL_COMPLETE' || message.type === 'DELETE_COMPLETE') {
+        worker.postMessage({ type: 'INIT' });
+        return;
+      }
+
+      if (message.type === 'ERROR') {
+        setModelLifecycle(createModelLifecycleErrorSummary());
+      }
+    }
+
+    function handleWorkerError() {
+      setModelLifecycle(createModelLifecycleErrorSummary());
+    }
+
+    return () => {
+      worker.postMessage({ type: 'DISPOSE' });
+      worker.removeEventListener('message', handleWorkerMessage);
+      worker.removeEventListener('error', handleWorkerError);
+      worker.terminate();
+    };
   }, []);
 
   useEffect(() => {
@@ -63,6 +163,16 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
     [activeDestination, focusDestination],
   );
 
+  const localStatus = useMemo(
+    () => createAppShellLocalStatusView({ modelLifecycle, online, pwa }),
+    [modelLifecycle, online, pwa],
+  );
+
+  const appMenuItems = useMemo(
+    () => createAppMenuItems(pwa.updateAvailable),
+    [pwa.updateAvailable],
+  );
+
   return (
     <div className="app-frame">
       <a className="skip-link" href="#app-main" onClick={handleSkipToMain}>
@@ -82,9 +192,8 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
             activeDestination={activeDestination}
             onDestinationClick={handleDestinationClick}
           />
-          <span className="app-shell-local" aria-label="Local status summary">
-            Local
-          </span>
+          <LocalStatusPopover status={localStatus} />
+          <ApplicationMenu items={appMenuItems} />
         </div>
       </header>
       <PrimaryNavigation
@@ -95,6 +204,80 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
       <main id="app-main" className="app-shell" tabIndex={-1}>
         {children}
       </main>
+    </div>
+  );
+}
+
+function ApplicationMenu({ items }: { readonly items: readonly MenuButtonItem[] }) {
+  return (
+    <MenuButton
+      buttonSize="sm"
+      buttonVariant="secondary"
+      className="app-menu"
+      items={items}
+      label="Menu"
+      menuLabel="Application menu"
+      placement="bottom-end"
+    />
+  );
+}
+
+function LocalStatusPopover({ status }: { readonly status: AppShellLocalStatusView }) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverId = 'app-local-status-popover';
+
+  function closePopover() {
+    setOpen(false);
+    buttonRef.current?.focus();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Escape') {
+      return;
+    }
+
+    event.preventDefault();
+    closePopover();
+  }
+
+  return (
+    <div
+      className="app-local-status"
+      data-open={open ? 'true' : undefined}
+      data-tone={status.tone}
+      onKeyDown={handleKeyDown}
+    >
+      <button
+        aria-controls={popoverId}
+        aria-expanded={open}
+        aria-label={status.ariaLabel}
+        className="app-local-status__button"
+        onClick={() => setOpen((current) => !current)}
+        ref={buttonRef}
+        type="button"
+      >
+        <span>Local</span>
+        <strong>{status.label}</strong>
+      </button>
+      <div
+        className="app-local-status__popover"
+        hidden={!open}
+        id={popoverId}
+        role="group"
+        aria-label="Local status details"
+      >
+        <p className="app-local-status__headline">{status.headline}</p>
+        <dl>
+          {status.rows.map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="app-local-status__privacy">{status.privacyNote}</p>
+      </div>
     </div>
   );
 }
@@ -120,6 +303,30 @@ function PrimaryNavigation({
       ))}
     </nav>
   );
+}
+
+function createAppMenuItems(updateAvailable: boolean): readonly MenuButtonItem[] {
+  const destinationItems: MenuButtonItem[] = appMenuDestinations.map((destination) => ({
+    id: destination.id,
+    kind: 'link',
+    href: destination.href,
+    label: destination.label,
+  }));
+
+  if (!updateAvailable) {
+    return destinationItems;
+  }
+
+  return [
+    ...destinationItems,
+    {
+      id: 'install-update',
+      label: 'Install update',
+      onSelect: () => {
+        void activatePwaUpdate();
+      },
+    },
+  ];
 }
 
 function PrimaryNavigationLink({

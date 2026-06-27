@@ -133,6 +133,12 @@ export const MenuButton = forwardRef<HTMLButtonElement, MenuButtonProps>(functio
   }
 
   function handleTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === 'Escape' && isOpen) {
+      event.preventDefault();
+      commitOpen(false);
+      return;
+    }
+
     if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       const nextIndex = getMenuKeyboardTargetIndex(-1, 'ArrowDown', items.length, {
