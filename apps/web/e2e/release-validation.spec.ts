@@ -148,8 +148,9 @@ test('active push-to-talk stress cycles do not make network requests or surface 
   });
   await page.waitForLoadState('networkidle');
 
-  const transcript = page.getByRole('region', { name: /focused push-to-talk dictation/i });
-  const pushToTalk = transcript.getByRole('button', { name: /hold to talk/i });
+  const transcript = page.getByRole('region', { name: /^dictate$/i });
+  const pushToTalk = transcript.locator('.push-to-talk-button');
+  await transcript.getByText('Dictation details', { exact: true }).click();
   const metrics = transcript.getByLabel('Transcript latency and capture status');
 
   recordingActiveRequests = true;

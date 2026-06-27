@@ -71,7 +71,7 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(bottomNav.getByRole('link', { name: 'Vocabulary' })).toBeVisible();
   await expect(bottomNav.getByRole('link', { name: 'Models' })).toBeVisible();
 
-  await expect(page.getByRole('button', { name: /hold to talk/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /hold to speak/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /local vocabulary sets/i })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: /profile cards and local lifecycle/i }),

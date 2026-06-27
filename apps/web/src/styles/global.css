@@ -849,6 +849,84 @@ h2 {
   background: rgba(2, 6, 23, 0.58);
 }
 
+.dictate-workspace {
+  display: grid;
+  min-height: min(44rem, calc(100vh - 9rem));
+  gap: var(--speech-space-4);
+}
+
+.dictate-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--speech-space-2);
+}
+
+.dictate-toolbar__field,
+.dictate-toolbar__link {
+  display: inline-flex;
+  min-height: var(--speech-size-touch-target);
+  align-items: center;
+  gap: var(--speech-space-2);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--speech-radius-pill);
+  padding: 0 var(--speech-space-3);
+  color: var(--speech-color-text-secondary);
+  background: rgba(15, 23, 42, 0.54);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.dictate-toolbar__field span,
+.dictate-toolbar__link span {
+  color: var(--speech-color-text-muted);
+  font-size: var(--speech-text-xs);
+  text-transform: uppercase;
+}
+
+.dictate-toolbar__field select {
+  border: 0;
+  color: var(--speech-color-text-primary);
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+}
+
+.dictate-toolbar__field:focus-within,
+.dictate-toolbar__link:focus-visible,
+.dictate-copy:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.dictate-copy,
+.dictate-actions-menu {
+  margin-inline-start: auto;
+}
+
+.dictate-copy + .dictate-actions-menu {
+  margin-inline-start: 0;
+}
+
+.dictate-stage {
+  display: grid;
+  min-height: 24rem;
+  align-content: center;
+  gap: var(--speech-space-4);
+}
+
+.dictate-stage__heading h2 {
+  margin-bottom: 0;
+  font-size: clamp(2.25rem, 7vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+.dictate-transcript-area {
+  display: grid;
+  gap: var(--speech-space-3);
+}
+
 .transcript-editor-label {
   display: block;
   margin-bottom: 0.65rem;
@@ -861,15 +939,15 @@ h2 {
 
 .transcript-editor {
   width: 100%;
-  min-height: 13rem;
+  min-height: clamp(16rem, 44vh, 34rem);
   resize: vertical;
   border: 0;
-  border-radius: 0.9rem;
-  padding: 1rem;
+  border-radius: var(--speech-radius-lg);
+  padding: clamp(var(--speech-space-4), 4vw, var(--speech-space-6));
   color: #f8fafc;
   background: rgba(2, 6, 23, 0.7);
   font: inherit;
-  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  font-size: clamp(1.35rem, 4vw, 2.8rem);
   line-height: 1.45;
 }
 
@@ -893,22 +971,66 @@ h2 {
   white-space: pre-wrap;
 }
 
-.transcript-controls {
+.dictate-recording-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.85rem;
+  justify-content: center;
   align-items: center;
+  gap: var(--speech-space-3);
 }
 
 .push-to-talk-button {
-  min-width: min(100%, 14rem);
+  min-width: min(100%, 16rem);
+  min-height: 4rem;
   color: #052e16;
   background: #86efac;
+  font-size: clamp(1.05rem, 2.4vw, 1.35rem);
 }
 
 .push-to-talk-button[aria-pressed='true'] {
   color: #450a0a;
   background: #fca5a5;
+}
+
+.dictate-state {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--speech-radius-pill);
+  padding: var(--speech-space-2) var(--speech-space-3);
+  color: var(--speech-color-text-primary);
+  background: rgba(15, 23, 42, 0.64);
+  font-weight: 800;
+}
+
+.dictate-state[data-tone='good'] {
+  color: var(--speech-color-success);
+}
+
+.dictate-state[data-tone='warn'] {
+  color: var(--speech-color-warning);
+}
+
+.dictate-state[data-tone='error'] {
+  color: var(--speech-color-danger);
+}
+
+.dictate-details {
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  padding-top: var(--speech-space-3);
+}
+
+.dictate-details summary {
+  width: fit-content;
+  min-height: var(--speech-size-touch-target);
+  border-radius: var(--speech-radius-pill);
+  padding: var(--speech-space-2) var(--speech-space-3);
+  color: var(--speech-color-text-secondary);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dictate-details summary:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
 }
 
 .transcript-settings-privacy {
@@ -1637,11 +1759,27 @@ button.danger,
     flex-direction: column;
   }
 
+  .dictate-toolbar {
+    align-items: stretch;
+  }
+
+  .dictate-toolbar__field,
+  .dictate-toolbar__link,
+  .dictate-copy,
+  .dictate-actions-menu,
+  .dictate-actions-menu .speech-button {
+    width: 100%;
+  }
+
+  .dictate-copy,
+  .dictate-actions-menu {
+    margin-inline-start: 0;
+  }
+
   .transcript-display {
     min-height: 10rem;
   }
 
-  .transcript-controls button,
   .vocabulary-actions button,
   .vocabulary-entry-actions button,
   .inline-form button,
