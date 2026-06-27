@@ -24,6 +24,7 @@ import {
   startDictateModelInstall,
   type DictateModelSetupState,
 } from './dictate-model-setup';
+import { formatMicrophoneBlockerText } from './microphone-state';
 import {
   buildTranscriptDownloadText,
   clearTranscript,
@@ -218,7 +219,9 @@ export function TranscriptPanel() {
           workletController.current?.releaseTransferredBuffer(message);
           return;
         case 'CAPTURE_ERROR':
-          updateWorkspace((current) => failTranscriptCapture(current, message.message));
+          updateWorkspace((current) =>
+            failTranscriptCapture(current, formatMicrophoneBlockerText(message)),
+          );
           return;
       }
     },
@@ -266,10 +269,7 @@ export function TranscriptPanel() {
       workletController.current = null;
       await microphoneController.stop();
       updateWorkspace((current) =>
-        failTranscriptCapture(
-          current,
-          error instanceof Error ? error.message : 'Push-to-talk microphone capture failed.',
-        ),
+        failTranscriptCapture(current, formatMicrophoneBlockerText(error)),
       );
       stopRequestedRef.current = false;
       stoppingRef.current = false;
@@ -523,7 +523,7 @@ export function TranscriptPanel() {
 
       {workspace.errorMessage ? (
         <p role="alert" className="status-message error-message">
-          {workspace.errorMessage} Check microphone permission and try again.
+          <strong>Recording needs attention.</strong> {workspace.errorMessage}
         </p>
       ) : null}
 

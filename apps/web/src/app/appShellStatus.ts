@@ -111,7 +111,7 @@ export function createAppShellLocalStatusView(options: {
     { label: 'Network', value: online ? 'Online' : 'Offline' },
     { label: 'Offline app', value: formatOfflineAppValue(pwa) },
     { label: 'Model downloads', value: modelDownloadValue },
-    { label: 'Update', value: pwa.updateAvailable ? 'Ready to install' : 'Current' },
+    { label: 'Update', value: pwa.updateAvailable ? 'Ready in menu' : 'Current' },
   ];
 
   return {

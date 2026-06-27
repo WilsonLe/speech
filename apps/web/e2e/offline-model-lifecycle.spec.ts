@@ -5,7 +5,8 @@ test('loads the model catalog and inspects manifest metadata in the lifecycle wo
 }) => {
   await page.goto('/');
 
-  const panel = page.getByRole('region', { name: /offline readiness and model lifecycle/i });
+  const panel = page.getByRole('region', { name: /offline and updates/i });
+  await panel.getByText('Model lifecycle details', { exact: true }).click();
   const vietasrCard = panel.getByRole('article', {
     name: /VietASR Iteration 3 Vietnamese INT8 candidate/i,
   });
@@ -34,26 +35,23 @@ test('reloads the precached app shell while offline', async ({ context, page }) 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('banner').getByRole('link', { name: 'Speech' })).toBeVisible();
   await expect(page.getByRole('heading', { name: /speech model required/i })).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: /offline readiness and model lifecycle/i }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /offline and updates/i })).toBeVisible();
+  await expect(page.getByLabel('Offline and update status')).toContainText(/Offline app/);
 
   await context.setOffline(false);
 });
 
 test('updates the offline indicator when the browser goes offline', async ({ context, page }) => {
   await page.goto('/');
-  const panel = page.getByRole('region', { name: /offline readiness and model lifecycle/i });
-  const networkStatus = panel.locator('.status-pill').filter({ hasText: /Network/ });
-  await expect(networkStatus.getByText('Online', { exact: true })).toBeVisible();
+  const panel = page.getByRole('region', { name: /offline and updates/i });
+  const status = panel.getByLabel('Offline and update status');
+  await expect(status).toContainText('Online');
 
   await context.setOffline(true);
-  await expect(networkStatus.getByText('Offline', { exact: true })).toBeVisible({
-    timeout: 10_000,
-  });
+  await expect(status).toContainText('Offline', { timeout: 10_000 });
 
   await context.setOffline(false);
-  await expect(networkStatus.getByText('Online', { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(status).toContainText('Online', { timeout: 10_000 });
 });
 
 async function waitForServiceWorkerControl(page: Page): Promise<void> {

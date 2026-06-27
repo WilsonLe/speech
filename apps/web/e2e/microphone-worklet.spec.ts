@@ -106,7 +106,9 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await page.getByRole('button', { name: /start microphone check/i }).click();
   await page.getByRole('button', { name: /stop microphone/i }).click();
   await expect(metrics).toContainText('stopped');
-  await expect(page.getByText(/microphone resources were released/i)).toBeVisible();
+  await expect(page.getByLabel('Permission and capture check')).toContainText(
+    /microphone stopped\./i,
+  );
 });
 
 async function requireDownloadPath(download: Download): Promise<string> {

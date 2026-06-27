@@ -17,3 +17,4 @@ applyTo: 'packages/audio/**,apps/web/src/app/MicrophonePanel.tsx,apps/web/src/wo
 - Transferable-buffer fallback chunks must come from a bounded reusable pool; the receiving side must return transferred buffers to the worklet after copying/counting them.
 - Resampling from device rate to model rate belongs after capture transport, not in the `AudioWorklet`; preserve phase/history across chunks and flush short utterances explicitly.
 - Do not persist dictation audio from the microphone check or worklet smoke path.
+- v0.6 microphone UI should map permission, no-device, constraint, and worklet failures to concise user-recovery copy by default; keep raw `DOMException` names, worklet internals, and diagnostic detail behind explicit details/diagnostics surfaces.

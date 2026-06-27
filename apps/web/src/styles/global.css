@@ -1369,12 +1369,80 @@ button.danger,
   margin: 1.25rem 0;
 }
 
+.offline-status-summary {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.42);
+}
+
+.offline-status-summary h3,
+.offline-status-summary p {
+  margin: 0;
+}
+
+.offline-status-summary h3 {
+  color: #f8fafc;
+  font-size: 1.12rem;
+}
+
+.offline-status-summary dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.offline-status-summary dl div {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.85rem;
+  padding: 0.85rem;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.offline-status-summary dt {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.offline-status-summary dd {
+  margin: 0.25rem 0 0;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.offline-status-summary[data-tone='ready'] h3 {
+  color: #86efac;
+}
+
+.offline-status-summary[data-tone='blocked'] h3 {
+  color: #fca5a5;
+}
+
 .update-message {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
   justify-content: space-between;
+}
+
+.model-lifecycle-disclosure {
+  margin-top: 1.25rem;
+}
+
+.model-lifecycle-disclosure > summary {
+  cursor: pointer;
+  color: #e0f2fe;
+  font-weight: 800;
+}
+
+.model-lifecycle-disclosure > summary:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
 }
 
 .model-lifecycle-heading {
@@ -1814,6 +1882,7 @@ button.danger,
   .transcript-settings-privacy,
   .transcript-footer,
   .dictate-model-details__meta,
+  .offline-status-summary dl,
   .vocabulary-summary,
   .vocabulary-layout,
   .vocabulary-form-grid,

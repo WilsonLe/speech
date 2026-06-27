@@ -102,9 +102,7 @@ test('renders the task-first PWA shell', async ({ page }) => {
     'Import behavior',
   );
   await expect(page.getByLabel('Import behavior')).toHaveValue('dedupe');
-  await expect(
-    page.getByRole('heading', { name: /offline readiness and model lifecycle/i }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /offline and updates/i })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: /benchmark and diagnostics export/i }),
   ).toBeVisible();
