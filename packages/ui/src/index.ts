@@ -92,6 +92,8 @@ export {
   type TooltipProps,
 } from './primitives/index';
 export {
+  auditSpeechPrimitiveExampleMarkup,
+  auditSpeechPrimitiveInteractionCoverage,
   speechAccordionAccessibilityChecklist,
   speechAccordionFocusKeys,
   speechButtonAccessibilityChecklist,
@@ -119,8 +121,15 @@ export {
   speechMenuCssRequirements,
   speechMenuFocusKeys,
   speechMenuUsageRules,
+  speechPrimitiveAccessibilityExamples,
+  speechPrimitiveAutomatedAccessibilityChecks,
+  speechPrimitiveExampleStateCoverage,
+  speechPrimitiveInteractionRequirements,
+  speechPrimitiveKeyboardTestMatrix,
+  speechPrimitiveTestingUsageGuide,
   speechTooltipAccessibilityChecklist,
   speechTooltipUsageRules,
+  summarizeSpeechPrimitiveAccessibilityAudits,
   type SpeechAccordionFocusKey,
   type SpeechButtonActivationKey,
   type SpeechButtonStateExample,
@@ -128,6 +137,12 @@ export {
   type SpeechFeedbackLiveRegionExample,
   type SpeechFormControlFocusKey,
   type SpeechMenuFocusKey,
+  type SpeechPrimitiveAccessibilityAuditResult,
+  type SpeechPrimitiveAccessibilityExample,
+  type SpeechPrimitiveAutomatedAccessibilityCheck,
+  type SpeechPrimitiveCoverageAuditResult,
+  type SpeechPrimitiveExampleCssEntry,
+  type SpeechPrimitiveInteractionRequirement,
 } from './testing/index';
 export {
   speechTokenCategories,

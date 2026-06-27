@@ -16,6 +16,25 @@ export {
   speechTooltipAccessibilityChecklist,
 } from './accessibility';
 export {
+  auditSpeechPrimitiveExampleMarkup,
+  auditSpeechPrimitiveInteractionCoverage,
+  speechPrimitiveAutomatedAccessibilityChecks,
+  speechPrimitiveTestingUsageGuide,
+  summarizeSpeechPrimitiveAccessibilityAudits,
+  type SpeechPrimitiveAccessibilityAuditResult,
+  type SpeechPrimitiveAutomatedAccessibilityCheck,
+  type SpeechPrimitiveCoverageAuditResult,
+} from './primitiveAudit';
+export {
+  speechPrimitiveAccessibilityExamples,
+  speechPrimitiveExampleStateCoverage,
+  speechPrimitiveInteractionRequirements,
+  speechPrimitiveKeyboardTestMatrix,
+  type SpeechPrimitiveAccessibilityExample,
+  type SpeechPrimitiveExampleCssEntry,
+  type SpeechPrimitiveInteractionRequirement,
+} from './primitiveExamples';
+export {
   speechAccordionFocusKeys,
   speechButtonActivationKeys,
   speechButtonPointerExpectations,
