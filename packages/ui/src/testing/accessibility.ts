@@ -74,3 +74,38 @@ export const speechMenuCssRequirements = [
   'forced-colors: active',
   '[hidden]',
 ] as const;
+
+export const speechDialogAccessibilityChecklist = [
+  'Dialog renders role="dialog" with aria-modal="true" and a persistent visible title.',
+  'Dialog traps Tab and Shift+Tab focus while open and restores focus on close.',
+  'Dialog supports Escape dismissal when the calling workflow marks cancellation safe.',
+  'Dialog content is hidden when closed so inactive controls are not focusable.',
+  'Long workflows, destructive consequences, and required privacy terms belong in screens or visible confirmation copy, not hidden dialog-only text.',
+] as const;
+
+export const speechFormControlAccessibilityChecklist = [
+  'Select renders a native <select> with a persistent visible <label>.',
+  'RadioGroup renders a native <fieldset> and <legend> with native radio inputs.',
+  'Hint and error text are connected with aria-describedby and invalid controls expose aria-invalid.',
+  'Select and RadioGroup rely on native keyboard support instead of custom listbox/radio roving state.',
+  'Required choices stay visible; menus/tooltips/disclosures must not be the only way to discover them.',
+] as const;
+
+export const speechDialogCssRequirements = [
+  '--speech-focus-ring-color',
+  '--speech-focus-ring-width',
+  '--speech-shadow-dialog',
+  '100dvh',
+  'prefers-reduced-motion: reduce',
+  'forced-colors: active',
+  '[hidden]',
+] as const;
+
+export const speechFormControlCssRequirements = [
+  '--speech-size-touch-target',
+  '--speech-focus-ring-color',
+  '--speech-focus-ring-width',
+  '--speech-color-danger',
+  'prefers-reduced-motion: reduce',
+  'forced-colors: active',
+] as const;

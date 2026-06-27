@@ -50,7 +50,34 @@ export const speechTooltipUsageRules = [
   'Provide a visible label or dedicated help surface when touch users need the information to complete the task.',
 ] as const;
 
+export const speechDialogFocusKeys = ['Tab', 'Shift+Tab', 'Escape'] as const;
+
+export const speechDialogUsageRules = [
+  'Use Dialog only for short confirmations, concise rename/passphrase decisions, or blocking decisions on the current screen.',
+  'Do not put a multi-step wizard, long form, or broad management task inside a dialog.',
+  'Destructive dialogs must visibly name the object and consequence before the confirming action.',
+  'When Escape would be unsafe, set closeOnEscape=false and provide visible Cancel or Back actions as appropriate.',
+] as const;
+
+export const speechFormControlFocusKeys = [
+  'Tab',
+  'ArrowDown',
+  'ArrowUp',
+  'ArrowLeft',
+  'ArrowRight',
+  'Space',
+] as const;
+
+export const speechFormControlUsageRules = [
+  'Use native Select for established choices that do not need side-by-side comparison.',
+  'Use RadioGroup when two to four choices must be compared before continuing.',
+  'Never use Select or RadioGroup to hide a primary action.',
+  'Every Select and RadioGroup must have a visible persistent label; placeholders are not labels.',
+] as const;
+
 export type SpeechButtonActivationKey = (typeof speechButtonActivationKeys)[number];
 export type SpeechButtonStateExample = (typeof speechButtonStateExamples)[number];
 export type SpeechAccordionFocusKey = (typeof speechAccordionFocusKeys)[number];
 export type SpeechMenuFocusKey = (typeof speechMenuFocusKeys)[number];
+export type SpeechDialogFocusKey = (typeof speechDialogFocusKeys)[number];
+export type SpeechFormControlFocusKey = (typeof speechFormControlFocusKeys)[number];
