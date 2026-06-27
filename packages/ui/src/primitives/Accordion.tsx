@@ -105,6 +105,7 @@ export const Accordion = forwardRef<HTMLDivElement, AccordionProps>(function Acc
 
         return (
           <section
+            aria-labelledby={buttonId}
             className="speech-accordion__item"
             data-open={isOpen ? 'true' : undefined}
             key={item.id}

@@ -1907,7 +1907,8 @@ button.danger,
 }
 
 .personal-models-preflight,
-.activation-review-card {
+.activation-review-card,
+.model-detail-panel {
   margin: 1.25rem 0;
   border: 1px solid rgba(56, 189, 248, 0.18);
   border-radius: 1.1rem;
@@ -1917,6 +1918,118 @@ button.danger,
 
 .activation-review-card {
   border-color: rgba(168, 85, 247, 0.2);
+}
+
+.model-detail-panel {
+  border-color: rgba(14, 165, 233, 0.24);
+}
+
+.model-detail-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 1rem;
+  align-items: start;
+}
+
+.model-detail-summary__copy {
+  min-width: 0;
+}
+
+.model-detail-summary__copy h3 {
+  overflow-wrap: anywhere;
+}
+
+.model-detail-summary__copy p {
+  margin: 0.4rem 0 0;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.model-detail-summary__meta,
+.model-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.model-detail-summary__meta {
+  margin: 1rem 0 0;
+}
+
+.model-detail-blockers {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.model-detail-blockers article {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  background: rgba(113, 63, 18, 0.16);
+}
+
+.model-detail-blockers article[data-tone='blocker'] {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.model-detail-blockers strong {
+  color: #f8fafc;
+}
+
+.model-detail-blockers p {
+  margin: 0.3rem 0 0;
+}
+
+.model-detail-accordion {
+  margin-top: 1rem;
+}
+
+.model-detail-section-content {
+  display: grid;
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+
+.model-detail-task-list {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-detail-task-list li {
+  display: grid;
+  gap: 0.35rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  padding-bottom: 0.65rem;
+}
+
+.model-detail-task-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.model-detail-task-list strong {
+  color: #e2e8f0;
+}
+
+.model-detail-task-list span {
+  width: max-content;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  color: #fde68a;
+  background: rgba(113, 63, 18, 0.2);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.model-detail-task-list li[data-status='complete'] span {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.14);
 }
 
 .activation-review-meta {
@@ -2178,6 +2291,9 @@ button.danger,
   .model-list-row,
   .model-list-header,
   .model-import-options,
+  .model-detail-summary,
+  .model-detail-summary__meta,
+  .model-detail-metrics,
   .personal-models-nav,
   .personal-models-summary,
   .preflight-grid,

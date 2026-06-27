@@ -102,6 +102,33 @@ export interface PersonalModelListRowV1 {
   };
 }
 
+export type PersonalModelDetailPrimaryActionV1 =
+  | 'continue-recording'
+  | 'use-model'
+  | 'deactivate'
+  | 'none';
+
+export interface PersonalModelDetailSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly displayName: string;
+  readonly statusLabel: 'Active' | 'Draft' | 'Generic fallback';
+  readonly nextActionSentence: string;
+  readonly primaryAction: PersonalModelDetailPrimaryActionV1;
+  readonly primaryActionLabel: string;
+  readonly primaryActionDisabled: boolean;
+  readonly lastUpdatedIso: string | null;
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsModelIds: false;
+    readonly containsStoragePaths: false;
+    readonly containsHashes: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
+}
+
 export interface PersonalModelProfileCardV1 {
   readonly schemaVersion: 1;
   readonly displayName: string;
@@ -227,7 +254,7 @@ export function buildPersonalModelProfileCard({
           }
         : {
             status: 'exact-bound',
-            label: baseModel.id,
+            label: 'Exact base model',
             version: baseModel.version,
           },
     activeVocabulary,
@@ -280,6 +307,68 @@ export function buildPersonalModelListRow(
     primaryActionLabel: card.active ? 'Using model' : 'Use model',
     primaryActionDisabled: card.active,
     privacy: createAggregateListRowPrivacy(),
+  };
+}
+
+export function buildPersonalModelDetailSummary({
+  card,
+  row,
+}: {
+  readonly card: PersonalModelProfileCardV1;
+  readonly row: PersonalModelListRowV1;
+}): PersonalModelDetailSummaryV1 {
+  if (card.status === 'no-profile') {
+    return {
+      schemaVersion: 1,
+      displayName: card.displayName,
+      statusLabel: 'Generic fallback',
+      nextActionSentence: 'Record enrollment takes to create a local voice model.',
+      primaryAction: 'continue-recording',
+      primaryActionLabel: 'Continue recording',
+      primaryActionDisabled: false,
+      lastUpdatedIso: null,
+      privacy: createAggregateDetailSummaryPrivacy(),
+    };
+  }
+
+  if (row.statusLabel === 'Recording needed') {
+    return {
+      schemaVersion: 1,
+      displayName: card.displayName,
+      statusLabel: card.active ? 'Active' : 'Draft',
+      nextActionSentence: 'Continue recording before this model can be trained or activated.',
+      primaryAction: 'continue-recording',
+      primaryActionLabel: 'Continue recording',
+      primaryActionDisabled: false,
+      lastUpdatedIso: card.storage.updatedAt ?? null,
+      privacy: createAggregateDetailSummaryPrivacy(),
+    };
+  }
+
+  if (card.active) {
+    return {
+      schemaVersion: 1,
+      displayName: card.displayName,
+      statusLabel: 'Active',
+      nextActionSentence: 'This model is active; changes apply at the next utterance boundary.',
+      primaryAction: 'deactivate',
+      primaryActionLabel: 'Deactivate',
+      primaryActionDisabled: false,
+      lastUpdatedIso: card.storage.updatedAt ?? null,
+      privacy: createAggregateDetailSummaryPrivacy(),
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    displayName: card.displayName,
+    statusLabel: 'Draft',
+    nextActionSentence: 'Use this model when you are ready to make it active for dictation.',
+    primaryAction: 'use-model',
+    primaryActionLabel: 'Use model',
+    primaryActionDisabled: row.primaryActionDisabled || !card.actions.canEnable,
+    lastUpdatedIso: card.storage.updatedAt ?? null,
+    privacy: createAggregateDetailSummaryPrivacy(),
   };
 }
 
@@ -408,6 +497,19 @@ function emptyActivationComparison(): PersonalModelActivationReviewCardV1['compa
 }
 
 function createAggregateListRowPrivacy(): PersonalModelListRowV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsModelIds: false,
+    containsStoragePaths: false,
+    containsHashes: false,
+    containsPrivateVocabularyTerms: false,
+    localOnly: true,
+  };
+}
+
+function createAggregateDetailSummaryPrivacy(): PersonalModelDetailSummaryV1['privacy'] {
   return {
     aggregateOnly: true,
     containsRawAudio: false,

@@ -167,8 +167,7 @@ export function summarizePersonalModelTrainingCompanion({
 }): PersonalModelTrainingCompanionSummaryV1 {
   const targetModelId =
     preferredModelId ?? installed[0]?.modelId ?? models.find((model) => model.manifestUrl)?.id;
-  const targetModel = models.find((model) => model.id === targetModelId);
-  const modelLabel = targetModel?.id ?? targetModelId ?? 'No base model selected';
+  const modelLabel = targetModelId === undefined ? 'No base model selected' : 'Exact base model';
   if (targetModelId === undefined) {
     return createTrainingCompanionSummary({
       modelLabel,

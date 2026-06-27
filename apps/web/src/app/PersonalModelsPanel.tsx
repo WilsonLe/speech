@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { MenuButton, type MenuButtonItem } from '@speech/ui';
+import { Accordion, MenuButton, type MenuButtonItem } from '@speech/ui';
+import type { TrainingReadinessCoverageReportV1 } from '@speech/enrollment';
 import {
   buildTrainingReadinessCoverageReportForProfile,
   type ActiveEnrollmentProfileStateV1,
@@ -38,11 +39,13 @@ import {
 import { createDefaultVocabularyStore, loadVocabularyStore } from './vocabulary-storage';
 import {
   buildPersonalModelActivationReviewCard,
+  buildPersonalModelDetailSummary,
   buildPersonalModelListRow,
   buildPersonalModelProfileCard,
   summarizeActiveVocabulary,
   type ActiveVocabularySummaryV1,
   type PersonalModelActivationReviewCardV1,
+  type PersonalModelDetailSummaryV1,
   type PersonalModelListRowV1,
   type PersonalModelProfileCardV1,
 } from './personal-models';
@@ -173,6 +176,11 @@ export function PersonalModelsPanel() {
     activeState: state.activeState,
     activeVocabulary: state.activeVocabulary,
   });
+  const primaryRow = useMemo(() => buildPersonalModelListRow(primaryCard), [primaryCard]);
+  const detailSummary = useMemo(
+    () => buildPersonalModelDetailSummary({ card: primaryCard, row: primaryRow }),
+    [primaryCard, primaryRow],
+  );
   const activationReview = useMemo(
     () =>
       buildPersonalModelActivationReviewCard({
@@ -207,6 +215,16 @@ export function PersonalModelsPanel() {
   const readinessTasks = useMemo(
     () => buildPersonalModelReadinessTasks(readinessReport),
     [readinessReport],
+  );
+  const detailBlockers = useMemo(
+    () =>
+      buildModelDetailBlockers({
+        activationReview,
+        capabilityChecks,
+        readinessTasks,
+        trainingCompanion,
+      }),
+    [activationReview, capabilityChecks, readinessTasks, trainingCompanion],
   );
   const isBusy =
     state.status === 'loading' ||
@@ -586,20 +604,6 @@ export function PersonalModelsPanel() {
         />
       </div>
 
-      <PersonalModelPreflightPanel
-        capabilityChecks={capabilityChecks}
-        capabilityError={preflight.capabilityError}
-        trainingCompanion={trainingCompanion}
-        modelStatus={preflight.modelStatus}
-        modelBackendKind={preflight.modelBackendKind}
-        modelError={preflight.modelError}
-        runtimeSelfTest={preflight.runtimeSelfTest}
-        readinessTasks={readinessTasks}
-        onRunRuntimeSelfTest={() => void runRuntimeSelfTest()}
-      />
-
-      <PersonalModelActivationReviewPanel review={activationReview} />
-
       <section className="model-list-panel" aria-labelledby="voice-models-list-title">
         <div className="model-list-header">
           <div>
@@ -704,6 +708,33 @@ export function PersonalModelsPanel() {
         </div>
       </section>
 
+      <PersonalModelDetailPanel
+        activeState={state.activeState}
+        backendKind={state.backendKind}
+        capabilityChecks={capabilityChecks}
+        capabilityError={preflight.capabilityError}
+        card={primaryCard}
+        detailBlockers={detailBlockers}
+        detailSummary={detailSummary}
+        isBusy={isBusy}
+        modelBackendKind={preflight.modelBackendKind}
+        modelError={preflight.modelError}
+        modelStatus={preflight.modelStatus}
+        onDeactivate={() =>
+          primarySummary === null ? undefined : void deactivateProfile(primarySummary.profile.id)
+        }
+        onEnable={() =>
+          primarySummary === null ? undefined : void enableProfile(primarySummary.profile.id)
+        }
+        onRunRuntimeSelfTest={() => void runRuntimeSelfTest()}
+        persistentStorageGranted={state.persistentStorageGranted}
+        readinessReport={readinessReport}
+        readinessTasks={readinessTasks}
+        review={activationReview}
+        runtimeSelfTest={preflight.runtimeSelfTest}
+        trainingCompanion={trainingCompanion}
+      />
+
       <p
         className={state.status === 'error' ? 'status-message error-message' : 'status-message'}
         aria-live="polite"
@@ -716,6 +747,447 @@ export function PersonalModelsPanel() {
       </p>
     </section>
   );
+}
+
+interface ModelDetailBlocker {
+  readonly id: string;
+  readonly label: string;
+  readonly detail: string;
+  readonly tone: 'blocker' | 'warning';
+}
+
+function PersonalModelDetailPanel({
+  activeState,
+  backendKind,
+  capabilityChecks,
+  capabilityError,
+  card,
+  detailBlockers,
+  detailSummary,
+  isBusy,
+  modelBackendKind,
+  modelError,
+  modelStatus,
+  onDeactivate,
+  onEnable,
+  onRunRuntimeSelfTest,
+  persistentStorageGranted,
+  readinessReport,
+  readinessTasks,
+  review,
+  runtimeSelfTest,
+  trainingCompanion,
+}: {
+  readonly activeState: ActiveEnrollmentProfileStateV1 | null;
+  readonly backendKind: ProfileStorageBackendKind | null;
+  readonly capabilityChecks: readonly PersonalModelPreflightCheckV1[];
+  readonly capabilityError: string | null;
+  readonly card: PersonalModelProfileCardV1;
+  readonly detailBlockers: readonly ModelDetailBlocker[];
+  readonly detailSummary: PersonalModelDetailSummaryV1;
+  readonly isBusy: boolean;
+  readonly modelBackendKind: string | null;
+  readonly modelError: string | null;
+  readonly modelStatus: PersonalModelsPreflightState['modelStatus'];
+  readonly onDeactivate: () => void | undefined;
+  readonly onEnable: () => void | undefined;
+  readonly onRunRuntimeSelfTest: () => void;
+  readonly persistentStorageGranted: boolean | null;
+  readonly readinessReport: TrainingReadinessCoverageReportV1 | null;
+  readonly readinessTasks: readonly PersonalModelReadinessTaskV1[];
+  readonly review: PersonalModelActivationReviewCardV1;
+  readonly runtimeSelfTest: RuntimeSelfTestUiState;
+  readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
+}) {
+  return (
+    <section className="model-detail-panel" aria-labelledby="model-detail-title">
+      <div className="model-detail-summary">
+        <div className="model-detail-summary__copy">
+          <p className="eyebrow">Model detail</p>
+          <h3 id="model-detail-title">{detailSummary.displayName}</h3>
+          <p>{detailSummary.nextActionSentence}</p>
+          <dl className="model-detail-summary__meta" aria-label="Selected model summary">
+            <div>
+              <dt>Status</dt>
+              <dd>{detailSummary.statusLabel}</dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>{formatDateLabel(detailSummary.lastUpdatedIso)}</dd>
+            </div>
+          </dl>
+        </div>
+        <ModelDetailPrimaryAction
+          detailSummary={detailSummary}
+          isBusy={isBusy}
+          onDeactivate={onDeactivate}
+          onEnable={onEnable}
+        />
+      </div>
+
+      {detailBlockers.length === 0 ? null : (
+        <div className="model-detail-blockers" aria-label="Model blockers and incompatibilities">
+          {detailBlockers.map((blocker) => (
+            <article data-tone={blocker.tone} key={blocker.id}>
+              <strong>{blocker.label}</strong>
+              <p>{blocker.detail}</p>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <Accordion
+        aria-label="Model detail sections"
+        className="model-detail-accordion"
+        headingLevel={4}
+        items={[
+          {
+            id: 'recording-coverage',
+            title: 'Recording coverage',
+            children: (
+              <ModelDetailRecordingCoverage
+                card={card}
+                readinessReport={readinessReport}
+                readinessTasks={readinessTasks}
+              />
+            ),
+          },
+          {
+            id: 'quality-results',
+            title: 'Quality results',
+            children: <PersonalModelActivationReviewPanel review={review} />,
+          },
+          {
+            id: 'compatibility',
+            title: 'Compatibility',
+            children: (
+              <ModelDetailCompatibilitySection
+                capabilityChecks={capabilityChecks}
+                capabilityError={capabilityError}
+                modelError={modelError}
+                trainingCompanion={trainingCompanion}
+              />
+            ),
+          },
+          {
+            id: 'storage',
+            title: 'Storage',
+            children: (
+              <ModelDetailStorageSection
+                backendKind={backendKind}
+                card={card}
+                persistentStorageGranted={persistentStorageGranted}
+                trainingCompanion={trainingCompanion}
+              />
+            ),
+          },
+          {
+            id: 'technical-details',
+            title: 'Technical details',
+            children: (
+              <ModelDetailTechnicalSection
+                activeState={activeState}
+                card={card}
+                modelBackendKind={modelBackendKind}
+                modelStatus={modelStatus}
+                onRunRuntimeSelfTest={onRunRuntimeSelfTest}
+                runtimeSelfTest={runtimeSelfTest}
+                trainingCompanion={trainingCompanion}
+              />
+            ),
+          },
+        ]}
+      />
+    </section>
+  );
+}
+
+function ModelDetailPrimaryAction({
+  detailSummary,
+  isBusy,
+  onDeactivate,
+  onEnable,
+}: {
+  readonly detailSummary: PersonalModelDetailSummaryV1;
+  readonly isBusy: boolean;
+  readonly onDeactivate: () => void | undefined;
+  readonly onEnable: () => void | undefined;
+}) {
+  if (detailSummary.primaryAction === 'continue-recording') {
+    return (
+      <a className="button" href="#microphone-title">
+        {detailSummary.primaryActionLabel}
+      </a>
+    );
+  }
+
+  if (detailSummary.primaryAction === 'use-model') {
+    return (
+      <button
+        type="button"
+        onClick={onEnable}
+        disabled={isBusy || detailSummary.primaryActionDisabled}
+      >
+        {detailSummary.primaryActionLabel}
+      </button>
+    );
+  }
+
+  if (detailSummary.primaryAction === 'deactivate') {
+    return (
+      <button type="button" className="secondary" onClick={onDeactivate} disabled={isBusy}>
+        {detailSummary.primaryActionLabel}
+      </button>
+    );
+  }
+
+  return (
+    <button type="button" className="secondary" disabled>
+      {detailSummary.primaryActionLabel}
+    </button>
+  );
+}
+
+function ModelDetailRecordingCoverage({
+  card,
+  readinessReport,
+  readinessTasks,
+}: {
+  readonly card: PersonalModelProfileCardV1;
+  readonly readinessReport: TrainingReadinessCoverageReportV1 | null;
+  readonly readinessTasks: readonly PersonalModelReadinessTaskV1[];
+}) {
+  return (
+    <div className="model-detail-section-content">
+      <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
+        <div>
+          <dt>Accepted recordings</dt>
+          <dd>{card.storage.acceptedUtterances.toString()}</dd>
+        </div>
+        <div>
+          <dt>Active speech</dt>
+          <dd>{formatDurationSeconds(card.storage.acceptedSeconds)}</dd>
+        </div>
+        <div>
+          <dt>Prompt coverage</dt>
+          <dd>{formatPromptCoverage(readinessReport)}</dd>
+        </div>
+        <div>
+          <dt>Vocabulary coverage</dt>
+          <dd>{formatVocabularyCoverage(readinessReport)}</dd>
+        </div>
+      </dl>
+      <ul className="model-detail-task-list" aria-label="Recording coverage tasks">
+        {readinessTasks.map((task) => (
+          <li key={task.label} data-status={task.status}>
+            <strong>{task.label}</strong>
+            <span>
+              {task.status === 'complete' ? 'Complete' : `${task.missing.toString()} missing`}
+            </span>
+            <p>{task.detail}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ModelDetailCompatibilitySection({
+  capabilityChecks,
+  capabilityError,
+  modelError,
+  trainingCompanion,
+}: {
+  readonly capabilityChecks: readonly PersonalModelPreflightCheckV1[];
+  readonly capabilityError: string | null;
+  readonly modelError: string | null;
+  readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
+}) {
+  return (
+    <div className="model-detail-section-content">
+      {capabilityError ? <p className="status-message error-message">{capabilityError}</p> : null}
+      {modelError ? <p className="status-message error-message">{modelError}</p> : null}
+      <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
+        <div>
+          <dt>Base model</dt>
+          <dd>{trainingCompanion.modelLabel}</dd>
+        </div>
+        <div>
+          <dt>Training support files</dt>
+          <dd>{formatTrainingCompanionStatus(trainingCompanion)}</dd>
+        </div>
+        <div>
+          <dt>Required files</dt>
+          <dd>{trainingCompanion.requiredFileCount.toString()}</dd>
+        </div>
+        <div>
+          <dt>Required storage</dt>
+          <dd>{formatPreflightBytes(trainingCompanion.requiredStorageBytes)}</dd>
+        </div>
+      </dl>
+      <ul className="preflight-check-list" aria-label="Compatibility checks">
+        {capabilityChecks.map((check) => (
+          <li key={check.label} data-status={check.status}>
+            <strong>{check.label}</strong>
+            <span>{formatPreflightStatus(check.status)}</span>
+            <p>{check.detail}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ModelDetailStorageSection({
+  backendKind,
+  card,
+  persistentStorageGranted,
+  trainingCompanion,
+}: {
+  readonly backendKind: ProfileStorageBackendKind | null;
+  readonly card: PersonalModelProfileCardV1;
+  readonly persistentStorageGranted: boolean | null;
+  readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
+}) {
+  return (
+    <div className="model-detail-section-content">
+      <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
+        <div>
+          <dt>Recordings and profile</dt>
+          <dd>{formatNullableBytes(card.storage.storedBytes)}</dd>
+        </div>
+        <div>
+          <dt>Training support files</dt>
+          <dd>{formatPreflightBytes(trainingCompanion.requiredStorageBytes)}</dd>
+        </div>
+        <div>
+          <dt>Profile store</dt>
+          <dd>{formatProfileStoreBackend(backendKind)}</dd>
+        </div>
+        <div>
+          <dt>Persistent storage</dt>
+          <dd>{formatPersistentStorage(persistentStorageGranted)}</dd>
+        </div>
+      </dl>
+      <p className="status-message">
+        Storage details remain local. Delete and export actions stay in each model row menu so
+        destructive consequences remain explicit.
+      </p>
+    </div>
+  );
+}
+
+function ModelDetailTechnicalSection({
+  activeState,
+  card,
+  modelBackendKind,
+  modelStatus,
+  onRunRuntimeSelfTest,
+  runtimeSelfTest,
+  trainingCompanion,
+}: {
+  readonly activeState: ActiveEnrollmentProfileStateV1 | null;
+  readonly card: PersonalModelProfileCardV1;
+  readonly modelBackendKind: string | null;
+  readonly modelStatus: PersonalModelsPreflightState['modelStatus'];
+  readonly onRunRuntimeSelfTest: () => void;
+  readonly runtimeSelfTest: RuntimeSelfTestUiState;
+  readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
+}) {
+  return (
+    <div className="model-detail-section-content">
+      <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
+        <div>
+          <dt>Base binding</dt>
+          <dd>{card.baseModel.label}</dd>
+        </div>
+        <div>
+          <dt>Base version</dt>
+          <dd>{card.baseModel.version ?? 'not bound'}</dd>
+        </div>
+        <div>
+          <dt>Model lifecycle store</dt>
+          <dd>{modelBackendKind ?? modelStatus}</dd>
+        </div>
+        <div>
+          <dt>Runtime self-test</dt>
+          <dd>{formatRuntimeSelfTestStatus(runtimeSelfTest)}</dd>
+        </div>
+        <div>
+          <dt>Training support status</dt>
+          <dd>{formatTrainingCompanionStatus(trainingCompanion)}</dd>
+        </div>
+        <div>
+          <dt>Rollback state</dt>
+          <dd>
+            {activeState?.previousProfileId === undefined
+              ? 'generic fallback'
+              : 'previous retained'}
+          </dd>
+        </div>
+      </dl>
+      <button type="button" className="secondary" onClick={onRunRuntimeSelfTest}>
+        Run runtime self-test
+      </button>
+      <p className="status-message">
+        Technical details stay aggregate-only here. Diagnostics exports retain exact reproducible
+        metrics with existing privacy filtering.
+      </p>
+    </div>
+  );
+}
+
+function buildModelDetailBlockers({
+  activationReview,
+  capabilityChecks,
+  readinessTasks,
+  trainingCompanion,
+}: {
+  readonly activationReview: PersonalModelActivationReviewCardV1;
+  readonly capabilityChecks: readonly PersonalModelPreflightCheckV1[];
+  readonly readinessTasks: readonly PersonalModelReadinessTaskV1[];
+  readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
+}): readonly ModelDetailBlocker[] {
+  const blockers: ModelDetailBlocker[] = [];
+  if (activationReview.status === 'blocked') {
+    blockers.push({
+      id: 'activation-blocked',
+      label: 'Activation blocked',
+      detail: activationReview.detail,
+      tone: 'blocker',
+    });
+  }
+
+  const missingReadiness = readinessTasks.find((task) => task.status === 'missing');
+  if (missingReadiness !== undefined) {
+    blockers.push({
+      id: 'recording-coverage-needed',
+      label: 'Recording coverage needed',
+      detail: missingReadiness.detail,
+      tone: 'warning',
+    });
+  }
+
+  if (trainingCompanion.status === 'base-model-missing') {
+    blockers.push({
+      id: 'base-model-missing',
+      label: 'Exact base model required',
+      detail: trainingCompanion.detail,
+      tone: 'blocker',
+    });
+  }
+
+  const actionNeededCheck = capabilityChecks.find((check) => check.status === 'action-needed');
+  if (actionNeededCheck !== undefined) {
+    blockers.push({
+      id: 'capability-action-needed',
+      label: actionNeededCheck.label,
+      detail: actionNeededCheck.detail,
+      tone: 'warning',
+    });
+  }
+
+  return blockers.slice(0, 4);
 }
 
 function ModelRowPrimaryAction({
@@ -898,151 +1370,6 @@ function PersonalModelActivationReviewPanel({
   );
 }
 
-function PersonalModelPreflightPanel({
-  capabilityChecks,
-  capabilityError,
-  trainingCompanion,
-  modelStatus,
-  modelBackendKind,
-  modelError,
-  runtimeSelfTest,
-  readinessTasks,
-  onRunRuntimeSelfTest,
-}: {
-  readonly capabilityChecks: readonly PersonalModelPreflightCheckV1[];
-  readonly capabilityError: string | null;
-  readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
-  readonly modelStatus: PersonalModelsPreflightState['modelStatus'];
-  readonly modelBackendKind: string | null;
-  readonly modelError: string | null;
-  readonly runtimeSelfTest: RuntimeSelfTestUiState;
-  readonly readinessTasks: readonly PersonalModelReadinessTaskV1[];
-  readonly onRunRuntimeSelfTest: () => void;
-}) {
-  return (
-    <section
-      className="personal-models-preflight"
-      aria-labelledby="personal-models-preflight-title"
-    >
-      <div className="section-heading compact-heading">
-        <p className="eyebrow">Readiness preflight</p>
-        <h3 id="personal-models-preflight-title">Browser personal-model readiness</h3>
-        <p>
-          Independent local checks summarize browser capabilities, base-model companion state,
-          storage/quota, runtime self-test, and missing-recording tasks without reading private
-          audio, transcripts, feature tensors, checkpoints, adapter weights, or vocabulary terms.
-        </p>
-      </div>
-
-      <div className="personal-models-summary" aria-label="Personal model readiness summary">
-        <StatusPill label="Capabilities" value={summarizeCheckStatuses(capabilityChecks)} />
-        <StatusPill label="Model storage" value={modelBackendKind ?? modelStatus} />
-        <StatusPill
-          label="Training companion"
-          value={formatTrainingCompanionStatus(trainingCompanion)}
-        />
-        <StatusPill
-          label="Runtime self-test"
-          value={formatRuntimeSelfTestStatus(runtimeSelfTest)}
-        />
-      </div>
-
-      {capabilityError ? <p className="status-message error-message">{capabilityError}</p> : null}
-      {modelError ? <p className="status-message error-message">{modelError}</p> : null}
-
-      <div className="preflight-grid" aria-label="Personal model capability preflight checks">
-        <article className="preflight-card">
-          <h4>Independent capability checks</h4>
-          <ul className="preflight-check-list">
-            {capabilityChecks.map((check) => (
-              <li key={check.label} data-status={check.status}>
-                <strong>{check.label}</strong>
-                <span>{formatPreflightStatus(check.status)}</span>
-                <p>{check.detail}</p>
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="preflight-card" aria-label="Training companion state">
-          <h4>Training companion state</h4>
-          <dl className="model-card-meta personal-model-card-meta">
-            <div>
-              <dt>Base model</dt>
-              <dd>{trainingCompanion.modelLabel}</dd>
-            </div>
-            <div>
-              <dt>Companion status</dt>
-              <dd>{formatTrainingCompanionStatus(trainingCompanion)}</dd>
-            </div>
-            <div>
-              <dt>Companion files</dt>
-              <dd>
-                {trainingCompanion.installedFileCount.toString()} /{' '}
-                {trainingCompanion.requiredFileCount.toString()}
-              </dd>
-            </div>
-            <div>
-              <dt>Companion bytes</dt>
-              <dd>{formatPreflightBytes(trainingCompanion.requiredStorageBytes)}</dd>
-            </div>
-          </dl>
-          <p className="status-message">{trainingCompanion.detail}</p>
-        </article>
-
-        <article className="preflight-card" aria-label="Runtime self-test preflight">
-          <h4>Runtime self-test</h4>
-          <p>{runtimeSelfTest.message}</p>
-          <dl className="model-card-meta personal-model-card-meta">
-            <div>
-              <dt>Provider</dt>
-              <dd>{runtimeSelfTest.result?.provider ?? 'not run'}</dd>
-            </div>
-            <div>
-              <dt>Adapter smoke</dt>
-              <dd>{runtimeSelfTest.result?.adapterBenchmark ? 'passed' : 'not run'}</dd>
-            </div>
-            <div>
-              <dt>Warnings</dt>
-              <dd>{runtimeSelfTest.result?.warnings.length ?? 0}</dd>
-            </div>
-          </dl>
-          <button
-            type="button"
-            className="secondary"
-            onClick={onRunRuntimeSelfTest}
-            disabled={runtimeSelfTest.status === 'checking'}
-          >
-            {runtimeSelfTest.status === 'checking'
-              ? 'Running runtime self-test…'
-              : 'Run runtime self-test'}
-          </button>
-        </article>
-
-        <article className="preflight-card" aria-label="Missing recording tasks">
-          <h4>Missing recording tasks</h4>
-          <ul className="preflight-check-list">
-            {readinessTasks.map((task) => (
-              <li
-                key={task.label}
-                data-status={task.status === 'complete' ? 'ready' : 'action-needed'}
-              >
-                <strong>{task.label}</strong>
-                <span>{task.status}</span>
-                <p>{task.detail}</p>
-              </li>
-            ))}
-          </ul>
-          <p className="status-message">
-            Task privacy: aggregate counts only; no prompt IDs, vocabulary entry IDs, transcript
-            text, or private vocabulary terms are shown.
-          </p>
-        </article>
-      </div>
-    </section>
-  );
-}
-
 function StatusPill({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="status-pill" data-tone="neutral">
@@ -1085,15 +1412,6 @@ function reduceModelLifecyclePreflight(
         modelError: message.message,
       };
   }
-}
-
-function summarizeCheckStatuses(checks: readonly PersonalModelPreflightCheckV1[]): string {
-  if (checks.some((check) => check.status === 'checking')) return 'checking';
-  const actionNeeded = checks.filter((check) => check.status === 'action-needed').length;
-  const fallbacks = checks.filter((check) => check.status === 'fallback').length;
-  if (actionNeeded > 0) return `${actionNeeded.toString()} actions needed`;
-  if (fallbacks > 0) return `${fallbacks.toString()} fallbacks`;
-  return 'ready';
 }
 
 function formatImportResultMessage(result: EnrollmentProfileImportResultV1): string {
@@ -1184,6 +1502,27 @@ function formatRuntimeSelfTestStatus(runtimeSelfTest: RuntimeSelfTestUiState): s
     case 'error':
       return 'failed';
   }
+}
+
+function formatDateLabel(iso: string | null): string {
+  if (iso === null) return 'No updates yet';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Updated locally';
+  return date.toLocaleDateString('en', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function formatPromptCoverage(report: TrainingReadinessCoverageReportV1 | null): string {
+  if (report === null) return 'No saved prompts yet';
+  return `${report.totals.uniquePromptIdentities.toLocaleString('en')} unique prompts`;
+}
+
+function formatVocabularyCoverage(report: TrainingReadinessCoverageReportV1 | null): string {
+  if (report === null) return 'No selected entries';
+  return `${report.vocabularyCoverage.coveredEntryCount.toLocaleString('en')} of ${report.vocabularyCoverage.targetedEntryCount.toLocaleString('en')} selected entries`;
 }
 
 function formatProfileStoreBackend(kind: ProfileStorageBackendKind | null): string {

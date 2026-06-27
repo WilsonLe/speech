@@ -14,6 +14,7 @@ import type {
 } from '../workers/model-lifecycle-client';
 import {
   buildPersonalModelActivationReviewCard,
+  buildPersonalModelDetailSummary,
   buildPersonalModelListRow,
   buildPersonalModelProfileCard,
   defaultPersonalProfileDisplayName,
@@ -73,7 +74,7 @@ describe('personal model card summaries', () => {
     expect(card.active).toBe(true);
     expect(card.baseModel).toEqual({
       status: 'exact-bound',
-      label: 'vietasr-local',
+      label: 'Exact base model',
       version: '2026.01',
     });
     expect(card.storage.acceptedUtterances).toBe(2);
@@ -82,6 +83,7 @@ describe('personal model card summaries', () => {
     expect(card.actions.canExport).toBe(true);
     expect(JSON.stringify(card)).not.toContain('private prompt text');
     expect(JSON.stringify(card)).not.toContain('Secret Launch Name');
+    expect(JSON.stringify(card)).not.toContain('vietasr-local');
   });
 
   it('builds compact list row labels without exposing model ids, hashes, paths, or terms', () => {
@@ -126,6 +128,71 @@ describe('personal model card summaries', () => {
     expect(JSON.stringify(activeRow)).not.toContain(profileSummary.profile.id);
     expect(JSON.stringify(activeRow)).not.toContain('manifest-sha');
     expect(JSON.stringify(activeRow)).not.toContain('Secret Launch Name');
+  });
+
+  it('builds model detail summaries with one next action and aggregate-only privacy', () => {
+    const profileSummary = createProfileSummary();
+    const inactiveState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      activeProfileId: 'generic-fallback',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const inactiveCard = buildPersonalModelProfileCard({
+      summary: profileSummary,
+      activeState: inactiveState,
+      activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+    });
+    const inactiveDetail = buildPersonalModelDetailSummary({
+      card: inactiveCard,
+      row: buildPersonalModelListRow(inactiveCard),
+    });
+    expect(inactiveDetail).toMatchObject({
+      displayName: 'Local enrollment profile',
+      statusLabel: 'Draft',
+      primaryAction: 'use-model',
+      primaryActionLabel: 'Use model',
+      primaryActionDisabled: false,
+      lastUpdatedIso: '2026-01-02T00:00:00.000Z',
+    });
+
+    const activeState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      activeProfileId: profileSummary.profile.id,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const activeCard = buildPersonalModelProfileCard({
+      summary: profileSummary,
+      activeState,
+      activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+    });
+    const activeDetail = buildPersonalModelDetailSummary({
+      card: activeCard,
+      row: buildPersonalModelListRow(activeCard),
+    });
+    expect(activeDetail.primaryAction).toBe('deactivate');
+    expect(activeDetail.statusLabel).toBe('Active');
+
+    const fallbackCard = buildPersonalModelProfileCard({
+      summary: null,
+      activeState: null,
+      activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+    });
+    const fallbackDetail = buildPersonalModelDetailSummary({
+      card: fallbackCard,
+      row: buildPersonalModelListRow(fallbackCard),
+    });
+    expect(fallbackDetail).toMatchObject({
+      statusLabel: 'Generic fallback',
+      primaryAction: 'continue-recording',
+      lastUpdatedIso: null,
+    });
+    expect(inactiveDetail.privacy.containsModelIds).toBe(false);
+    expect(JSON.stringify([inactiveDetail, activeDetail, fallbackDetail])).not.toContain(
+      profileSummary.profile.id,
+    );
+    expect(JSON.stringify([inactiveDetail, activeDetail, fallbackDetail])).not.toContain(
+      'manifest-sha',
+    );
   });
 
   it('builds activation review cards without exposing profile ids or private terms', () => {
@@ -234,6 +301,7 @@ describe('personal model card summaries', () => {
     expect(companion.requiredStorageBytes).toBe(12_288);
     expect(companion.privacy.containsRawAudio).toBe(false);
     expect(JSON.stringify(companion)).not.toContain('local-enrollment-profile');
+    expect(JSON.stringify(companion)).not.toContain('vietasr-local');
   });
 
   it('reports installed training companions from active model records', () => {
@@ -247,6 +315,7 @@ describe('personal model card summaries', () => {
     expect(companion.status).toBe('installed');
     expect(companion.installedFileCount).toBe(2);
     expect(companion.requiredStorageBytes).toBe(1024);
+    expect(JSON.stringify(companion)).not.toContain('vietasr-local');
   });
 
   it('summarizes missing recording tasks with redacted requirement labels', () => {
