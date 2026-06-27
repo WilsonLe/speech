@@ -99,35 +99,35 @@ export function buildPersonalModelCapabilityChecks(
         : 'AudioWorklet is unavailable; enrollment capture cannot use the low-latency path.',
     }),
     createPreflightCheck({
-      label: 'Dedicated workers',
+      label: 'Background work',
       status: capabilities.webWorkers && workerBenchmark.supported ? 'ready' : 'action-needed',
       detail:
         capabilities.webWorkers && workerBenchmark.supported
-          ? `Worker round-trip benchmark passed (${formatMilliseconds(workerBenchmark.medianRoundTripMs)} median).`
-          : 'Dedicated worker support or the round-trip benchmark is unavailable.',
+          ? `Background response check passed (${formatMilliseconds(workerBenchmark.medianRoundTripMs)} median).`
+          : 'Background processing support is unavailable in this browser.',
     }),
     createPreflightCheck({
-      label: 'Shared memory path',
+      label: 'Fast data path',
       status:
         capabilities.crossOriginIsolated && capabilities.sharedArrayBuffer ? 'ready' : 'fallback',
       detail:
         capabilities.crossOriginIsolated && capabilities.sharedArrayBuffer
-          ? 'Cross-origin isolation and SharedArrayBuffer are available.'
-          : 'Transferable-buffer fallback will be used because shared memory is unavailable.',
+          ? 'The fastest local data path is available.'
+          : 'A compatible local fallback will be used.',
     }),
     createPreflightCheck({
-      label: 'WASM acceleration',
+      label: 'Local processing support',
       status: capabilities.webAssemblySimd ? 'ready' : 'fallback',
       detail: capabilities.webAssemblySimd
-        ? `WASM SIMD available${capabilities.webAssemblyThreads ? ' with thread support.' : '; single-thread fallback.'}`
-        : 'WASM SIMD was not detected; local inference/training may be slower.',
+        ? `Local processing acceleration is available${capabilities.webAssemblyThreads ? ' with parallel support.' : '; single-thread fallback.'}`
+        : 'Local processing acceleration was not detected; checks may run slower.',
     }),
     createPreflightCheck({
-      label: 'WebGPU provider',
+      label: 'Advanced processing mode',
       status: capabilities.webGpu ? 'ready' : 'fallback',
       detail: capabilities.webGpu
-        ? 'WebGPU device creation succeeded for runtime provider selection.'
-        : `Using ${report.recommendedProvider} provider fallback for runtime checks.`,
+        ? 'The fastest local processing mode is available.'
+        : 'The app will use a compatible local fallback for checks.',
     }),
     createPreflightCheck({
       label: 'Persistent storage',
@@ -137,19 +137,19 @@ export function buildPersonalModelCapabilityChecks(
         : `Persistent storage is not granted yet (${formatBytes(report.storage.usageBytes)} used of ${formatBytes(report.storage.quotaBytes)} quota).`,
     }),
     createPreflightCheck({
-      label: 'Cross-tab training lock',
+      label: 'One trainer at a time',
       status: browserTraining.webLocks && browserTraining.broadcastChannel ? 'ready' : 'fallback',
       detail:
         browserTraining.webLocks && browserTraining.broadcastChannel
-          ? 'Web Locks and BroadcastChannel can coordinate one local trainer per profile.'
-          : 'Training can still warn locally, but cross-tab lock/status coordination is limited.',
+          ? 'The browser can coordinate one local trainer per voice model.'
+          : 'Training can still warn locally, but another tab may not see the status immediately.',
     }),
     createPreflightCheck({
       label: 'Recovery storage',
       status: browserTraining.localStorage ? 'ready' : 'action-needed',
       detail: browserTraining.localStorage
-        ? 'Browser-training recovery checkpoints can persist in localStorage.'
-        : 'Browser-training recovery checkpoints cannot persist because localStorage is unavailable.',
+        ? 'Training recovery can be saved on this device.'
+        : 'Training recovery cannot be saved in this browser.',
     }),
   ];
 }
@@ -167,12 +167,13 @@ export function summarizePersonalModelTrainingCompanion({
 }): PersonalModelTrainingCompanionSummaryV1 {
   const targetModelId =
     preferredModelId ?? installed[0]?.modelId ?? models.find((model) => model.manifestUrl)?.id;
-  const modelLabel = targetModelId === undefined ? 'No base model selected' : 'Exact base model';
+  const modelLabel =
+    targetModelId === undefined ? 'No speech model selected' : 'Exact speech model';
   if (targetModelId === undefined) {
     return createTrainingCompanionSummary({
       modelLabel,
       status: 'base-model-missing',
-      detail: 'Install or inspect a base model before browser personal-model training can start.',
+      detail: 'Install or inspect a speech model before local voice-model training can start.',
     });
   }
 
@@ -184,7 +185,7 @@ export function summarizePersonalModelTrainingCompanion({
       installedFileCount: installedRecord.trainingCompanion.files.length,
       requiredFileCount: installedRecord.trainingCompanion.files.length,
       requiredStorageBytes: installedRecord.trainingCompanion.requiredStorageBytes,
-      detail: 'Training companion files are installed for the exact active base-model version.',
+      detail: 'Training support files are installed for the exact active speech model.',
     });
   }
 
@@ -206,7 +207,8 @@ export function summarizePersonalModelTrainingCompanion({
       status: 'base-model-missing',
       requiredFileCount,
       requiredStorageBytes,
-      detail: 'Install the exact base model before its optional training companion can be used.',
+      detail:
+        'Install the exact speech model before its optional training support files can be used.',
     });
   }
 
@@ -214,7 +216,7 @@ export function summarizePersonalModelTrainingCompanion({
     return createTrainingCompanionSummary({
       modelLabel,
       status: 'checking',
-      detail: 'Inspecting model manifest for optional browser-training companion files.',
+      detail: 'Checking the speech model for optional training support files.',
     });
   }
 
@@ -225,14 +227,14 @@ export function summarizePersonalModelTrainingCompanion({
       requiredFileCount,
       requiredStorageBytes,
       detail:
-        'This base model declares optional browser-training companion files, but they are not installed yet.',
+        'This speech model declares optional training support files, but they are not installed yet.',
     });
   }
 
   return createTrainingCompanionSummary({
     modelLabel,
     status: 'not-declared',
-    detail: 'This base model does not declare optional browser-training companion files.',
+    detail: 'This speech model does not declare optional training support files.',
   });
 }
 

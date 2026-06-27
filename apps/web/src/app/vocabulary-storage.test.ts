@@ -142,7 +142,11 @@ describe('vocabulary storage helpers', () => {
     );
 
     expect(duplicate.ok).toBe(false);
-    expect(duplicate.message).toMatch(/duplicates entry/iu);
+    expect(duplicate.message).toContain(
+      'This word or spoken variant already matches another word in the set.',
+    );
+    expect(duplicate.message).toContain('Edit the duplicate or remove one copy.');
+    expect(duplicate.message).not.toMatch(/duplicates entry|schema|parse|token/iu);
   });
 
   it('exports and imports JSON stores and entry arrays', () => {
@@ -172,6 +176,9 @@ describe('vocabulary storage helpers', () => {
     );
     expect(importedStore.ok).toBe(true);
     expect(importedStore.importedEntries).toBe(1);
+    expect(importedStore.message).toBe(
+      'Imported the vocabulary JSON store locally. Review enabled sets before recording.',
+    );
 
     const importedEntries = importVocabularyJson(
       JSON.stringify([
@@ -182,6 +189,9 @@ describe('vocabulary storage helpers', () => {
       now,
     );
     expect(importedEntries.ok).toBe(true);
+    expect(importedEntries.message).toBe(
+      'Imported vocabulary JSON words locally. Review them before recording.',
+    );
     expect(importedEntries.snapshot?.sets[0]?.entries[0]).toMatchObject({
       phrase: 'Dashboard',
       displayForm: 'Dashboard',
@@ -212,6 +222,9 @@ describe('vocabulary storage helpers', () => {
 
     expect(csv).toContain('spokenAliases');
     expect(imported.ok).toBe(true);
+    expect(imported.message).toBe(
+      'Imported vocabulary CSV words locally. Review them before recording.',
+    );
     expect(imported.snapshot?.sets[0]?.entries[0]).toMatchObject({
       phrase: 'Project Alpha',
       spokenAliases: ['Alpha dashboard'],

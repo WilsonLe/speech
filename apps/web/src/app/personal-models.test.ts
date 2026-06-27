@@ -74,7 +74,7 @@ describe('personal model card summaries', () => {
     expect(card.active).toBe(true);
     expect(card.baseModel).toEqual({
       status: 'exact-bound',
-      label: 'Exact base model',
+      label: 'Exact speech model',
       version: '2026.01',
     });
     expect(card.storage.acceptedUtterances).toBe(2);
@@ -270,17 +270,17 @@ describe('personal model card summaries', () => {
       'Secure context',
       'Microphone APIs',
       'AudioWorklet capture',
-      'Dedicated workers',
-      'Shared memory path',
-      'WASM acceleration',
-      'WebGPU provider',
+      'Background work',
+      'Fast data path',
+      'Local processing support',
+      'Advanced processing mode',
       'Persistent storage',
-      'Cross-tab training lock',
+      'One trainer at a time',
       'Recovery storage',
     ]);
     expect(checks.every((check) => check.privacy.aggregateOnly)).toBe(true);
-    expect(checks.find((check) => check.label === 'Shared memory path')?.status).toBe('fallback');
-    expect(checks.find((check) => check.label === 'Cross-tab training lock')?.status).toBe(
+    expect(checks.find((check) => check.label === 'Fast data path')?.status).toBe('fallback');
+    expect(checks.find((check) => check.label === 'One trainer at a time')?.status).toBe(
       'fallback',
     );
     expect(JSON.stringify(checks)).not.toContain('Secret Launch Name');

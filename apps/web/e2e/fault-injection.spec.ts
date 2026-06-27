@@ -117,7 +117,7 @@ test.describe('cross-browser personal-model fault injection', () => {
       .setInputFiles(exportedProfilePath);
     await expect(
       personalModels.getByText(
-        /Profile import verified checksums.*(created a new local profile|resolved a display-name collision)/i,
+        /Import checks passed and (a new local voice model was created|the display-name conflict was resolved)\./i,
       ),
     ).toBeVisible({ timeout: 10_000 });
 
@@ -131,7 +131,9 @@ test.describe('cross-browser personal-model fault injection', () => {
       .first();
     await inactiveEnableButton.click();
     await expect(
-      personalModels.getByText('Personal profile lifecycle state refreshed from local storage.'),
+      personalModels.getByText(
+        'Local voice model state was refreshed. Continue with the next model task.',
+      ),
     ).toBeVisible({ timeout: 10_000 });
     await expect(personalModels.locator('.model-list-row .status-chip.success')).toHaveCount(1);
 
@@ -143,7 +145,9 @@ test.describe('cross-browser personal-model fault injection', () => {
     page.once('dialog', (dialog) => void dialog.accept());
     await page.getByRole('menuitem', { name: 'Roll back…' }).click();
     await expect(
-      personalModels.getByText('Personal profile lifecycle state refreshed from local storage.'),
+      personalModels.getByText(
+        'Local voice model state was refreshed. Continue with the next model task.',
+      ),
     ).toBeVisible({ timeout: 10_000 });
     await expect(personalModels.locator('.model-list-row .status-chip.success')).toHaveCount(1);
 
@@ -156,10 +160,10 @@ test.describe('cross-browser personal-model fault injection', () => {
     await page.getByRole('menuitem', { name: /Delete Local enrollment profile/ }).click();
     await expect(
       personalModels.getByText(
-        'Stored profile recordings, derived files, and local active pointers were deleted.',
+        'Stored recordings, training data, model files, and local pointers were deleted. Use the generic model or create another voice model.',
       ),
     ).toBeVisible({ timeout: 10_000 });
-    await expect(personalModels).toContainText('Card privacy: aggregate counts only');
+    await expect(personalModels).toContainText('Models privacy: aggregate counts only');
   });
 });
 

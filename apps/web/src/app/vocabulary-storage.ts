@@ -3,9 +3,15 @@ import {
   normalizeVocabularyText,
   validateVocabularyStoreSnapshot,
 } from '@speech/context-bias';
+import {
+  formatVocabularyValidationErrors,
+  getVocabularyOperationReasonCopy,
+  vocabularyValidationReasonCodes,
+} from '../content/reasonCodes';
 import type {
   VocabularyEntryLanguage,
   VocabularyEntryV1,
+  VocabularyError,
   VocabularySetV1,
   VocabularyStoreSnapshotV1,
 } from '@speech/protocol';
@@ -82,26 +88,26 @@ export function loadVocabularyStore(
   if (raw === null || raw.trim().length === 0) {
     return {
       snapshot: createDefaultVocabularyStore(nowIso),
-      message: 'Created a local vocabulary store.',
+      message: getVocabularyOperationReasonCopy('vocabulary-store-created').message,
     };
   }
   try {
     const parsed = JSON.parse(raw) as unknown;
     const validation = validateVocabularyStoreSnapshot(parsed);
     if (validation.normalizedSnapshot !== undefined) {
-      return { snapshot: validation.normalizedSnapshot, message: 'Loaded local vocabulary store.' };
+      return {
+        snapshot: validation.normalizedSnapshot,
+        message: getVocabularyOperationReasonCopy('vocabulary-store-loaded').message,
+      };
     }
     return {
       snapshot: createDefaultVocabularyStore(nowIso),
-      message: `Stored vocabulary was invalid and was reset locally: ${formatVocabularyErrors(validation.errors)}`,
+      message: formatVocabularyOperationMessage('vocabulary-store-reset'),
     };
-  } catch (error) {
+  } catch {
     return {
       snapshot: createDefaultVocabularyStore(nowIso),
-      message:
-        error instanceof Error
-          ? `Stored vocabulary could not be parsed: ${error.message}`
-          : 'Stored vocabulary could not be parsed.',
+      message: formatVocabularyOperationMessage('vocabulary-store-unreadable'),
     };
   }
 }
@@ -120,7 +126,11 @@ export function createVocabularySet(
 ): VocabularyImportResult {
   const name = normalizeVocabularyText(displayName);
   if (name.length === 0) {
-    return { ok: false, importedEntries: 0, message: 'Set name is required.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-set-name-required'),
+    };
   }
   const id = uniqueId('set', name, new Set(snapshot.sets.map((set) => set.id)));
   const set: VocabularySetV1 = {
@@ -152,11 +162,19 @@ export function deleteVocabularySet(
   nowIso = new Date().toISOString(),
 ): VocabularyImportResult {
   if (snapshot.sets.length <= 1) {
-    return { ok: false, importedEntries: 0, message: 'Keep at least one local vocabulary set.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-keep-one-set'),
+    };
   }
   const nextSets = snapshot.sets.filter((set) => set.id !== setId);
   if (nextSets.length === snapshot.sets.length) {
-    return { ok: false, importedEntries: 0, message: 'Vocabulary set was not found.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-set-not-found'),
+    };
   }
   return validateNextSnapshot(
     {
@@ -182,7 +200,12 @@ export function setVocabularySetEnabled(
     found = true;
     return { ...set, enabled, revision: set.revision + 1, updatedAt: nowIso };
   });
-  if (!found) return { ok: false, importedEntries: 0, message: 'Vocabulary set was not found.' };
+  if (!found)
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-set-not-found'),
+    };
   const activeSetIds = enabled
     ? appendUnique(snapshot.activeSetIds, setId)
     : snapshot.activeSetIds.filter((id) => id !== setId);
@@ -206,7 +229,11 @@ export function upsertVocabularyEntry(
 ): VocabularyImportResult {
   const set = snapshot.sets.find((candidate) => candidate.id === setId);
   if (set === undefined)
-    return { ok: false, importedEntries: 0, message: 'Vocabulary set was not found.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-set-not-found'),
+    };
   const entry = createEntryFromDraft(draft, new Set(set.entries.map((item) => item.id)));
   const nextEntries = draft.id
     ? set.entries.map((candidate) => (candidate.id === draft.id ? entry : candidate))
@@ -215,7 +242,7 @@ export function upsertVocabularyEntry(
     return {
       ok: false,
       importedEntries: 0,
-      message: 'Vocabulary entry was not found for editing.',
+      message: formatVocabularyOperationMessage('vocabulary-word-not-found'),
     };
   }
   const nextSet: VocabularySetV1 = {
@@ -241,10 +268,18 @@ export function deleteVocabularyEntry(
 ): VocabularyImportResult {
   const set = snapshot.sets.find((candidate) => candidate.id === setId);
   if (set === undefined)
-    return { ok: false, importedEntries: 0, message: 'Vocabulary set was not found.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-set-not-found'),
+    };
   const nextEntries = set.entries.filter((entry) => entry.id !== entryId);
   if (nextEntries.length === set.entries.length) {
-    return { ok: false, importedEntries: 0, message: 'Vocabulary entry was not found.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-word-not-found'),
+    };
   }
   const nextSet: VocabularySetV1 = {
     ...set,
@@ -264,7 +299,11 @@ export function toggleVocabularyEntry(
 ): VocabularyImportResult {
   const set = snapshot.sets.find((candidate) => candidate.id === setId);
   if (set === undefined)
-    return { ok: false, importedEntries: 0, message: 'Vocabulary set was not found.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-set-not-found'),
+    };
   const nextSet: VocabularySetV1 = {
     ...set,
     entries: set.entries.map((entry) => (entry.id === entryId ? { ...entry, enabled } : entry)),
@@ -307,7 +346,7 @@ export function importVocabularyJson(
           (count, set) => count + set.entries.length,
           0,
         ),
-        message: 'Imported vocabulary JSON store locally.',
+        message: formatVocabularyOperationMessage('vocabulary-import-json-store-imported'),
       };
     }
     if (Array.isArray(parsed)) {
@@ -316,7 +355,7 @@ export function importVocabularyJson(
         selectedSetId,
         parsed,
         nowIso,
-        'Imported vocabulary JSON entries locally.',
+        formatVocabularyOperationMessage('vocabulary-import-json-words-imported'),
       );
     }
     if (isSetLike(parsed)) {
@@ -341,20 +380,19 @@ export function importVocabularyJson(
         ok: true,
         snapshot: validation.normalizedSnapshot,
         importedEntries: parsed.entries.length,
-        message: 'Imported vocabulary JSON set locally.',
+        message: formatVocabularyOperationMessage('vocabulary-import-json-set-imported'),
       };
     }
     return {
       ok: false,
       importedEntries: 0,
-      message: 'JSON import must be a vocabulary store, set, or entry array.',
+      message: formatVocabularyOperationMessage('vocabulary-import-json-shape'),
     };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       importedEntries: 0,
-      message:
-        error instanceof Error ? `JSON import failed: ${error.message}` : 'JSON import failed.',
+      message: formatVocabularyOperationMessage('vocabulary-import-json-unreadable'),
     };
   }
 }
@@ -371,7 +409,12 @@ export function importVocabularyCsv(
   nowIso = new Date().toISOString(),
 ): VocabularyImportResult {
   const rows = parseCsvRows(text);
-  if (rows.length === 0) return { ok: false, importedEntries: 0, message: 'CSV import is empty.' };
+  if (rows.length === 0)
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-import-csv-empty'),
+    };
   const [header, ...dataRows] = rows;
   const normalizedHeader = header?.map((cell) => cell.trim()) ?? [];
   const expectedHeader = csvHeaders.join(',');
@@ -379,7 +422,7 @@ export function importVocabularyCsv(
     return {
       ok: false,
       importedEntries: 0,
-      message: `CSV header must be: ${expectedHeader}`,
+      message: formatVocabularyOperationMessage('vocabulary-import-csv-header'),
     };
   }
   const entries = dataRows
@@ -390,13 +433,39 @@ export function importVocabularyCsv(
     selectedSetId,
     entries,
     nowIso,
-    'Imported vocabulary CSV entries locally.',
+    formatVocabularyOperationMessage('vocabulary-import-csv-words-imported'),
   );
 }
 
-export function formatVocabularyErrors(errors: readonly { readonly message: string }[]): string {
-  if (errors.length === 0) return 'No validation errors.';
-  return errors.map((error) => error.message).join(' ');
+export function formatVocabularyErrors(
+  errors: readonly { readonly code?: string; readonly field?: string; readonly message: string }[],
+): string {
+  const vocabularyErrors: Pick<VocabularyError, 'code' | 'field'>[] = [];
+  for (const error of errors) {
+    if (typeof error.code === 'string' && isVocabularyValidationCode(error.code)) {
+      vocabularyErrors.push(
+        error.field === undefined ? { code: error.code } : { code: error.code, field: error.field },
+      );
+    }
+  }
+  if (vocabularyErrors.length > 0) return formatVocabularyValidationErrors(vocabularyErrors);
+  if (errors.length === 0) {
+    return getVocabularyOperationReasonCopy('vocabulary-validation-ok').message;
+  }
+  return formatVocabularyOperationMessage('vocabulary-import-json-shape');
+}
+
+function formatVocabularyOperationMessage(
+  code: Parameters<typeof getVocabularyOperationReasonCopy>[0],
+): string {
+  const copy = getVocabularyOperationReasonCopy(code);
+  return `${copy.message} ${copy.action}`;
+}
+
+function isVocabularyValidationCode(
+  code: string,
+): code is (typeof vocabularyValidationReasonCodes)[number] {
+  return (vocabularyValidationReasonCodes as readonly string[]).includes(code);
 }
 
 function createEntryFromDraft(
@@ -436,7 +505,11 @@ function appendImportedEntries(
 ): VocabularyImportResult {
   const set = current.sets.find((candidate) => candidate.id === selectedSetId);
   if (set === undefined)
-    return { ok: false, importedEntries: 0, message: 'Vocabulary set was not found.' };
+    return {
+      ok: false,
+      importedEntries: 0,
+      message: formatVocabularyOperationMessage('vocabulary-set-not-found'),
+    };
   const existingIds = new Set(set.entries.map((entry) => entry.id));
   const entries = rawEntries.map((rawEntry, index) =>
     normalizeImportedEntry(rawEntry, existingIds, index),
