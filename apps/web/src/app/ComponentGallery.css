@@ -1,0 +1,169 @@
+.component-gallery {
+  min-height: 100vh;
+  padding: var(--speech-space-6);
+  color: var(--speech-color-text-primary);
+  background: var(--speech-color-surface-canvas);
+}
+
+.component-gallery__header,
+.component-gallery__section {
+  max-width: 1120px;
+  margin: 0 auto var(--speech-space-6);
+}
+
+.component-gallery__header {
+  display: grid;
+  gap: var(--speech-space-3);
+}
+
+.component-gallery__header h1,
+.component-gallery__section h2,
+.component-gallery__card h3 {
+  margin: 0;
+}
+
+.component-gallery__header p,
+.component-gallery__card p {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--speech-color-text-secondary);
+}
+
+.component-gallery__eyebrow {
+  font-size: var(--speech-font-size-label);
+  font-weight: var(--speech-font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--speech-color-accent-primary);
+}
+
+.component-gallery__section {
+  display: grid;
+  gap: var(--speech-space-4);
+  padding: var(--speech-space-5);
+  border: 1px solid var(--speech-color-border-muted);
+  border-radius: var(--speech-radius-xl);
+  background: var(--speech-color-surface-panel);
+  box-shadow: var(--speech-shadow-sm);
+}
+
+.component-gallery__columns,
+.component-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--speech-space-4);
+}
+
+.component-gallery__columns h3 {
+  margin-block: 0 var(--speech-space-2);
+}
+
+.component-gallery__columns ul,
+.component-gallery__chips {
+  margin: 0;
+  padding-left: var(--speech-space-5);
+}
+
+.component-gallery__metrics,
+.component-gallery__example-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--speech-space-3);
+  margin: 0;
+}
+
+.component-gallery__metrics div,
+.component-gallery__example-meta div {
+  display: grid;
+  gap: var(--speech-space-1);
+}
+
+.component-gallery__metrics dt,
+.component-gallery__example-meta dt {
+  font-size: var(--speech-font-size-label);
+  font-weight: var(--speech-font-weight-semibold);
+  color: var(--speech-color-text-secondary);
+}
+
+.component-gallery__metrics dd,
+.component-gallery__example-meta dd {
+  margin: 0;
+}
+
+.component-gallery__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--speech-space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.component-gallery__chips li,
+.component-gallery__card-header span {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--speech-touch-target-sm);
+  padding: 0 var(--speech-space-3);
+  border: 1px solid var(--speech-color-border-muted);
+  border-radius: var(--speech-radius-pill);
+  color: var(--speech-color-text-secondary);
+  background: var(--speech-color-surface-subtle);
+  font-size: var(--speech-font-size-label);
+}
+
+.component-gallery__card {
+  display: grid;
+  gap: var(--speech-space-4);
+  align-content: start;
+  padding: var(--speech-space-4);
+  border: 1px solid var(--speech-color-border-muted);
+  border-radius: var(--speech-radius-lg);
+  background: var(--speech-color-surface-raised);
+}
+
+.component-gallery__card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--speech-space-3);
+}
+
+.component-gallery__card-header div {
+  display: grid;
+  gap: var(--speech-space-2);
+}
+
+.component-gallery__preview {
+  display: grid;
+  gap: var(--speech-space-3);
+  align-items: start;
+  min-height: 96px;
+  padding: var(--speech-space-4);
+  border: 1px dashed var(--speech-color-border-muted);
+  border-radius: var(--speech-radius-md);
+  background: var(--speech-color-surface-canvas);
+}
+
+@media (max-width: 640px) {
+  .component-gallery {
+    padding: var(--speech-space-4);
+  }
+
+  .component-gallery__section {
+    padding: var(--speech-space-4);
+  }
+
+  .component-gallery__card-header {
+    display: grid;
+  }
+}
+
+@media (forced-colors: active) {
+  .component-gallery__section,
+  .component-gallery__card,
+  .component-gallery__preview,
+  .component-gallery__chips li,
+  .component-gallery__card-header span {
+    border-color: CanvasText;
+  }
+}

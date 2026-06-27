@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "issue": 225,
+  "title": "v0.6.0 component gallery and usage documentation",
+  "route": {
+    "hash": "#ui-gallery",
+    "availability": "development-only",
+    "defaultLinkedFromProductionNavigation": false,
+    "productionCriticalPath": false,
+    "loader": "React.lazy gated by import.meta.env.DEV",
+    "fallbackText": "Loading component gallery"
+  },
+  "bundleImpact": {
+    "measuredAgainstCommit": "145cc53",
+    "command": "pnpm --filter @speech/web build",
+    "preChangeJsCssBytes": 930939,
+    "postChangeJsCssBytes": 931206,
+    "deltaBytes": 267,
+    "deltaBudgetBytes": 1024,
+    "productionGalleryChunkPresent": false,
+    "criticalDictatePathImpact": "route-helper-only"
+  },
+  "componentUseRules": [
+    "Use the gallery only in local development through the #ui-gallery hash route.",
+    "Keep examples synthetic and task-focused; do not add domain workers, storage, audio, archive, encryption, profile, transcript, or vocabulary fixtures.",
+    "Required actions, blockers, privacy consequences, destructive consequences, and recovery text must stay visible outside tooltips, menus, toasts, and collapsed panels.",
+    "Prefer native semantics and repository-owned primitives before creating one-off application controls.",
+    "When a primitive changes, update @speech/ui/testing examples before updating feature-screen fixtures."
+  ],
+  "contentStyleRules": [
+    "Visible gallery copy identifies a control, state, consequence, or accessibility rule.",
+    "Default UI examples use v0.6 terminology such as Voice model, Speech model, Vocabulary, Quality check, and Device storage.",
+    "Technical implementation terms belong in diagnostics or advanced sections, not ordinary workflow examples."
+  ],
+  "accessibilityConstraints": [
+    "Gallery examples render native semantics for current primitives and feedback components.",
+    "Gallery coverage reflects keyboard, Escape, focus order, focus restoration, ARIA state, hidden focusability, pointer and touch, forced colours, reduced motion, and disabled/loading states.",
+    "Tooltips supplement labels but never own required instructions, errors, privacy terms, or destructive consequences.",
+    "Menus contain temporary action/navigation lists only; no nested submenus and no forms.",
+    "Dialogs remain short blocking decisions; long workflows belong on dedicated routes."
+  ],
+  "documentedPrimitiveFamilies": [
+    "Accordion",
+    "Button",
+    "Dialog",
+    "Disclosure",
+    "EmptyState",
+    "IconButton",
+    "InlineError",
+    "LoadingState",
+    "MenuButton",
+    "Notice",
+    "Progress",
+    "RadioGroup",
+    "Select",
+    "Status",
+    "Toast",
+    "Tooltip"
+  ],
+  "privacyRules": {
+    "syntheticFixturesOnly": true,
+    "noTelemetry": true,
+    "forbiddenFixtureContent": [
+      "personal audio",
+      "transcripts",
+      "private vocabulary terms",
+      "profile JSON",
+      "profile IDs",
+      "prompt IDs",
+      "feature tensors",
+      "checkpoints",
+      "adapter weights",
+      "storage paths",
+      "passphrases"
+    ]
+  },
+  "validationOwners": [
+    "apps/web/src/app/component-gallery.test.tsx",
+    "training/tests/test_v0_6_component_gallery.py",
+    "packages/ui/src/testing/primitiveAccessibility.test.tsx"
+  ]
+}
