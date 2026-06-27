@@ -4,6 +4,7 @@ import type {
   EnrollmentProfileSummaryV1,
 } from '@speech/profile-manager';
 import type { VocabularyStoreSnapshotV1 } from '@speech/protocol';
+import { getModelReasonCopy } from '../content/reasonCodes';
 
 export const defaultPersonalProfileId = 'local-enrollment-profile';
 export const defaultPersonalProfileDisplayName = 'Local enrollment profile';
@@ -220,7 +221,7 @@ export function buildPersonalModelProfileCard({
       },
       baseModel: {
         status: 'generic-fallback',
-        label: 'Generic base model fallback',
+        label: 'Generic speech model fallback',
       },
       activeVocabulary,
       actions: {
@@ -250,11 +251,11 @@ export function buildPersonalModelProfileCard({
       baseModel === undefined
         ? {
             status: 'generic-fallback',
-            label: 'Generic base model fallback',
+            label: 'Generic speech model fallback',
           }
         : {
             status: 'exact-bound',
-            label: 'Exact base model',
+            label: 'Exact speech model',
             version: baseModel.version,
           },
     activeVocabulary,
@@ -388,8 +389,8 @@ export function buildPersonalModelActivationReviewCard({
       status: hasProfile ? 'awaiting-evaluation' : 'generic-fallback',
       title: hasProfile ? 'Awaiting aggregate evaluation' : 'Generic fallback active',
       detail: hasProfile
-        ? 'Run personal/anchor evaluation before activating a trained adapter. The existing profile can still be exported, deleted, or used as enrollment input.'
-        : 'No local personal model is active; the generic base model remains the safe fallback.',
+        ? getModelReasonCopy('model-quality-awaiting-evaluation').message
+        : getModelReasonCopy('model-profiles-empty').message,
       activationAllowed: false,
       automaticActivationAllowed: false,
       advancedOverrideAvailable: false,
@@ -458,28 +459,24 @@ function activationReviewStatus(
 }
 
 function activationReviewTitle(decision: PersonalModelActivationDecisionV1): string {
-  switch (decision.status) {
-    case 'automatic-activation-allowed':
-      return 'Activation gates passed';
-    case 'advanced-override-required':
-      return 'Advanced override required';
-    case 'advanced-override-accepted':
-      return 'Advanced override accepted';
-    case 'blocked-by-hard-gates':
-      return 'Activation blocked by hard gates';
-  }
+  return getModelReasonCopy(activationDecisionReasonCode(decision)).title;
 }
 
 function activationReviewDetail(decision: PersonalModelActivationDecisionV1): string {
+  const copy = getModelReasonCopy(activationDecisionReasonCode(decision));
+  return `${copy.message} ${copy.action}`;
+}
+
+function activationDecisionReasonCode(decision: PersonalModelActivationDecisionV1) {
   switch (decision.status) {
     case 'automatic-activation-allowed':
-      return 'Candidate adapter can be activated at an utterance boundary with previous adapter retention.';
+      return 'model-quality-automatic-ready';
     case 'advanced-override-required':
-      return 'Hard gates passed, but soft gates need an explicit advanced override before activation.';
+      return 'model-quality-review-required';
     case 'advanced-override-accepted':
-      return 'Activation is allowed by explicit advanced override; keep rollback visible.';
+      return 'model-quality-review-accepted';
     case 'blocked-by-hard-gates':
-      return 'Keep the generic or previous adapter active until hard regression gates pass.';
+      return 'model-quality-blocked';
   }
 }
 

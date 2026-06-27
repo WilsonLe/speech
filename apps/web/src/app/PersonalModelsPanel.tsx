@@ -37,6 +37,7 @@ import {
   type CapabilityReport,
 } from '../capabilities';
 import { createDefaultVocabularyStore, loadVocabularyStore } from './vocabulary-storage';
+import { formatModelReasonMessage, getModelReasonCopy } from '../content/reasonCodes';
 import {
   buildPersonalModelActivationReviewCard,
   buildPersonalModelDetailSummary,
@@ -108,7 +109,7 @@ const initialPersonalModelsState: PersonalModelsUiState = {
   activeState: null,
   summaries: [],
   activeVocabulary: initialVocabularySummary,
-  message: 'Loading local profile cards and active vocabulary counts…',
+  message: formatModelReasonMessage('model-profiles-loading'),
 };
 
 const initialPreflightState: PersonalModelsPreflightState = {
@@ -123,7 +124,7 @@ const initialPreflightState: PersonalModelsPreflightState = {
   runtimeSelfTest: {
     status: 'idle',
     result: null,
-    message: 'Runtime self-test has not run yet.',
+    message: getModelReasonCopy('model-runtime-check-idle').message,
   },
 };
 
@@ -252,12 +253,11 @@ export function PersonalModelsPanel() {
           capabilityReport: report,
           capabilityError: null,
         }));
-      } catch (error) {
+      } catch {
         if (cancelled) return;
         setPreflight((current) => ({
           ...current,
-          capabilityError:
-            error instanceof Error ? error.message : 'Capability preflight could not run.',
+          capabilityError: formatModelReasonMessage('model-capability-check-failed'),
         }));
       }
     }
@@ -286,11 +286,11 @@ export function PersonalModelsPanel() {
       }
     }
 
-    function handleModelLifecycleError(event: ErrorEvent) {
+    function handleModelLifecycleError(_event: ErrorEvent) {
       setPreflight((current) => ({
         ...current,
         modelStatus: 'error',
-        modelError: event.message,
+        modelError: formatModelReasonMessage('model-companion-check-failed'),
       }));
     }
 
@@ -315,7 +315,7 @@ export function PersonalModelsPanel() {
     setState((current) => ({
       ...current,
       status: 'loading',
-      message: nextMessage ?? 'Refreshing local profile cards and active vocabulary counts…',
+      message: nextMessage ?? formatModelReasonMessage('model-profile-refresh-started'),
     }));
     try {
       const vocabulary = summarizeActiveVocabulary(
@@ -333,20 +333,15 @@ export function PersonalModelsPanel() {
         message:
           nextMessage ??
           (result.summaries.length === 0
-            ? 'No personal profile is stored yet. The app will use the generic base-model fallback.'
-            : `Loaded ${result.summaries.length.toString()} local personal profile card${
-                result.summaries.length === 1 ? '' : 's'
-              } from private storage.`),
+            ? formatModelReasonMessage('model-profiles-empty')
+            : formatModelReasonMessage('model-profiles-loaded')),
       });
-    } catch (error) {
+    } catch {
       if (cancelled()) return;
       setState((current) => ({
         ...current,
         status: 'error',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Personal model cards could not load from local profile storage.',
+        message: formatModelReasonMessage('model-profiles-load-failed'),
       }));
     }
   }
@@ -357,7 +352,7 @@ export function PersonalModelsPanel() {
       runtimeSelfTest: {
         status: 'checking',
         result: current.runtimeSelfTest.result,
-        message: 'Running ASR worker provider and adapter smoke self-test…',
+        message: formatModelReasonMessage('model-runtime-check-started'),
       },
     }));
     try {
@@ -371,26 +366,24 @@ export function PersonalModelsPanel() {
         runtimeSelfTest: {
           status: 'ready',
           result,
-          message: 'Runtime self-test passed inside the ASR worker.',
+          message: formatModelReasonMessage('model-runtime-check-passed'),
         },
       }));
-    } catch (error) {
+    } catch {
       setPreflight((current) => ({
         ...current,
         runtimeSelfTest: {
           status: 'error',
           result: null,
-          message: error instanceof Error ? error.message : 'Runtime self-test failed.',
+          message: formatModelReasonMessage('model-runtime-check-failed'),
         },
       }));
     }
   }
 
   async function enableProfile(profileId: string) {
-    await runLifecycleAction(
-      'activating',
-      'Enabling this personal profile between utterances…',
-      () => enableEnrollmentProfile({ profileId }),
+    await runLifecycleAction('activating', formatModelReasonMessage('model-enable-started'), () =>
+      enableEnrollmentProfile({ profileId }),
     );
   }
 
@@ -400,7 +393,7 @@ export function PersonalModelsPanel() {
     }
     await runLifecycleAction(
       'activating',
-      'Deactivating this voice model at the next boundary…',
+      formatModelReasonMessage('model-deactivate-started'),
       () => deactivateEnrollmentProfile({ profileId }),
     );
   }
@@ -409,7 +402,7 @@ export function PersonalModelsPanel() {
     if (!window.confirm('Roll back to the previously active voice model?')) {
       return;
     }
-    await runLifecycleAction('activating', 'Rolling back to the previous active profile…', () =>
+    await runLifecycleAction('activating', formatModelReasonMessage('model-rollback-started'), () =>
       rollbackEnrollmentProfile(),
     );
   }
@@ -418,7 +411,7 @@ export function PersonalModelsPanel() {
     setState((current) => ({
       ...current,
       status: 'exporting',
-      message: 'Preparing a sensitive local profile export package…',
+      message: formatModelReasonMessage('model-export-started'),
     }));
     try {
       const result = await exportEnrollmentProfile({
@@ -427,14 +420,13 @@ export function PersonalModelsPanel() {
       });
       downloadProfilePackage(result.profilePackage);
       await refreshPersonalModels({
-        nextMessage:
-          'Profile export downloaded locally. Treat it as sensitive voice data outside this browser.',
+        nextMessage: formatModelReasonMessage('model-export-complete'),
       });
-    } catch (error) {
+    } catch {
       setState((current) => ({
         ...current,
         status: 'error',
-        message: error instanceof Error ? error.message : 'Profile export failed.',
+        message: formatModelReasonMessage('model-export-failed'),
       }));
     }
   }
@@ -446,7 +438,7 @@ export function PersonalModelsPanel() {
     setState((current) => ({
       ...current,
       status: 'importing',
-      message: 'Importing and verifying a sensitive local profile package…',
+      message: formatModelReasonMessage('model-import-started'),
     }));
     try {
       const profilePackage = JSON.parse(await file.text()) as EnrollmentProfileExportPackageV1;
@@ -459,11 +451,11 @@ export function PersonalModelsPanel() {
       await refreshPersonalModels({
         nextMessage: formatImportResultMessage(result.importResult),
       });
-    } catch (error) {
+    } catch {
       setState((current) => ({
         ...current,
         status: 'error',
-        message: error instanceof Error ? error.message : 'Profile import failed.',
+        message: formatModelReasonMessage('model-import-failed'),
       }));
     }
   }
@@ -472,8 +464,7 @@ export function PersonalModelsPanel() {
     setState((current) => ({
       ...current,
       status: 'importing',
-      message:
-        'Duplicating this local profile without exporting private files outside the browser…',
+      message: formatModelReasonMessage('model-duplicate-started'),
     }));
     try {
       const exportResult = await exportEnrollmentProfile({ profileId, timeoutMs: 15_000 });
@@ -486,11 +477,11 @@ export function PersonalModelsPanel() {
       await refreshPersonalModels({
         nextMessage: formatImportResultMessage(result.importResult),
       });
-    } catch (error) {
+    } catch {
       setState((current) => ({
         ...current,
         status: 'error',
-        message: error instanceof Error ? error.message : 'Profile duplicate failed.',
+        message: formatModelReasonMessage('model-duplicate-failed'),
       }));
     }
   }
@@ -507,18 +498,18 @@ export function PersonalModelsPanel() {
     setState((current) => ({
       ...current,
       status: 'loading',
-      message: 'Renaming local personal profile card…',
+      message: formatModelReasonMessage('model-rename-started'),
     }));
     try {
       await renameEnrollmentProfile({ profileId, displayName, timeoutMs: 15_000 });
       await refreshPersonalModels({
-        nextMessage: 'Personal profile display name updated locally.',
+        nextMessage: formatModelReasonMessage('model-rename-complete'),
       });
-    } catch (error) {
+    } catch {
       setState((current) => ({
         ...current,
         status: 'error',
-        message: error instanceof Error ? error.message : 'Profile rename failed.',
+        message: formatModelReasonMessage('model-rename-failed'),
       }));
     }
   }
@@ -526,12 +517,12 @@ export function PersonalModelsPanel() {
   async function deleteProfile(profileId: string, displayName: string) {
     if (
       !window.confirm(
-        `Delete ${displayName}? Recordings, features, checkpoints, and adapter files for this model will be removed from this device.`,
+        `Delete ${displayName}? Recordings, training data, and local model files for this voice model will be removed from this device.`,
       )
     ) {
       return;
     }
-    await runLifecycleAction('deleting', 'Deleting stored profile files and active pointers…', () =>
+    await runLifecycleAction('deleting', formatModelReasonMessage('model-delete-started'), () =>
       deleteEnrollmentProfile({ profileId }),
     );
   }
@@ -547,15 +538,14 @@ export function PersonalModelsPanel() {
       await refreshPersonalModels({
         nextMessage:
           status === 'deleting'
-            ? 'Stored profile recordings, derived files, and local active pointers were deleted.'
-            : 'Personal profile lifecycle state refreshed from local storage.',
+            ? formatModelReasonMessage('model-delete-complete')
+            : formatModelReasonMessage('model-lifecycle-refreshed'),
       });
-    } catch (error) {
+    } catch {
       setState((current) => ({
         ...current,
         status: 'error',
-        message:
-          error instanceof Error ? error.message : 'Personal profile lifecycle action failed.',
+        message: formatModelReasonMessage('model-lifecycle-failed'),
       }));
     }
   }
@@ -582,25 +572,25 @@ export function PersonalModelsPanel() {
           Train or resume
         </a>
         <a className="button secondary" href="#offline-model-title">
-          Base model lifecycle
+          Speech model lifecycle
         </a>
       </nav>
 
       <div className="personal-models-summary" aria-label="Personal Models summary">
         <StatusPill
-          label="Cards"
-          value={`${state.summaries.length.toString()} local profile${
+          label="Voice models"
+          value={`${state.summaries.length.toString()} local voice model${
             state.summaries.length === 1 ? '' : 's'
           }`}
         />
-        <StatusPill label="Profile store" value={formatProfileStoreBackend(state.backendKind)} />
+        <StatusPill label="Storage" value={formatProfileStoreBackend(state.backendKind)} />
         <StatusPill
           label="Persistent storage"
           value={formatPersistentStorage(state.persistentStorageGranted)}
         />
         <StatusPill
           label="Active vocabulary"
-          value={`${primaryCard.activeVocabulary.activeEntryCount.toString()} entries`}
+          value={`${primaryCard.activeVocabulary.activeEntryCount.toString()} words`}
         />
       </div>
 
@@ -742,8 +732,8 @@ export function PersonalModelsPanel() {
         {state.message}
       </p>
       <p className="status-message">
-        Card privacy: aggregate counts only; no raw audio, transcript text, feature tensors,
-        checkpoints, adapter weights, vocabulary terms, or vocabulary entry IDs are displayed.
+        Models privacy: aggregate counts only; no raw audio, transcript text, training data, model
+        files, vocabulary terms, or vocabulary item identifiers are displayed.
       </p>
     </section>
   );
@@ -1009,7 +999,7 @@ function ModelDetailCompatibilitySection({
       {modelError ? <p className="status-message error-message">{modelError}</p> : null}
       <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
         <div>
-          <dt>Base model</dt>
+          <dt>Speech model</dt>
           <dd>{trainingCompanion.modelLabel}</dd>
         </div>
         <div>
@@ -1061,7 +1051,7 @@ function ModelDetailStorageSection({
           <dd>{formatPreflightBytes(trainingCompanion.requiredStorageBytes)}</dd>
         </div>
         <div>
-          <dt>Profile store</dt>
+          <dt>Storage</dt>
           <dd>{formatProfileStoreBackend(backendKind)}</dd>
         </div>
         <div>
@@ -1098,15 +1088,17 @@ function ModelDetailTechnicalSection({
     <div className="model-detail-section-content">
       <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
         <div>
-          <dt>Base binding</dt>
-          <dd>{card.baseModel.label}</dd>
+          <dt>Speech model binding</dt>
+          <dd>
+            {card.baseModel.status === 'exact-bound' ? 'exact match retained' : 'generic fallback'}
+          </dd>
         </div>
         <div>
-          <dt>Base version</dt>
+          <dt>Speech model version</dt>
           <dd>{card.baseModel.version ?? 'not bound'}</dd>
         </div>
         <div>
-          <dt>Model lifecycle store</dt>
+          <dt>Model storage</dt>
           <dd>{modelBackendKind ?? modelStatus}</dd>
         </div>
         <div>
@@ -1171,7 +1163,7 @@ function buildModelDetailBlockers({
   if (trainingCompanion.status === 'base-model-missing') {
     blockers.push({
       id: 'base-model-missing',
-      label: 'Exact base model required',
+      label: 'Speech model required',
       detail: trainingCompanion.detail,
       tone: 'blocker',
     });
@@ -1297,23 +1289,25 @@ function PersonalModelActivationReviewPanel({
   return (
     <section className="activation-review-card" aria-labelledby="activation-review-title">
       <div className="section-heading compact-heading">
-        <p className="eyebrow">Activation review</p>
-        <h3 id="activation-review-title">Comparison gates and rollback</h3>
+        <p className="eyebrow">Quality review</p>
+        <h3 id="activation-review-title">Quality checks and rollback</h3>
         <p>
-          Aggregate personal/anchor evaluation decides whether a candidate adapter can activate
-          automatically, needs explicit advanced override, or must stay blocked while the generic or
-          previous adapter remains available.
+          Aggregate personal and general speech checks decide whether this voice model can activate
+          automatically, needs explicit review, or must stay blocked while the generic or previous
+          model remains available.
         </p>
       </div>
-      <div className="personal-models-summary" aria-label="Activation gate summary">
-        <StatusPill label="Gate status" value={formatActivationReviewStatus(review)} />
+      <div className="personal-models-summary" aria-label="Quality check summary">
+        <StatusPill label="Check status" value={formatActivationReviewStatus(review)} />
         <StatusPill
           label="Activation"
           value={review.activationAllowed ? 'allowed at boundary' : 'not allowed'}
         />
         <StatusPill
           label="Advanced override"
-          value={review.advancedOverrideAvailable ? 'available for soft gates' : 'not available'}
+          value={
+            review.advancedOverrideAvailable ? 'available for advisory checks' : 'not available'
+          }
         />
         <StatusPill
           label="Rollback"
@@ -1324,37 +1318,35 @@ function PersonalModelActivationReviewPanel({
       </div>
       <dl className="model-card-meta personal-model-card-meta activation-review-meta">
         <div>
-          <dt>Personal held-out cases</dt>
+          <dt>Personal review cases</dt>
           <dd>{review.comparison.personalHeldoutCases.toString()}</dd>
         </div>
         <div>
-          <dt>Anchor cases</dt>
+          <dt>General speech cases</dt>
           <dd>{review.comparison.anchorCases.toString()}</dd>
         </div>
         <div>
           <dt>Selected vocabulary</dt>
-          <dd>{review.comparison.selectedVocabularyEntryCount.toString()} entries</dd>
+          <dd>{review.comparison.selectedVocabularyEntryCount.toString()} words</dd>
         </div>
         <div>
-          <dt>Personal WER improvement</dt>
-          <dd>
-            {formatNullablePercent(review.comparison.candidateVsGenericWerRelativeImprovement)}
-          </dd>
+          <dt>Personal speech improvement</dt>
+          <dd>{formatSignedPercent(review.comparison.candidateVsGenericWerRelativeImprovement)}</dd>
         </div>
         <div>
-          <dt>P1 WER delta</dt>
-          <dd>{formatNullableNumber(review.comparison.candidateVsP1WerDelta)}</dd>
+          <dt>Baseline difference</dt>
+          <dd>{formatSignedPercent(review.comparison.candidateVsP1WerDelta)}</dd>
         </div>
         <div>
-          <dt>Anchor WER delta</dt>
-          <dd>{formatNullableNumber(review.comparison.anchorWerDelta)}</dd>
+          <dt>General speech difference</dt>
+          <dd>{formatSignedPercent(review.comparison.anchorWerDelta)}</dd>
         </div>
         <div>
-          <dt>RTF overhead vs P1</dt>
+          <dt>Speed overhead</dt>
           <dd>{formatNullablePercent(review.comparison.rtfOverheadRatioVsP1)}</dd>
         </div>
         <div>
-          <dt>Adapter size</dt>
+          <dt>Model file size</dt>
           <dd>{formatNullableBytes(review.comparison.candidateAdapterSizeBytes)}</dd>
         </div>
       </dl>
@@ -1362,9 +1354,9 @@ function PersonalModelActivationReviewPanel({
         <strong>{review.title}.</strong> {review.detail}
       </p>
       <p className="status-message">
-        Activation privacy: aggregate metrics only; no raw audio, transcript text, case IDs, feature
-        tensors, checkpoints, adapter weights, raw profile IDs, vocabulary terms, or vocabulary
-        entry IDs are displayed.
+        Activation privacy: aggregate metrics only; no raw audio, transcript text, case identifiers,
+        training data, model files, profile identifiers, vocabulary terms, or vocabulary item
+        identifiers are displayed.
       </p>
     </section>
   );
@@ -1409,7 +1401,7 @@ function reduceModelLifecyclePreflight(
       return {
         ...current,
         modelStatus: 'error',
-        modelError: message.message,
+        modelError: formatModelReasonMessage('model-companion-check-failed'),
       };
   }
 }
@@ -1417,13 +1409,13 @@ function reduceModelLifecyclePreflight(
 function formatImportResultMessage(result: EnrollmentProfileImportResultV1): string {
   switch (result.operation) {
     case 'deduped-existing':
-      return 'Profile import matched an existing local profile, so no duplicate files were written.';
+      return formatModelReasonMessage('model-import-deduped-existing');
     case 'imported-new':
       return result.nameCollisionResolved
-        ? 'Profile import verified checksums, created a new local profile, and resolved a display-name collision.'
-        : 'Profile import verified checksums and created a new local profile. Review before enabling.';
+        ? formatModelReasonMessage('model-imported-name-collision')
+        : formatModelReasonMessage('model-imported-new');
     case 'replaced-existing':
-      return 'Profile import verified checksums and replaced the matching local profile.';
+      return formatModelReasonMessage('model-replaced-existing');
   }
 }
 
@@ -1444,8 +1436,11 @@ function formatActivationReviewStatus(review: PersonalModelActivationReviewCardV
   }
 }
 
-function formatNullableNumber(value: number | null): string {
-  return value === null ? 'not evaluated' : value.toFixed(6);
+function formatSignedPercent(value: number | null): string {
+  if (value === null) return 'not evaluated';
+  const percent = value * 100;
+  const sign = percent > 0 ? '+' : '';
+  return `${sign}${percent.toFixed(2)}%`;
 }
 
 function formatNullablePercent(value: number | null): string {
@@ -1487,7 +1482,7 @@ function formatTrainingCompanionStatus(companion: PersonalModelTrainingCompanion
     case 'not-declared':
       return 'not declared';
     case 'base-model-missing':
-      return 'base model missing';
+      return 'speech model required';
   }
 }
 
@@ -1521,13 +1516,13 @@ function formatPromptCoverage(report: TrainingReadinessCoverageReportV1 | null):
 }
 
 function formatVocabularyCoverage(report: TrainingReadinessCoverageReportV1 | null): string {
-  if (report === null) return 'No selected entries';
-  return `${report.vocabularyCoverage.coveredEntryCount.toLocaleString('en')} of ${report.vocabularyCoverage.targetedEntryCount.toLocaleString('en')} selected entries`;
+  if (report === null) return 'No selected words';
+  return `${report.vocabularyCoverage.coveredEntryCount.toLocaleString('en')} of ${report.vocabularyCoverage.targetedEntryCount.toLocaleString('en')} selected words`;
 }
 
 function formatProfileStoreBackend(kind: ProfileStorageBackendKind | null): string {
   if (kind === null) return 'checking';
-  return kind === 'opfs' ? 'OPFS' : 'memory fallback';
+  return kind === 'opfs' ? 'device storage' : 'temporary storage';
 }
 
 function formatPersistentStorage(value: boolean | null): string {

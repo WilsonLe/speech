@@ -3,6 +3,7 @@ import { MenuButton, type MenuButtonItem } from '@speech/ui';
 import type { VocabularyEntryLanguage, VocabularyEntryV1 } from '@speech/protocol';
 import { validateVocabularyStoreSnapshot } from '@speech/context-bias';
 import { scheduleCustomVocabularyPrompts } from '@speech/enrollment';
+import { getVocabularyOperationReasonCopy } from '../content/reasonCodes';
 import {
   createDefaultVocabularyStore,
   createVocabularySet,
@@ -739,8 +740,8 @@ export function VocabularyPanel() {
                   setImportFormat(event.currentTarget.value as 'json' | 'csv');
                 }}
               >
-                <option value="json">JSON store, set, or entries</option>
-                <option value="csv">CSV entries for selected set</option>
+                <option value="json">JSON store, set, or words</option>
+                <option value="csv">CSV words for selected set</option>
               </select>
             </label>
             <label htmlFor="vocabulary-import-text">
@@ -788,7 +789,7 @@ function StatusMetric({ label, value }: { readonly label: string; readonly value
 function validateStoreMessage(snapshot: ReturnType<typeof createDefaultVocabularyStore>): string {
   const validation = validateVocabularyStoreSnapshot(snapshot);
   return validation.ok
-    ? 'Vocabulary schema is valid locally; tokenizer checks run during future automaton compilation.'
+    ? getVocabularyOperationReasonCopy('vocabulary-validation-ok').message
     : formatVocabularyErrors(validation.errors);
 }
 
