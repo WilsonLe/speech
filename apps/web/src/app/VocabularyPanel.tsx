@@ -44,6 +44,7 @@ export function VocabularyPanel() {
   const [snapshot, setSnapshot] = useState(() => createDefaultVocabularyStore());
   const [selectedSetId, setSelectedSetId] = useState('set-work');
   const [draft, setDraft] = useState<VocabularyEntryDraft>(emptyDraft);
+  const [displayFormOpen, setDisplayFormOpen] = useState(false);
   const [newSetName, setNewSetName] = useState('');
   const [setSearch, setSetSearch] = useState('');
   const [importFormat, setImportFormat] = useState<'json' | 'csv'>('json');
@@ -133,7 +134,10 @@ export function VocabularyPanel() {
     if (selectedSet === undefined) return;
     const result = upsertVocabularyEntry(snapshot, selectedSet.id, draft);
     applyResult(result);
-    if (result.ok) setDraft(emptyDraft);
+    if (result.ok) {
+      setDraft(emptyDraft);
+      setDisplayFormOpen(false);
+    }
   }
 
   function editEntry(entry: VocabularyEntryV1) {
@@ -149,6 +153,7 @@ export function VocabularyPanel() {
       exactCase: entry.exactCase,
       promptPriority: entry.promptPriority?.toString() ?? '',
     });
+    setDisplayFormOpen(entry.displayForm !== entry.phrase);
     setStatusMessage(`Editing vocabulary entry “${entry.displayForm}”.`);
   }
 
@@ -195,6 +200,31 @@ export function VocabularyPanel() {
   function openSet(setId: string) {
     setSelectedSetId(setId);
     setDraft(emptyDraft);
+    setDisplayFormOpen(false);
+  }
+
+  function resetEntryDraft() {
+    setDraft(emptyDraft);
+    setDisplayFormOpen(false);
+  }
+
+  function confirmDeleteSet(setId: string, displayName: string, entryCount: number) {
+    const confirmed = window.confirm(
+      `Delete “${displayName}”? ${entryCount.toString()} words will stop applying to future recordings and local enrollment prompts. Exports made later will not include this set.`,
+    );
+    if (!confirmed) return;
+    applyResult(deleteVocabularySet(snapshot, setId));
+    resetEntryDraft();
+  }
+
+  function confirmDeleteEntry(entry: VocabularyEntryV1) {
+    if (selectedSet === undefined) return;
+    const confirmed = window.confirm(
+      `Delete “${entry.displayForm}”? It will stop applying to future recordings and local enrollment prompts.`,
+    );
+    if (!confirmed) return;
+    applyResult(deleteVocabularyEntry(snapshot, selectedSet.id, entry.id));
+    if (draft.id === entry.id) resetEntryDraft();
   }
 
   function importVocabulary() {
@@ -300,10 +330,7 @@ export function VocabularyPanel() {
                   label: 'Delete…',
                   destructive: true,
                   disabled: snapshot.sets.length <= 1,
-                  onSelect: () => {
-                    applyResult(deleteVocabularySet(snapshot, set.id));
-                    setDraft(emptyDraft);
-                  },
+                  onSelect: () => confirmDeleteSet(set.id, set.displayName, set.entries.length),
                 },
               ];
 
@@ -385,29 +412,29 @@ export function VocabularyPanel() {
           )}
         </article>
 
-        <article className="vocabulary-card" aria-labelledby="vocabulary-entry-form-title">
-          <h3 id="vocabulary-entry-form-title">{draft.id ? 'Edit word' : 'Add word'}</h3>
-          <div className="vocabulary-form-grid">
+        <article
+          className="vocabulary-card vocabulary-entry-editor"
+          aria-labelledby="vocabulary-entry-form-title"
+        >
+          <div className="vocabulary-entry-editor__heading">
+            <div>
+              <h3 id="vocabulary-entry-form-title">{draft.id ? 'Edit word' : 'Add word'}</h3>
+              <p>Basic fields are enough for most names, acronyms, and project phrases.</p>
+            </div>
+            <span className="status-pill" data-tone="neutral">
+              Saved after {draft.id ? 'update' : 'add'}
+            </span>
+          </div>
+
+          <div className="vocabulary-form-grid vocabulary-form-grid--basic">
             <label htmlFor="vocabulary-phrase">
-              Phrase
+              Term
               <input
                 id="vocabulary-phrase"
                 value={draft.phrase}
                 onChange={(event) => {
                   const { value } = event.currentTarget;
                   setDraft((current) => ({ ...current, phrase: value }));
-                }}
-                placeholder="Pangea Chat"
-              />
-            </label>
-            <label htmlFor="vocabulary-display-form">
-              Display form
-              <input
-                id="vocabulary-display-form"
-                value={draft.displayForm}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  setDraft((current) => ({ ...current, displayForm: value }));
                 }}
                 placeholder="Pangea Chat"
               />
@@ -431,50 +458,10 @@ export function VocabularyPanel() {
                 <option value="mixed">Mixed/code-switch</option>
               </select>
             </label>
-            <label htmlFor="vocabulary-weight">
-              Weight
-              <input
-                id="vocabulary-weight"
-                type="number"
-                min="0"
-                max="10"
-                step="0.5"
-                value={draft.weight}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  setDraft((current) => ({ ...current, weight: Number(value) }));
-                }}
-              />
-            </label>
-            <label htmlFor="vocabulary-category">
-              Category
-              <input
-                id="vocabulary-category"
-                value={draft.category}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  setDraft((current) => ({ ...current, category: value }));
-                }}
-                placeholder="Work"
-              />
-            </label>
-            <label htmlFor="vocabulary-priority">
-              Prompt priority
-              <input
-                id="vocabulary-priority"
-                type="number"
-                min="0"
-                value={draft.promptPriority}
-                onChange={(event) => {
-                  const { value } = event.currentTarget;
-                  setDraft((current) => ({ ...current, promptPriority: value }));
-                }}
-                placeholder="Optional"
-              />
-            </label>
           </div>
+
           <label htmlFor="vocabulary-aliases">
-            Spoken aliases (one per line or comma-separated)
+            Spoken variants
             <textarea
               id="vocabulary-aliases"
               value={draft.spokenAliasesText}
@@ -488,35 +475,176 @@ export function VocabularyPanel() {
               placeholder="pangea dashboard"
             />
           </label>
-          <div className="vocabulary-checkbox-row">
-            <label>
-              <input
-                type="checkbox"
-                checked={draft.enabled}
-                onChange={(event) => {
-                  const { checked } = event.currentTarget;
-                  setDraft((current) => ({ ...current, enabled: checked }));
+
+          {displayFormOpen ? (
+            <div className="vocabulary-display-row">
+              <label htmlFor="vocabulary-display-form">
+                Display as
+                <input
+                  id="vocabulary-display-form"
+                  value={draft.displayForm}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    setDraft((current) => ({ ...current, displayForm: value }));
+                  }}
+                  placeholder={draft.phrase || 'Pangea Chat'}
+                />
+              </label>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setDraft((current) => ({ ...current, displayForm: '' }));
+                  setDisplayFormOpen(false);
                 }}
-              />
-              Enabled
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={draft.exactCase}
-                onChange={(event) => {
-                  const { checked } = event.currentTarget;
-                  setDraft((current) => ({ ...current, exactCase: checked }));
-                }}
-              />
-              Preserve exact display casing
-            </label>
-          </div>
+              >
+                Use term text
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="secondary vocabulary-inline-action"
+              onClick={() => {
+                setDraft((current) => ({
+                  ...current,
+                  displayForm: current.displayForm || current.phrase,
+                }));
+                setDisplayFormOpen(true);
+              }}
+            >
+              Add display text
+            </button>
+          )}
+
+          <details className="vocabulary-advanced-editor">
+            <summary>Advanced</summary>
+            <div className="vocabulary-advanced-content">
+              <p className="status-message">
+                Optional controls for stronger vocabulary biasing, enrollment prompts, and local
+                diagnostics.
+              </p>
+              <div className="vocabulary-form-grid">
+                <label htmlFor="vocabulary-weight">
+                  Steering strength
+                  <input
+                    id="vocabulary-weight"
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    value={draft.weight}
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setDraft((current) => ({ ...current, weight: Number(value) }));
+                    }}
+                  />
+                </label>
+                <label htmlFor="vocabulary-category">
+                  Category
+                  <input
+                    id="vocabulary-category"
+                    value={draft.category}
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setDraft((current) => ({ ...current, category: value }));
+                    }}
+                    placeholder="Work"
+                  />
+                </label>
+                <label htmlFor="vocabulary-priority">
+                  Prompt priority
+                  <input
+                    id="vocabulary-priority"
+                    type="number"
+                    min="0"
+                    value={draft.promptPriority}
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setDraft((current) => ({ ...current, promptPriority: value }));
+                    }}
+                    placeholder="Optional"
+                  />
+                </label>
+              </div>
+              <div className="vocabulary-checkbox-row vocabulary-checkbox-row--advanced">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={draft.enabled}
+                    onChange={(event) => {
+                      const { checked } = event.currentTarget;
+                      setDraft((current) => ({ ...current, enabled: checked }));
+                    }}
+                  />
+                  Include this word in recordings and enrollment prompts
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={draft.exactCase}
+                    onChange={(event) => {
+                      const { checked } = event.currentTarget;
+                      setDraft((current) => ({ ...current, exactCase: checked }));
+                    }}
+                  />
+                  Match display casing exactly
+                </label>
+              </div>
+              <section
+                className="vocabulary-advanced-panel"
+                aria-labelledby="vocabulary-prompt-preview-title"
+              >
+                <h4 id="vocabulary-prompt-preview-title">Enrollment prompt preview</h4>
+                {customPromptPreview.prompts.length > 0 ? (
+                  <div
+                    className="vocabulary-entry-list"
+                    aria-label="Custom vocabulary prompt preview"
+                  >
+                    {customPromptPreview.prompts.map((prompt) => (
+                      <article
+                        className="vocabulary-entry vocabulary-entry--compact"
+                        key={prompt.id}
+                      >
+                        <div>
+                          <h5>{prompt.text}</h5>
+                          <p>
+                            {languageLabels[prompt.customVocabulary.language]} word · prompt
+                            language {prompt.language} · {prompt.customVocabulary.voiceCondition} ·{' '}
+                            {prompt.customVocabulary.position}
+                          </p>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="status-message">
+                    Add enabled words to preview local enrollment prompts.
+                  </p>
+                )}
+                <p className="status-message">
+                  Selected words: {customPromptPreview.selectedEntryIds.length}. Skipped words:{' '}
+                  {customPromptPreview.skippedEntryIds.length}. {customPromptPreview.warnings[0]}
+                </p>
+              </section>
+              <section
+                className="vocabulary-advanced-panel"
+                aria-labelledby="vocabulary-diagnostics-title"
+              >
+                <h4 id="vocabulary-diagnostics-title">Diagnostics</h4>
+                <p className="status-message">{storeValidation}</p>
+                <p className="status-message">
+                  Token checks run locally when the recognizer prepares vocabulary for a recording.
+                </p>
+              </section>
+            </div>
+          </details>
+
           <div className="vocabulary-actions">
             <button type="button" onClick={submitEntry} disabled={selectedSet === undefined}>
               {draft.id ? 'Update word' : 'Add word'}
             </button>
-            <button type="button" className="secondary" onClick={() => setDraft(emptyDraft)}>
+            <button type="button" className="secondary" onClick={resetEntryDraft}>
               Reset form
             </button>
           </div>
@@ -524,7 +652,7 @@ export function VocabularyPanel() {
       </div>
 
       <article className="vocabulary-card" aria-labelledby="vocabulary-entry-list-title">
-        <h3 id="vocabulary-entry-list-title">Entries in {selectedSet?.displayName ?? 'set'}</h3>
+        <h3 id="vocabulary-entry-list-title">Words in {selectedSet?.displayName ?? 'set'}</h3>
         {selectedSet !== undefined && selectedSet.entries.length > 0 ? (
           <div className="vocabulary-entry-list">
             {selectedSet.entries.map((entry) => (
@@ -536,8 +664,7 @@ export function VocabularyPanel() {
                 <div>
                   <h4>{entry.displayForm}</h4>
                   <p>
-                    {languageLabels[entry.language]} · weight {entry.weight} ·{' '}
-                    {entry.enabled ? 'enabled' : 'disabled'}
+                    {languageLabels[entry.language]} · {entry.enabled ? 'On' : 'Off'}
                   </p>
                   <p>
                     {entry.spokenAliases.length > 0
@@ -563,11 +690,9 @@ export function VocabularyPanel() {
                   <button
                     type="button"
                     className="secondary danger"
-                    onClick={() =>
-                      applyResult(deleteVocabularyEntry(snapshot, selectedSet.id, entry.id))
-                    }
+                    onClick={() => confirmDeleteEntry(entry)}
                   >
-                    Delete
+                    Delete…
                   </button>
                 </div>
               </article>
@@ -577,32 +702,6 @@ export function VocabularyPanel() {
           <p className="status-message">No terms yet. Add a name, acronym, or product phrase.</p>
         )}
       </article>
-
-      <details className="vocabulary-card vocabulary-details">
-        <summary>Enrollment prompts</summary>
-        {customPromptPreview.prompts.length > 0 ? (
-          <div className="vocabulary-entry-list" aria-label="Custom vocabulary prompt preview">
-            {customPromptPreview.prompts.map((prompt) => (
-              <article className="vocabulary-entry" key={prompt.id}>
-                <div>
-                  <h4>{prompt.text}</h4>
-                  <p>
-                    {languageLabels[prompt.customVocabulary.language]} term · prompt language{' '}
-                    {prompt.language} · {prompt.customVocabulary.voiceCondition} ·{' '}
-                    {prompt.customVocabulary.position}
-                  </p>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="status-message">Add enabled words to preview local enrollment prompts.</p>
-        )}
-        <p className="status-message">
-          Selected entries: {customPromptPreview.selectedEntryIds.length}. Skipped entries:{' '}
-          {customPromptPreview.skippedEntryIds.length}. {customPromptPreview.warnings[0]}
-        </p>
-      </details>
 
       <details
         className="vocabulary-card vocabulary-details"
@@ -672,9 +771,6 @@ export function VocabularyPanel() {
 
       <p className="status-message" aria-live="polite">
         {statusMessage}
-      </p>
-      <p className="status-message" aria-live="polite">
-        {storeValidation}
       </p>
     </section>
   );

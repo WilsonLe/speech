@@ -28,9 +28,9 @@ test('manages compact vocabulary sets and preserves local import/export semantic
   await panel.getByRole('button', { name: /open contacts/i }).click();
 
   await page.locator('#vocabulary-phrase').fill('Pangea Chat');
-  await page.locator('#vocabulary-display-form').fill('Pangea Chat');
   await page.locator('#vocabulary-language').selectOption('mixed');
   await page.locator('#vocabulary-aliases').fill('pangea dashboard');
+  await panel.getByText('Advanced', { exact: true }).click();
   await page.locator('#vocabulary-weight').fill('7');
   await page.locator('#vocabulary-category').fill('Work');
   await page.locator('#vocabulary-priority').fill('10');
@@ -41,13 +41,13 @@ test('manages compact vocabulary sets and preserves local import/export semantic
   await expect(entry).toContainText('Aliases: pangea dashboard');
 
   await entry.getByRole('button', { name: 'Edit' }).click();
+  await panel.getByRole('button', { name: 'Add display text' }).click();
   await page.locator('#vocabulary-display-form').fill('Pangea Chat Pro');
   await panel.getByRole('button', { name: 'Update word' }).click();
   await expect(
     panel.getByRole('article', { name: /vocabulary entry pangea chat pro/i }),
   ).toBeVisible();
 
-  await panel.getByText('Enrollment prompts').click();
   const promptPreview = panel.getByLabel(/custom vocabulary prompt preview/i);
   await expect(promptPreview.getByText(/Pangea Chat Pro/).first()).toBeVisible();
 
