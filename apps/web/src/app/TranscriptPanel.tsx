@@ -250,7 +250,7 @@ export function TranscriptPanel() {
   }
 
   return (
-    <section className="panel transcript" aria-labelledby="transcript-title">
+    <section className="panel transcript" id="dictate" aria-labelledby="transcript-title">
       <div className="transcript-layout">
         <div className="section-heading transcript-heading">
           <p className="eyebrow">Transcription workspace</p>

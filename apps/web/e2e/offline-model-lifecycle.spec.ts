@@ -32,8 +32,9 @@ test('reloads the precached app shell while offline', async ({ context, page }) 
 
   await context.setOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('banner').getByRole('link', { name: 'Speech' })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: /local-first bilingual dictation/i }),
+    page.getByRole('heading', { name: /focused push-to-talk dictation/i }),
   ).toBeVisible();
   await expect(
     page.getByRole('heading', { name: /offline readiness and model lifecycle/i }),

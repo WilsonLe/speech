@@ -95,6 +95,11 @@ test('release UI exposes named controls, labelled sections, and keyboard focus',
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(hasHorizontalOverflow).toBe(false);
+  const bottomNav = page.locator('.app-bottom-nav');
+  await expect(bottomNav).toBeVisible();
+  await expect(bottomNav).toContainText('Dictate');
+  await expect(bottomNav).toContainText('Vocabulary');
+  await expect(bottomNav).toContainText('Models');
 
   const focusedControls: string[] = [];
   for (let index = 0; index < 8; index += 1) {
@@ -102,8 +107,11 @@ test('release UI exposes named controls, labelled sections, and keyboard focus',
     focusedControls.push(await activeElementName(page));
   }
   expect(focusedControls.filter(Boolean).length).toBeGreaterThanOrEqual(5);
-  expect(focusedControls).toContain('Manage offline model');
-  expect(focusedControls).toContain('Run benchmark');
+  expect(focusedControls).toContain('Skip to main content');
+  expect(focusedControls).toContain('Speech');
+  expect(focusedControls).toContain('Dictate');
+  expect(focusedControls).toContain('Vocabulary');
+  expect(focusedControls).toContain('Models');
 });
 
 test('active push-to-talk stress cycles do not make network requests or surface errors', async ({

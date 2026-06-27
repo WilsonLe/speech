@@ -3,13 +3,23 @@ import { describe, expect, it } from 'vitest';
 import { App } from './App';
 
 describe('App', () => {
-  it('renders the product foundation shell', () => {
+  it('renders the task-first application shell and existing workflow panels', () => {
     const html = renderToString(<App />);
 
-    expect(html).toContain('Local-first bilingual dictation');
-    expect(html).toContain('Privacy baseline');
+    expect(html).toContain('Skip to main content');
+    expect(html).toContain('aria-label="Primary destinations"');
+    expect(html).toContain('href="#dictate"');
+    expect(html).toContain('href="#vocabulary"');
+    expect(html).toContain('href="#models"');
+    expect(html).toContain('aria-label="Local status summary"');
+    expect(html).not.toContain('Foundation actions');
+    expect(html).not.toContain('Privacy baseline');
+
+    expect(html).toContain('id="dictate"');
     expect(html).toContain('Focused push-to-talk dictation');
+    expect(html).toContain('id="vocabulary"');
     expect(html).toContain('Local vocabulary sets');
+    expect(html).toContain('id="models"');
     expect(html).toContain('Profile cards and local lifecycle');
     expect(html).toContain('Personal Models navigation');
     expect(html).toContain('Browser personal-model readiness');
@@ -30,7 +40,6 @@ describe('App', () => {
     expect(html).toContain('Training progress');
     expect(html).toContain('Prepare worker');
     expect(html).toContain('Implementation roadmap');
-    expect(html).toContain('Personal Models');
     expect(html).toContain('Evidence-backed production claims');
     expect(html).toContain('evidence-needed');
   });

@@ -176,7 +176,7 @@ export function VocabularyPanel() {
   }
 
   return (
-    <section className="panel vocabulary" aria-labelledby="vocabulary-title">
+    <section className="panel vocabulary" id="vocabulary" aria-labelledby="vocabulary-title">
       <div className="section-heading">
         <p className="eyebrow">Vocabulary steering</p>
         <h2 id="vocabulary-title">Local vocabulary sets</h2>
