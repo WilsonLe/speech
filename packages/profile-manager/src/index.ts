@@ -1350,6 +1350,21 @@ export class EnrollmentProfileStore {
     return nextState;
   }
 
+  async deactivateProfile(profileId: string): Promise<ActiveEnrollmentProfileStateV1> {
+    const normalizedProfileId = normalizeSegment(profileId, 'profileId');
+    const existing = await this.getActiveProfileState();
+    if (existing.activeProfileId !== normalizedProfileId) {
+      return existing;
+    }
+    const nextState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      previousProfileId: normalizedProfileId,
+      updatedAt: this.options.now?.() ?? new Date().toISOString(),
+    };
+    await writeJsonAtomically(this.backend, profileLifecyclePath('active-profile.json'), nextState);
+    return nextState;
+  }
+
   async exportProfile(profileId: string): Promise<EnrollmentProfileExportPackageV1> {
     const normalizedProfileId = normalizeSegment(profileId, 'profileId');
     const summary = await this.getProfileSummary(normalizedProfileId);

@@ -281,6 +281,19 @@ export function rollbackEnrollmentProfile(
   ).then(activeResultFromResponse);
 }
 
+export function deactivateEnrollmentProfile(
+  options: EnableProfileOptions,
+): Promise<ProfileStoreActiveResult> {
+  return requestProfileStore(
+    {
+      type: 'DEACTIVATE_PROFILE',
+      requestId: createRequestId('deactivate'),
+      profileId: options.profileId,
+    },
+    options.timeoutMs,
+  ).then(activeResultFromResponse);
+}
+
 export function exportEnrollmentProfile(
   options: EnableProfileOptions,
 ): Promise<ProfileStoreExportResult> {

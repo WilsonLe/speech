@@ -14,6 +14,7 @@ import type {
 } from '../workers/model-lifecycle-client';
 import {
   buildPersonalModelActivationReviewCard,
+  buildPersonalModelListRow,
   buildPersonalModelProfileCard,
   defaultPersonalProfileDisplayName,
   summarizeActiveVocabulary,
@@ -81,6 +82,50 @@ describe('personal model card summaries', () => {
     expect(card.actions.canExport).toBe(true);
     expect(JSON.stringify(card)).not.toContain('private prompt text');
     expect(JSON.stringify(card)).not.toContain('Secret Launch Name');
+  });
+
+  it('builds compact list row labels without exposing model ids, hashes, paths, or terms', () => {
+    const profileSummary = createProfileSummary();
+    const activeState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      activeProfileId: profileSummary.profile.id,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const activeRow = buildPersonalModelListRow(
+      buildPersonalModelProfileCard({
+        summary: profileSummary,
+        activeState,
+        activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+      }),
+    );
+    expect(activeRow).toMatchObject({
+      activeLabel: 'Active',
+      statusLabel: 'Ready',
+      primaryAction: 'use-model',
+      primaryActionLabel: 'Using model',
+      primaryActionDisabled: true,
+    });
+
+    const fallbackRow = buildPersonalModelListRow(
+      buildPersonalModelProfileCard({
+        summary: null,
+        activeState: null,
+        activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+      }),
+    );
+    expect(fallbackRow).toMatchObject({
+      activeLabel: 'Generic',
+      statusLabel: 'Recording needed',
+      primaryAction: 'continue-recording',
+      primaryActionLabel: 'Continue recording',
+      primaryActionDisabled: false,
+    });
+    expect(activeRow.privacy.containsModelIds).toBe(false);
+    expect(activeRow.privacy.containsHashes).toBe(false);
+    expect(activeRow.privacy.containsStoragePaths).toBe(false);
+    expect(JSON.stringify(activeRow)).not.toContain(profileSummary.profile.id);
+    expect(JSON.stringify(activeRow)).not.toContain('manifest-sha');
+    expect(JSON.stringify(activeRow)).not.toContain('Secret Launch Name');
   });
 
   it('builds activation review cards without exposing profile ids or private terms', () => {

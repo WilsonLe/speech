@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { MenuButton, type MenuButtonItem } from '@speech/ui';
 import {
   buildTrainingReadinessCoverageReportForProfile,
   type ActiveEnrollmentProfileStateV1,
@@ -10,6 +11,7 @@ import {
 } from '@speech/profile-manager';
 import type { InstalledModelRecord } from '@speech/model-manager';
 import {
+  deactivateEnrollmentProfile,
   deleteEnrollmentProfile,
   enableEnrollmentProfile,
   exportEnrollmentProfile,
@@ -36,11 +38,12 @@ import {
 import { createDefaultVocabularyStore, loadVocabularyStore } from './vocabulary-storage';
 import {
   buildPersonalModelActivationReviewCard,
+  buildPersonalModelListRow,
   buildPersonalModelProfileCard,
   summarizeActiveVocabulary,
   type ActiveVocabularySummaryV1,
   type PersonalModelActivationReviewCardV1,
-  type PersonalModelCardStatus,
+  type PersonalModelListRowV1,
   type PersonalModelProfileCardV1,
 } from './personal-models';
 import {
@@ -137,27 +140,33 @@ export function PersonalModelsPanel() {
   );
   const cardRows = useMemo(() => {
     if (state.summaries.length === 0) {
+      const card = buildPersonalModelProfileCard({
+        summary: null,
+        activeState: state.activeState,
+        activeVocabulary: state.activeVocabulary,
+      });
       return [
         {
           profileId: null,
           summary: null,
-          card: buildPersonalModelProfileCard({
-            summary: null,
-            activeState: state.activeState,
-            activeVocabulary: state.activeVocabulary,
-          }),
+          card,
+          row: buildPersonalModelListRow(card),
         },
       ];
     }
-    return state.summaries.map((summary) => ({
-      profileId: summary.profile.id,
-      summary,
-      card: buildPersonalModelProfileCard({
+    return state.summaries.map((summary) => {
+      const card = buildPersonalModelProfileCard({
         summary,
         activeState: state.activeState,
         activeVocabulary: state.activeVocabulary,
-      }),
-    }));
+      });
+      return {
+        profileId: summary.profile.id,
+        summary,
+        card,
+        row: buildPersonalModelListRow(card),
+      };
+    });
   }, [state.activeState, state.activeVocabulary, state.summaries]);
   const primaryCard = buildPersonalModelProfileCard({
     summary: primarySummary,
@@ -367,7 +376,21 @@ export function PersonalModelsPanel() {
     );
   }
 
+  async function deactivateProfile(profileId: string) {
+    if (!window.confirm('Deactivate this voice model and use the generic fallback instead?')) {
+      return;
+    }
+    await runLifecycleAction(
+      'activating',
+      'Deactivating this voice model at the next boundary…',
+      () => deactivateEnrollmentProfile({ profileId }),
+    );
+  }
+
   async function rollbackProfile() {
+    if (!window.confirm('Roll back to the previously active voice model?')) {
+      return;
+    }
     await runLifecycleAction('activating', 'Rolling back to the previous active profile…', () =>
       rollbackEnrollmentProfile(),
     );
@@ -427,10 +450,42 @@ export function PersonalModelsPanel() {
     }
   }
 
-  async function renameProfile(event: FormEvent<HTMLFormElement>, profileId: string) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const displayName = String(new FormData(form).get('displayName') ?? '');
+  async function duplicateProfile(profileId: string, displayName: string) {
+    setState((current) => ({
+      ...current,
+      status: 'importing',
+      message:
+        'Duplicating this local profile without exporting private files outside the browser…',
+    }));
+    try {
+      const exportResult = await exportEnrollmentProfile({ profileId, timeoutMs: 15_000 });
+      const result = await importEnrollmentProfile({
+        profilePackage: exportResult.profilePackage,
+        mode: 'import-as-new',
+        targetDisplayName: `${displayName} copy`,
+        timeoutMs: 15_000,
+      });
+      await refreshPersonalModels({
+        nextMessage: formatImportResultMessage(result.importResult),
+      });
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Profile duplicate failed.',
+      }));
+    }
+  }
+
+  async function renameProfile(profileId: string, currentDisplayName: string) {
+    const displayName = window.prompt('Rename this voice model', currentDisplayName)?.trim();
+    if (
+      displayName === undefined ||
+      displayName.length === 0 ||
+      displayName === currentDisplayName
+    ) {
+      return;
+    }
     setState((current) => ({
       ...current,
       status: 'loading',
@@ -450,7 +505,14 @@ export function PersonalModelsPanel() {
     }
   }
 
-  async function deleteProfile(profileId: string) {
+  async function deleteProfile(profileId: string, displayName: string) {
+    if (
+      !window.confirm(
+        `Delete ${displayName}? Recordings, features, checkpoints, and adapter files for this model will be removed from this device.`,
+      )
+    ) {
+      return;
+    }
     await runLifecycleAction('deleting', 'Deleting stored profile files and active pointers…', () =>
       deleteEnrollmentProfile({ profileId }),
     );
@@ -484,11 +546,10 @@ export function PersonalModelsPanel() {
     <section className="panel personal-models" id="models" aria-labelledby="personal-models-title">
       <div className="section-heading">
         <p className="eyebrow">Personal models</p>
-        <h2 id="personal-models-title">Profile cards and local lifecycle</h2>
+        <h2 id="personal-models-title">Voice models</h2>
         <p>
-          Review local voice profiles, active vocabulary coverage, base-model compatibility, and
-          explicit export/import/delete actions from one privacy-first area. Heavy profile work
-          remains worker-owned; cards show aggregate status only.
+          Choose the active local model, continue recording or training, and keep import/export
+          actions private on this device.
         </p>
       </div>
 
@@ -539,100 +600,109 @@ export function PersonalModelsPanel() {
 
       <PersonalModelActivationReviewPanel review={activationReview} />
 
-      <div className="personal-model-card-list" aria-label="Personal model profile cards">
-        {cardRows.map((row) => (
-          <div className="personal-model-card-row" key={row.profileId ?? 'generic-fallback'}>
-            <PersonalModelProfileCard card={row.card} />
-            {row.profileId === null ? null : (
-              <form
-                className="profile-card-actions"
-                aria-label={`${row.card.displayName} profile actions`}
-                onSubmit={(event) => void renameProfile(event, row.profileId)}
-              >
-                <label>
-                  <span>Display name</span>
-                  <input
-                    key={row.card.displayName}
-                    name="displayName"
-                    defaultValue={row.card.displayName}
-                    maxLength={80}
-                    disabled={isBusy}
-                  />
-                </label>
-                <button type="submit" className="secondary" disabled={isBusy}>
-                  Rename profile
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => void enableProfile(row.profileId)}
-                  disabled={isBusy || !row.card.actions.canEnable}
-                >
-                  Enable personal profile
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => void exportProfile(row.profileId)}
-                  disabled={isBusy || !row.card.actions.canExport}
-                >
-                  Export sensitive profile package
-                </button>
-                <button
-                  type="button"
-                  className="secondary danger"
-                  onClick={() => void deleteProfile(row.profileId)}
-                  disabled={isBusy || !row.card.actions.canDelete}
-                >
-                  Delete local personal profile
-                </button>
-              </form>
-            )}
+      <section className="model-list-panel" aria-labelledby="voice-models-list-title">
+        <div className="model-list-header">
+          <div>
+            <p className="eyebrow">Voice models</p>
+            <h3 id="voice-models-list-title">Models</h3>
           </div>
-        ))}
-      </div>
+          <div className="model-list-toolbar" aria-label="Model list actions">
+            <a className="button secondary" href="#microphone-title">
+              New
+            </a>
+            <label className="secondary file-button">
+              Import
+              <input
+                type="file"
+                accept="application/json,.json,.speechprofile"
+                onChange={(event) => void importProfile(event)}
+                disabled={isBusy}
+              />
+            </label>
+          </div>
+        </div>
 
-      <div className="hero-actions" aria-label="Personal model profile lifecycle controls">
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => void refreshPersonalModels()}
-          disabled={isBusy}
-        >
-          Refresh profile cards
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => void rollbackProfile()}
-          disabled={isBusy || state.activeState?.previousProfileId === undefined}
-        >
-          Roll back active profile
-        </button>
-        <label className="select-field">
-          <span>Import behavior</span>
-          <select
-            value={importMode}
-            onChange={(event) =>
-              setImportMode(event.currentTarget.value as EnrollmentProfileImportMode)
-            }
+        <div className="model-import-options" aria-label="Model import options">
+          <label className="select-field compact-select">
+            <span>Import behavior</span>
+            <select
+              value={importMode}
+              onChange={(event) =>
+                setImportMode(event.currentTarget.value as EnrollmentProfileImportMode)
+              }
+              disabled={isBusy}
+            >
+              <option value="dedupe">Dedupe</option>
+              <option value="import-as-new">Import as new</option>
+              <option value="replace">Replace match</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void refreshPersonalModels()}
             disabled={isBusy}
           >
-            <option value="dedupe">Dedupe existing profile</option>
-            <option value="import-as-new">Import as new profile</option>
-            <option value="replace">Replace matching profile</option>
-          </select>
-        </label>
-        <label className="secondary file-button">
-          Import profile package
-          <input
-            type="file"
-            accept="application/json,.json,.speechprofile"
-            onChange={(event) => void importProfile(event)}
-            disabled={isBusy}
-          />
-        </label>
-      </div>
+            Refresh
+          </button>
+        </div>
+
+        <div className="model-list" role="list" aria-label="Personal voice model rows">
+          {cardRows.map((row) => (
+            <article
+              className="model-list-row"
+              role="listitem"
+              key={row.profileId ?? 'generic-fallback'}
+            >
+              <div className="model-list-main">
+                <h4>{row.row.displayName}</h4>
+                <div className="model-list-status" aria-label={`${row.row.displayName} status`}>
+                  <span className={row.card.active ? 'status-chip success' : 'status-chip'}>
+                    {row.row.activeLabel}
+                  </span>
+                  <span className="status-chip">{row.row.statusLabel}</span>
+                </div>
+              </div>
+              <div className="model-list-meta" aria-label={`${row.row.displayName} summary`}>
+                <span>{row.card.storage.acceptedUtterances.toString()} recordings</span>
+                <span>{formatDurationSeconds(row.card.storage.acceptedSeconds)}</span>
+                <span>{row.card.activeVocabulary.activeEntryCount.toString()} vocabulary</span>
+              </div>
+              <div className="model-list-actions">
+                <ModelRowPrimaryAction
+                  row={row}
+                  isBusy={isBusy}
+                  onEnable={() =>
+                    row.profileId === null ? undefined : void enableProfile(row.profileId)
+                  }
+                />
+                {row.profileId === null ? null : (
+                  <MenuButton
+                    label="More"
+                    menuLabel={`${row.row.displayName} model actions`}
+                    buttonSize="sm"
+                    items={createModelRowMenuItems({
+                      profileId: row.profileId,
+                      displayName: row.row.displayName,
+                      active: row.card.active,
+                      canExport: row.card.actions.canExport,
+                      canDelete: row.card.actions.canDelete,
+                      isBusy,
+                      previousProfileAvailable: state.activeState?.previousProfileId !== undefined,
+                      onRename: () => void renameProfile(row.profileId, row.row.displayName),
+                      onDuplicate: () => void duplicateProfile(row.profileId, row.row.displayName),
+                      onExport: () => void exportProfile(row.profileId),
+                      onDeactivate: () => void deactivateProfile(row.profileId),
+                      onRollback: () => void rollbackProfile(),
+                      onDelete: () => void deleteProfile(row.profileId, row.row.displayName),
+                    })}
+                  />
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <p
         className={state.status === 'error' ? 'status-message error-message' : 'status-message'}
@@ -646,6 +716,105 @@ export function PersonalModelsPanel() {
       </p>
     </section>
   );
+}
+
+function ModelRowPrimaryAction({
+  row,
+  isBusy,
+  onEnable,
+}: {
+  readonly row: {
+    readonly profileId: string | null;
+    readonly card: PersonalModelProfileCardV1;
+    readonly row: PersonalModelListRowV1;
+  };
+  readonly isBusy: boolean;
+  readonly onEnable: () => void | undefined;
+}) {
+  if (row.row.primaryAction === 'continue-recording') {
+    return (
+      <a className="button secondary" href="#microphone-title">
+        {row.row.primaryActionLabel}
+      </a>
+    );
+  }
+  if (row.row.primaryAction === 'use-model') {
+    return (
+      <button
+        type="button"
+        className="secondary"
+        onClick={onEnable}
+        disabled={isBusy || row.row.primaryActionDisabled || !row.card.actions.canEnable}
+      >
+        {row.row.primaryActionLabel}
+      </button>
+    );
+  }
+  return (
+    <button type="button" className="secondary" disabled>
+      {row.row.primaryActionLabel}
+    </button>
+  );
+}
+
+function createModelRowMenuItems({
+  profileId,
+  displayName,
+  active,
+  canExport,
+  canDelete,
+  isBusy,
+  previousProfileAvailable,
+  onRename,
+  onDuplicate,
+  onExport,
+  onDeactivate,
+  onRollback,
+  onDelete,
+}: {
+  readonly profileId: string;
+  readonly displayName: string;
+  readonly active: boolean;
+  readonly canExport: boolean;
+  readonly canDelete: boolean;
+  readonly isBusy: boolean;
+  readonly previousProfileAvailable: boolean;
+  readonly onRename: () => void;
+  readonly onDuplicate: () => void;
+  readonly onExport: () => void;
+  readonly onDeactivate: () => void;
+  readonly onRollback: () => void;
+  readonly onDelete: () => void;
+}): readonly MenuButtonItem[] {
+  return [
+    { id: `${profileId}-rename`, label: 'Rename…', disabled: isBusy, onSelect: onRename },
+    { id: `${profileId}-duplicate`, label: 'Duplicate…', disabled: isBusy, onSelect: onDuplicate },
+    {
+      id: `${profileId}-export`,
+      label: 'Export…',
+      disabled: isBusy || !canExport,
+      onSelect: onExport,
+    },
+    {
+      id: `${profileId}-deactivate`,
+      label: active ? 'Deactivate…' : 'Deactivate',
+      disabled: isBusy || !active,
+      onSelect: onDeactivate,
+    },
+    {
+      id: `${profileId}-rollback`,
+      label: 'Roll back…',
+      disabled: isBusy || !active || !previousProfileAvailable,
+      onSelect: onRollback,
+    },
+    {
+      id: `${profileId}-delete`,
+      label: `Delete ${displayName}…`,
+      disabled: isBusy || !canDelete,
+      destructive: true,
+      onSelect: onDelete,
+    },
+  ];
 }
 
 function PersonalModelActivationReviewPanel({
@@ -874,63 +1043,6 @@ function PersonalModelPreflightPanel({
   );
 }
 
-function PersonalModelProfileCard({ card }: { readonly card: PersonalModelProfileCardV1 }) {
-  return (
-    <article className="personal-model-card" aria-label={`${card.displayName} profile card`}>
-      <div className="personal-model-card-header">
-        <div>
-          <h3>{card.displayName}</h3>
-          <p>{formatCardStatus(card.status)}</p>
-        </div>
-        <span data-status={card.status}>{card.active ? 'active' : card.status}</span>
-      </div>
-      <dl className="model-card-meta personal-model-card-meta">
-        <div>
-          <dt>Stored takes</dt>
-          <dd>{card.storage.acceptedUtterances.toString()}</dd>
-        </div>
-        <div>
-          <dt>Accepted duration</dt>
-          <dd>{card.storage.acceptedSeconds.toFixed(1)} s</dd>
-        </div>
-        <div>
-          <dt>Stored bytes</dt>
-          <dd>{card.storage.storedBytes.toLocaleString()} bytes</dd>
-        </div>
-        <div>
-          <dt>Base model</dt>
-          <dd>{formatBaseModel(card)}</dd>
-        </div>
-        <div>
-          <dt>Base dependency</dt>
-          <dd>
-            {card.baseModel.status === 'exact-bound'
-              ? 'exact manifest match required'
-              : 'generic fallback'}
-          </dd>
-        </div>
-        <div>
-          <dt>Active vocabulary</dt>
-          <dd>{`${card.activeVocabulary.activeEntryCount.toString()} enabled entries`}</dd>
-        </div>
-        <div>
-          <dt>Vocabulary revision</dt>
-          <dd>{card.activeVocabulary.revision.toString()}</dd>
-        </div>
-        <div>
-          <dt>Updated</dt>
-          <dd>{card.storage.updatedAt ?? 'not stored yet'}</dd>
-        </div>
-      </dl>
-      <p className="status-message">
-        {card.status === 'no-profile'
-          ? 'Generic fallback is active until you save or import a local profile.'
-          : 'This card is backed by private local profile storage and can be exported only by explicit action.'}
-      </p>
-    </article>
-  );
-}
-
 function StatusPill({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="status-pill" data-tone="neutral">
@@ -1026,6 +1138,13 @@ function formatNullableBytes(value: number | null): string {
   return value === null ? 'not evaluated' : formatPreflightBytes(value);
 }
 
+function formatDurationSeconds(seconds: number): string {
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  return `${minutes.toString()} min ${remainder.toString()} s`;
+}
+
 function formatPreflightStatus(status: PersonalModelPreflightStatus): string {
   switch (status) {
     case 'checking':
@@ -1065,22 +1184,6 @@ function formatRuntimeSelfTestStatus(runtimeSelfTest: RuntimeSelfTestUiState): s
     case 'error':
       return 'failed';
   }
-}
-
-function formatCardStatus(status: PersonalModelCardStatus): string {
-  switch (status) {
-    case 'active':
-      return 'Enabled locally and applied only at safe utterance boundaries.';
-    case 'available':
-      return 'Stored locally and ready for review or activation.';
-    case 'no-profile':
-      return 'No saved personal model yet; use the generic fallback.';
-  }
-}
-
-function formatBaseModel(card: PersonalModelProfileCardV1): string {
-  if (card.baseModel.status === 'generic-fallback') return card.baseModel.label;
-  return `${card.baseModel.label} ${card.baseModel.version ?? ''}`.trim();
 }
 
 function formatProfileStoreBackend(kind: ProfileStorageBackendKind | null): string {
