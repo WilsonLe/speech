@@ -1,5 +1,6 @@
 import {
   createDiagnosticsExport,
+  createMissingDictatePerformanceParityReport,
   createMissingPersonalModelReleaseBenchmarkReport,
   serializeBenchmarkJson,
   type BenchmarkMetricName,
@@ -110,6 +111,12 @@ export function BenchmarkPanel() {
           generatedAt,
           warnings: [
             'The synthetic worker benchmark in this diagnostics bundle is not a declared reference-hardware v0.5.0 personal-model benchmark run.',
+          ],
+        }),
+        dictatePerformanceParity: createMissingDictatePerformanceParityReport({
+          generatedAt,
+          warnings: [
+            'The synthetic worker benchmark in this diagnostics bundle is not a declared reference-hardware v0.6.0 Dictate UI parity run.',
           ],
         }),
         capabilities: readyStatus.capabilityReport,

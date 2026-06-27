@@ -55,6 +55,19 @@ test('runs the synthetic benchmark and downloads local JSON reports', async ({ p
         networkUpload: false,
       },
     },
+    dictatePerformanceParity: {
+      reportType: 'dictate-performance-parity',
+      status: 'insufficient-evidence',
+      privacy: {
+        aggregateOnly: true,
+        containsAudio: false,
+        containsTranscriptText: false,
+        containsFeatureTensors: false,
+        containsCheckpoints: false,
+        containsAdapterWeights: false,
+        networkUpload: false,
+      },
+    },
   });
   await expect(page.getByText(/diagnostics bundle downloaded/i)).toBeVisible({ timeout: 15_000 });
 });

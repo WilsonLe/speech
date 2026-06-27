@@ -4,7 +4,9 @@ import {
   type TranscriptDisplayReplacement,
   type TranscriptVocabulary,
 } from '@speech/formatter';
+export * from './dictate-performance-parity';
 export * from './personal-model-release-benchmark';
+import type { DictatePerformanceParityReportV1 } from './dictate-performance-parity';
 import type { PersonalModelReleaseBenchmarkReportV1 } from './personal-model-release-benchmark';
 
 export type BenchmarkMetricName =
@@ -161,6 +163,7 @@ export interface DiagnosticsExportV1 {
   readonly privacy: BenchmarkPrivacyStatement;
   readonly benchmark?: BenchmarkReportV1;
   readonly personalModelReleaseBenchmark?: PersonalModelReleaseBenchmarkReportV1;
+  readonly dictatePerformanceParity?: DictatePerformanceParityReportV1;
   readonly capabilities?: unknown;
   readonly notes: readonly string[];
 }
@@ -169,6 +172,7 @@ export interface CreateDiagnosticsExportOptions {
   readonly generatedAt: string;
   readonly benchmark?: BenchmarkReportV1;
   readonly personalModelReleaseBenchmark?: PersonalModelReleaseBenchmarkReportV1;
+  readonly dictatePerformanceParity?: DictatePerformanceParityReportV1;
   readonly capabilities?: unknown;
   readonly notes?: readonly string[];
 }
@@ -183,7 +187,7 @@ export const packageInfo: BenchmarkPackageInfo = {
   name: '@speech/benchmark',
   status: 'active',
   description:
-    'Latency, RTF, queue, memory, storage, custom-term, personal-model release gates, and benchmark export contracts.',
+    'Latency, RTF, queue, memory, storage, custom-term, Dictate UI parity, personal-model release gates, and benchmark export contracts.',
 };
 
 export const benchmarkPrivacyStatement: BenchmarkPrivacyStatement = {
@@ -256,6 +260,9 @@ export function createDiagnosticsExport(
     ...(options.personalModelReleaseBenchmark === undefined
       ? {}
       : { personalModelReleaseBenchmark: options.personalModelReleaseBenchmark }),
+    ...(options.dictatePerformanceParity === undefined
+      ? {}
+      : { dictatePerformanceParity: options.dictatePerformanceParity }),
     ...(options.capabilities === undefined ? {} : { capabilities: options.capabilities }),
     notes: [...(options.notes ?? [])],
   };
