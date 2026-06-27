@@ -224,7 +224,7 @@ const appRouteSpecs = [
     pattern: '/models/new',
     title: 'New voice model',
     primaryDestinationId: 'models',
-    headingId: 'personal-models-title',
+    headingId: 'create-model-flow-title',
     queryKeys: ['returnTo'],
     scrollRestoration: 'reset-on-new-task',
     stateSource: 'domain-storage',

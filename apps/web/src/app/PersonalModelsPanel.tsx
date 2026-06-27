@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { Accordion, MenuButton, type MenuButtonItem } from '@speech/ui';
+import { Accordion, MenuButton, RadioGroup, type MenuButtonItem } from '@speech/ui';
 import type { TrainingReadinessCoverageReportV1 } from '@speech/enrollment';
 import {
   buildTrainingReadinessCoverageReportForProfile,
@@ -36,6 +36,16 @@ import {
   runCapabilityWorkerBenchmark,
   type CapabilityReport,
 } from '../capabilities';
+import { useAppRoute } from './appRouteContext';
+import {
+  buildCreateModelReview,
+  createCreateModelDraft,
+  loadCreateModelDraft,
+  saveCreateModelDraft,
+  type CreateModelDraftV1,
+  type CreateModelLanguageTargetV1,
+  type CreateModelRecordingPlanV1,
+} from './create-model-flow';
 import { createDefaultVocabularyStore, loadVocabularyStore } from './vocabulary-storage';
 import { formatModelReasonMessage, getModelReasonCopy } from '../content/reasonCodes';
 import {
@@ -128,11 +138,76 @@ const initialPreflightState: PersonalModelsPreflightState = {
   },
 };
 
+type CreateModelWizardStep = 'name' | 'speech' | 'mixed' | 'plan' | 'review';
+
+const allCreateModelSteps: readonly CreateModelWizardStep[] = [
+  'name',
+  'speech',
+  'mixed',
+  'plan',
+  'review',
+];
+
+const createModelLanguageOptions = [
+  {
+    value: 'vietnamese',
+    label: 'Vietnamese',
+    description: 'Record Vietnamese prompts for this voice model.',
+  },
+  {
+    value: 'english',
+    label: 'English',
+    description: 'Record English prompts for this voice model.',
+  },
+  {
+    value: 'both',
+    label: 'Vietnamese and English',
+    description: 'Use a bilingual recording plan.',
+  },
+] as const;
+
+const createModelMixedOptions = [
+  {
+    value: 'include',
+    label: 'Include mixed speech',
+    description: 'Add prompts that combine Vietnamese and English.',
+  },
+  {
+    value: 'separate',
+    label: 'Keep languages separate',
+    description: 'Record Vietnamese and English prompts separately.',
+  },
+] as const;
+
+const createModelPlanOptions = [
+  {
+    value: 'quick',
+    label: 'Quick',
+    description: 'Shorter recording plan for a fast draft.',
+  },
+  {
+    value: 'recommended',
+    label: 'Recommended',
+    description: 'Balanced coverage for the best default result.',
+  },
+  {
+    value: 'extended',
+    label: 'Extended',
+    description: 'More recording coverage when you have time.',
+  },
+] as const;
+
 export function PersonalModelsPanel() {
+  const currentRoute = useAppRoute();
   const [state, setState] = useState<PersonalModelsUiState>(initialPersonalModelsState);
   const [preflight, setPreflight] = useState<PersonalModelsPreflightState>(initialPreflightState);
   const [importMode, setImportMode] = useState<EnrollmentProfileImportMode>('dedupe');
+  const [createModelDraft, setCreateModelDraft] = useState<CreateModelDraftV1>(() =>
+    loadCreateModelDraft(typeof window === 'undefined' ? null : window.localStorage),
+  );
+  const [createModelStep, setCreateModelStep] = useState<CreateModelWizardStep>('name');
   const modelLifecycleWorkerRef = useRef<Worker | null>(null);
+  const isCreateModelRoute = currentRoute.routeId === 'models-new';
   const primarySummary = useMemo(
     () =>
       state.summaries.find(
@@ -381,6 +456,43 @@ export function PersonalModelsPanel() {
     }
   }
 
+  function updateCreateModelDraft(
+    patch: Partial<
+      Pick<
+        CreateModelDraftV1,
+        'displayName' | 'languageTarget' | 'includeMixedSpeech' | 'recordingPlan'
+      >
+    >,
+  ) {
+    setCreateModelDraft((current) =>
+      createCreateModelDraft(
+        {
+          displayName: patch.displayName ?? current.displayName,
+          languageTarget: patch.languageTarget ?? current.languageTarget,
+          includeMixedSpeech: patch.includeMixedSpeech ?? current.includeMixedSpeech,
+          recordingPlan: patch.recordingPlan ?? current.recordingPlan,
+        },
+        new Date(),
+      ),
+    );
+  }
+
+  function moveCreateModelStep(direction: 'next' | 'back') {
+    const steps = getCreateModelSteps(createModelDraft);
+    const currentIndex = steps.indexOf(createModelStep);
+    const nextIndex =
+      direction === 'next'
+        ? Math.min(currentIndex + 1, steps.length - 1)
+        : Math.max(currentIndex - 1, 0);
+    setCreateModelStep(steps[nextIndex] ?? 'name');
+  }
+
+  function handleStartRecording() {
+    if (typeof window === 'undefined') return;
+    saveCreateModelDraft(window.localStorage, createModelDraft);
+    window.dispatchEvent(new Event('speech-create-model-draft-updated'));
+  }
+
   async function enableProfile(profileId: string) {
     await runLifecycleAction('activating', formatModelReasonMessage('model-enable-started'), () =>
       enableEnrollmentProfile({ profileId }),
@@ -594,136 +706,154 @@ export function PersonalModelsPanel() {
         />
       </div>
 
-      <section className="model-list-panel" aria-labelledby="voice-models-list-title">
-        <div className="model-list-header">
-          <div>
-            <p className="eyebrow">Voice models</p>
-            <h3 id="voice-models-list-title">Models</h3>
-          </div>
-          <div className="model-list-toolbar" aria-label="Model list actions">
-            <a className="button secondary" href="#microphone-title">
-              New
-            </a>
-            <label className="secondary file-button">
-              Import
-              <input
-                type="file"
-                accept="application/json,.json,.speechprofile"
-                onChange={(event) => void importProfile(event)}
-                disabled={isBusy}
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="model-import-options" aria-label="Model import options">
-          <label className="select-field compact-select">
-            <span>Import behavior</span>
-            <select
-              value={importMode}
-              onChange={(event) =>
-                setImportMode(event.currentTarget.value as EnrollmentProfileImportMode)
-              }
-              disabled={isBusy}
-            >
-              <option value="dedupe">Dedupe</option>
-              <option value="import-as-new">Import as new</option>
-              <option value="replace">Replace match</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void refreshPersonalModels()}
-            disabled={isBusy}
-          >
-            Refresh
-          </button>
-        </div>
-
-        <div className="model-list" role="list" aria-label="Personal voice model rows">
-          {cardRows.map((row) => (
-            <article
-              className="model-list-row"
-              role="listitem"
-              key={row.profileId ?? 'generic-fallback'}
-            >
-              <div className="model-list-main">
-                <h4>{row.row.displayName}</h4>
-                <div className="model-list-status" aria-label={`${row.row.displayName} status`}>
-                  <span className={row.card.active ? 'status-chip success' : 'status-chip'}>
-                    {row.row.activeLabel}
-                  </span>
-                  <span className="status-chip">{row.row.statusLabel}</span>
-                </div>
+      {isCreateModelRoute ? (
+        <CreateModelFlowPanel
+          draft={createModelDraft}
+          onBack={() => moveCreateModelStep('back')}
+          onNext={() => moveCreateModelStep('next')}
+          onStartRecording={handleStartRecording}
+          onStepChange={setCreateModelStep}
+          onUpdateDraft={updateCreateModelDraft}
+          step={createModelStep}
+        />
+      ) : (
+        <>
+          <section className="model-list-panel" aria-labelledby="voice-models-list-title">
+            <div className="model-list-header">
+              <div>
+                <p className="eyebrow">Voice models</p>
+                <h3 id="voice-models-list-title">Models</h3>
               </div>
-              <div className="model-list-meta" aria-label={`${row.row.displayName} summary`}>
-                <span>{row.card.storage.acceptedUtterances.toString()} recordings</span>
-                <span>{formatDurationSeconds(row.card.storage.acceptedSeconds)}</span>
-                <span>{row.card.activeVocabulary.activeEntryCount.toString()} vocabulary</span>
-              </div>
-              <div className="model-list-actions">
-                <ModelRowPrimaryAction
-                  row={row}
-                  isBusy={isBusy}
-                  onEnable={() =>
-                    row.profileId === null ? undefined : void enableProfile(row.profileId)
-                  }
-                />
-                {row.profileId === null ? null : (
-                  <MenuButton
-                    label="More"
-                    menuLabel={`${row.row.displayName} model actions`}
-                    buttonSize="sm"
-                    items={createModelRowMenuItems({
-                      profileId: row.profileId,
-                      displayName: row.row.displayName,
-                      active: row.card.active,
-                      canExport: row.card.actions.canExport,
-                      canDelete: row.card.actions.canDelete,
-                      isBusy,
-                      previousProfileAvailable: state.activeState?.previousProfileId !== undefined,
-                      onRename: () => void renameProfile(row.profileId, row.row.displayName),
-                      onDuplicate: () => void duplicateProfile(row.profileId, row.row.displayName),
-                      onExport: () => void exportProfile(row.profileId),
-                      onDeactivate: () => void deactivateProfile(row.profileId),
-                      onRollback: () => void rollbackProfile(),
-                      onDelete: () => void deleteProfile(row.profileId, row.row.displayName),
-                    })}
+              <div className="model-list-toolbar" aria-label="Model list actions">
+                <a className="button secondary" href="/models/new">
+                  New
+                </a>
+                <label className="secondary file-button">
+                  Import
+                  <input
+                    type="file"
+                    accept="application/json,.json,.speechprofile"
+                    onChange={(event) => void importProfile(event)}
+                    disabled={isBusy}
                   />
-                )}
+                </label>
               </div>
-            </article>
-          ))}
-        </div>
-      </section>
+            </div>
 
-      <PersonalModelDetailPanel
-        activeState={state.activeState}
-        backendKind={state.backendKind}
-        capabilityChecks={capabilityChecks}
-        capabilityError={preflight.capabilityError}
-        card={primaryCard}
-        detailBlockers={detailBlockers}
-        detailSummary={detailSummary}
-        isBusy={isBusy}
-        modelBackendKind={preflight.modelBackendKind}
-        modelError={preflight.modelError}
-        modelStatus={preflight.modelStatus}
-        onDeactivate={() =>
-          primarySummary === null ? undefined : void deactivateProfile(primarySummary.profile.id)
-        }
-        onEnable={() =>
-          primarySummary === null ? undefined : void enableProfile(primarySummary.profile.id)
-        }
-        onRunRuntimeSelfTest={() => void runRuntimeSelfTest()}
-        persistentStorageGranted={state.persistentStorageGranted}
-        readinessReport={readinessReport}
-        readinessTasks={readinessTasks}
-        review={activationReview}
-        runtimeSelfTest={preflight.runtimeSelfTest}
-        trainingCompanion={trainingCompanion}
-      />
+            <div className="model-import-options" aria-label="Model import options">
+              <label className="select-field compact-select">
+                <span>Import behavior</span>
+                <select
+                  value={importMode}
+                  onChange={(event) =>
+                    setImportMode(event.currentTarget.value as EnrollmentProfileImportMode)
+                  }
+                  disabled={isBusy}
+                >
+                  <option value="dedupe">Dedupe</option>
+                  <option value="import-as-new">Import as new</option>
+                  <option value="replace">Replace match</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void refreshPersonalModels()}
+                disabled={isBusy}
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div className="model-list" role="list" aria-label="Personal voice model rows">
+              {cardRows.map((row) => (
+                <article
+                  className="model-list-row"
+                  role="listitem"
+                  key={row.profileId ?? 'generic-fallback'}
+                >
+                  <div className="model-list-main">
+                    <h4>{row.row.displayName}</h4>
+                    <div className="model-list-status" aria-label={`${row.row.displayName} status`}>
+                      <span className={row.card.active ? 'status-chip success' : 'status-chip'}>
+                        {row.row.activeLabel}
+                      </span>
+                      <span className="status-chip">{row.row.statusLabel}</span>
+                    </div>
+                  </div>
+                  <div className="model-list-meta" aria-label={`${row.row.displayName} summary`}>
+                    <span>{row.card.storage.acceptedUtterances.toString()} recordings</span>
+                    <span>{formatDurationSeconds(row.card.storage.acceptedSeconds)}</span>
+                    <span>{row.card.activeVocabulary.activeEntryCount.toString()} vocabulary</span>
+                  </div>
+                  <div className="model-list-actions">
+                    <ModelRowPrimaryAction
+                      row={row}
+                      isBusy={isBusy}
+                      onEnable={() =>
+                        row.profileId === null ? undefined : void enableProfile(row.profileId)
+                      }
+                    />
+                    {row.profileId === null ? null : (
+                      <MenuButton
+                        label="More"
+                        menuLabel={`${row.row.displayName} model actions`}
+                        buttonSize="sm"
+                        items={createModelRowMenuItems({
+                          profileId: row.profileId,
+                          displayName: row.row.displayName,
+                          active: row.card.active,
+                          canExport: row.card.actions.canExport,
+                          canDelete: row.card.actions.canDelete,
+                          isBusy,
+                          previousProfileAvailable:
+                            state.activeState?.previousProfileId !== undefined,
+                          onRename: () => void renameProfile(row.profileId, row.row.displayName),
+                          onDuplicate: () =>
+                            void duplicateProfile(row.profileId, row.row.displayName),
+                          onExport: () => void exportProfile(row.profileId),
+                          onDeactivate: () => void deactivateProfile(row.profileId),
+                          onRollback: () => void rollbackProfile(),
+                          onDelete: () => void deleteProfile(row.profileId, row.row.displayName),
+                        })}
+                      />
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <PersonalModelDetailPanel
+            activeState={state.activeState}
+            backendKind={state.backendKind}
+            capabilityChecks={capabilityChecks}
+            capabilityError={preflight.capabilityError}
+            card={primaryCard}
+            detailBlockers={detailBlockers}
+            detailSummary={detailSummary}
+            isBusy={isBusy}
+            modelBackendKind={preflight.modelBackendKind}
+            modelError={preflight.modelError}
+            modelStatus={preflight.modelStatus}
+            onDeactivate={() =>
+              primarySummary === null
+                ? undefined
+                : void deactivateProfile(primarySummary.profile.id)
+            }
+            onEnable={() =>
+              primarySummary === null ? undefined : void enableProfile(primarySummary.profile.id)
+            }
+            onRunRuntimeSelfTest={() => void runRuntimeSelfTest()}
+            persistentStorageGranted={state.persistentStorageGranted}
+            readinessReport={readinessReport}
+            readinessTasks={readinessTasks}
+            review={activationReview}
+            runtimeSelfTest={preflight.runtimeSelfTest}
+            trainingCompanion={trainingCompanion}
+          />
+        </>
+      )}
 
       <p
         className={state.status === 'error' ? 'status-message error-message' : 'status-message'}
@@ -737,6 +867,182 @@ export function PersonalModelsPanel() {
       </p>
     </section>
   );
+}
+
+function CreateModelFlowPanel({
+  draft,
+  onBack,
+  onNext,
+  onStartRecording,
+  onStepChange,
+  onUpdateDraft,
+  step,
+}: {
+  readonly draft: CreateModelDraftV1;
+  readonly onBack: () => void;
+  readonly onNext: () => void;
+  readonly onStartRecording: () => void;
+  readonly onStepChange: (step: CreateModelWizardStep) => void;
+  readonly onUpdateDraft: (
+    patch: Partial<
+      Pick<
+        CreateModelDraftV1,
+        'displayName' | 'languageTarget' | 'includeMixedSpeech' | 'recordingPlan'
+      >
+    >,
+  ) => void;
+  readonly step: CreateModelWizardStep;
+}) {
+  const steps = getCreateModelSteps(draft);
+  const stepIndex = Math.max(steps.indexOf(step), 0);
+  const currentStep = steps[stepIndex] ?? 'name';
+  const review = buildCreateModelReview(draft);
+  const atFirstStep = stepIndex === 0;
+  const atReviewStep = currentStep === 'review';
+  const nameIsReady = draft.displayName.trim().length > 0;
+
+  return (
+    <section className="create-model-flow" aria-labelledby="create-model-flow-title">
+      <div className="create-model-flow__header">
+        <a className="button secondary" href="/models">
+          Back to models
+        </a>
+        <p className="eyebrow">New voice model</p>
+        <h3 id="create-model-flow-title">{getCreateModelStepTitle(currentStep)}</h3>
+        <p className="create-model-flow__progress">
+          Step {(stepIndex + 1).toString()} of {steps.length.toString()}
+        </p>
+      </div>
+
+      <div className="create-model-flow__card" data-step={currentStep}>
+        {currentStep === 'name' ? (
+          <label className="create-model-flow__field" htmlFor="create-model-name">
+            <span>Name this voice model</span>
+            <input
+              id="create-model-name"
+              maxLength={80}
+              onChange={(event) => onUpdateDraft({ displayName: event.currentTarget.value })}
+              type="text"
+              value={draft.displayName}
+            />
+          </label>
+        ) : null}
+
+        {currentStep === 'speech' ? (
+          <RadioGroup
+            label="Which speech should it learn?"
+            name="create-model-language-target"
+            onValueChange={(value) =>
+              onUpdateDraft({ languageTarget: value as CreateModelLanguageTargetV1 })
+            }
+            options={createModelLanguageOptions}
+            value={draft.languageTarget}
+          />
+        ) : null}
+
+        {currentStep === 'mixed' ? (
+          <RadioGroup
+            label="Include mixed Vietnamese and English?"
+            name="create-model-mixed-speech"
+            onValueChange={(value) => onUpdateDraft({ includeMixedSpeech: value === 'include' })}
+            options={createModelMixedOptions}
+            value={draft.includeMixedSpeech ? 'include' : 'separate'}
+          />
+        ) : null}
+
+        {currentStep === 'plan' ? (
+          <RadioGroup
+            label="Choose a recording plan"
+            name="create-model-recording-plan"
+            onValueChange={(value) =>
+              onUpdateDraft({ recordingPlan: value as CreateModelRecordingPlanV1 })
+            }
+            options={createModelPlanOptions}
+            value={draft.recordingPlan}
+          />
+        ) : null}
+
+        {currentStep === 'review' ? <CreateModelReview review={review} /> : null}
+      </div>
+
+      <details className="create-model-flow__details">
+        <summary>How voice models work</summary>
+        <p>
+          Speech stays on this device. The app adapts the shared speech model to your recordings
+          instead of sending audio to a service.
+        </p>
+      </details>
+
+      <div className="create-model-flow__actions" aria-label="Create voice model actions">
+        <button type="button" className="secondary" onClick={onBack} disabled={atFirstStep}>
+          Back
+        </button>
+        {steps.map((candidateStep) => (
+          <button
+            aria-current={candidateStep === currentStep ? 'step' : undefined}
+            className="secondary create-model-flow__step-dot"
+            key={candidateStep}
+            onClick={() => onStepChange(candidateStep)}
+            type="button"
+          >
+            <span className="sr-only">{getCreateModelStepTitle(candidateStep)}</span>
+          </button>
+        ))}
+        {atReviewStep ? (
+          <a className="button" href={review.startRoute} onClick={onStartRecording}>
+            Start recording
+          </a>
+        ) : (
+          <button type="button" onClick={onNext} disabled={currentStep === 'name' && !nameIsReady}>
+            Continue
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CreateModelReview({
+  review,
+}: {
+  readonly review: ReturnType<typeof buildCreateModelReview>;
+}) {
+  return (
+    <div className="create-model-flow__review" aria-label="New voice model review">
+      <dl>
+        <div>
+          <dt>Name</dt>
+          <dd>{review.name}</dd>
+        </div>
+        <div>
+          <dt>Speech</dt>
+          <dd>{review.speech}</dd>
+        </div>
+        <div>
+          <dt>Mixed speech</dt>
+          <dd>{review.mixedSpeech}</dd>
+        </div>
+        <div>
+          <dt>Recording plan</dt>
+          <dd>{review.plan}</dd>
+        </div>
+      </dl>
+      <p className="status-message">Recording starts next. Progress is saved on this device.</p>
+    </div>
+  );
+}
+
+function getCreateModelSteps(draft: CreateModelDraftV1): readonly CreateModelWizardStep[] {
+  if (draft.languageTarget === 'both') return allCreateModelSteps;
+  return allCreateModelSteps.filter((step) => step !== 'mixed');
+}
+
+function getCreateModelStepTitle(step: CreateModelWizardStep): string {
+  if (step === 'name') return 'Name this voice model';
+  if (step === 'speech') return 'Which speech should it learn?';
+  if (step === 'mixed') return 'Include mixed Vietnamese and English?';
+  if (step === 'plan') return 'Choose a recording plan';
+  return 'Review and start recording';
 }
 
 interface ModelDetailBlocker {

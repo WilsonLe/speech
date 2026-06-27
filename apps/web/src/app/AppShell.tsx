@@ -38,6 +38,7 @@ import {
   createModelLifecycleWorker,
   type ModelLifecycleResponse,
 } from '../workers/model-lifecycle-client';
+import { AppRouteContext } from './appRouteContext';
 
 function getCurrentRoute(): ResolvedAppRoute {
   if (typeof window === 'undefined') {
@@ -272,9 +273,11 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
         activeDestination={activeDestination}
         onDestinationClick={handleDestinationClick}
       />
-      <main id="app-main" className="app-shell" tabIndex={-1}>
-        {children}
-      </main>
+      <AppRouteContext.Provider value={currentRoute}>
+        <main id="app-main" className="app-shell" tabIndex={-1}>
+          {children}
+        </main>
+      </AppRouteContext.Provider>
     </div>
   );
 }
