@@ -481,7 +481,7 @@ export function PersonalModelsPanel() {
   }
 
   return (
-    <section className="panel personal-models" aria-labelledby="personal-models-title">
+    <section className="panel personal-models" id="models" aria-labelledby="personal-models-title">
       <div className="section-heading">
         <p className="eyebrow">Personal models</p>
         <h2 id="personal-models-title">Profile cards and local lifecycle</h2>
