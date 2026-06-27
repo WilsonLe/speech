@@ -78,21 +78,19 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Vocabulary sets' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Voice models' })).toBeVisible();
   await expect(page.getByLabel('Personal Models navigation')).toContainText('Record enrollment');
-  await expect(page.getByLabel('Personal model readiness summary')).toContainText('Capabilities', {
-    timeout: 10_000,
-  });
-  await expect(page.getByLabel('Personal model capability preflight checks')).toContainText(
-    'Independent capability checks',
-  );
-  await expect(page.getByLabel('Training companion state')).toContainText('Companion status', {
-    timeout: 10_000,
-  });
-  await expect(page.getByLabel('Missing recording tasks')).toContainText(
+  const modelDetail = page.locator('section.model-detail-panel');
+  await expect(modelDetail).toContainText('Recording coverage', { timeout: 10_000 });
+  await expect(modelDetail).toContainText('Quality results');
+  await expect(modelDetail).toContainText('Compatibility');
+  await expect(modelDetail).toContainText('Storage');
+  await expect(modelDetail).toContainText('Technical details');
+  await modelDetail.getByRole('button', { name: 'Compatibility' }).click();
+  await expect(modelDetail.getByLabel('Compatibility checks')).toContainText('Secure context');
+  await expect(modelDetail.getByLabel('Compatibility checks')).toContainText('Persistent storage');
+  await modelDetail.getByRole('button', { name: 'Recording coverage' }).click();
+  await expect(modelDetail.getByLabel('Recording coverage tasks')).toContainText(
     'Record accepted enrollment takes',
   );
-  await expect(page.getByLabel('Activation gate summary')).toContainText('generic fallback', {
-    timeout: 10_000,
-  });
   await expect(page.getByLabel('Personal voice model rows')).toContainText('Generic', {
     timeout: 10_000,
   });

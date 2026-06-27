@@ -86,7 +86,9 @@ describe('Accordion primitive', () => {
       <Accordion defaultOpenIds={['coverage']} headingLevel={2} items={accordionItems} />,
     );
 
+    expect(html).toContain('class="speech-accordion__item"');
     expect(html).toContain('<h2 class="speech-accordion__heading"');
+    expect(html).toContain('aria-labelledby=');
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-controls=');

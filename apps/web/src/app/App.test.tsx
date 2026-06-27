@@ -53,7 +53,12 @@ describe('App', () => {
     expect(html).toContain('id="models"');
     expect(html).toContain('Voice models');
     expect(html).toContain('Personal Models navigation');
-    expect(html).toContain('Browser personal-model readiness');
+    expect(html).toContain('Model detail');
+    expect(html).toContain('Recording coverage');
+    expect(html).toContain('Quality results');
+    expect(html).toContain('Compatibility');
+    expect(html).toContain('Storage');
+    expect(html).toContain('Technical details');
     expect(html).toContain('Comparison gates and rollback');
     expect(html).toContain('Personal voice model rows');
     expect(html).toContain('Model import options');
