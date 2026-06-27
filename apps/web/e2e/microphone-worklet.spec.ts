@@ -14,33 +14,37 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
     .poll(async () => readMetric(metrics, 'Captured samples'), { timeout: 10_000 })
     .toBeGreaterThan(0);
 
-  const calibration = page.getByLabel('Enrollment calibration guidance');
-  await expect(calibration).toContainText('Calibration and voice guidance');
-  await calibration.getByRole('button', { name: /room-noise sample/i }).click();
-  await calibration.getByRole('button', { name: /normal baseline/i }).click();
-  await calibration.getByLabel('Voice condition').selectOption('projected');
-  await expect(calibration).toContainText('Projected means loud and clear');
-  await expect(calibration).toContainText('Do not strain');
-
   const recorder = page.getByLabel('Enrollment recorder', { exact: true });
   const profileStore = page.getByLabel('Enrollment profile storage');
-  await expect(recorder).toContainText('Enrollment recorder and quality analyzer');
+  await expect(recorder).toContainText('Read this prompt');
+  await expect(recorder).toContainText('1 of 24');
+  await expect(recorder.getByRole('button', { name: /^Record$/i })).toBeEnabled();
+  await recorder.getByText('Recording details', { exact: true }).click();
+
+  const calibration = page.getByLabel('Enrollment calibration guidance');
+  await expect(calibration).toContainText('Recording setup');
+  await calibration.getByRole('button', { name: /room noise/i }).click();
+  await calibration.getByRole('button', { name: /normal voice baseline/i }).click();
+  await recorder.getByLabel('Voice condition').selectOption('projected');
+  await expect(recorder).toContainText('Loud');
+  await expect(recorder).toContainText('Project your voice without straining');
+
   await expect(profileStore).toContainText('ready', { timeout: 10_000 });
   await deleteStoredProfileIfPresent(profileStore);
 
-  await recorder.getByRole('button', { name: /start enrollment take/i }).click();
-  await expect(recorder).toContainText('recording');
+  await recorder.getByRole('button', { name: /^Record$/i }).click();
+  await expect(recorder).toContainText('Recording');
   await expect
     .poll(async () => readMetric(recorder, 'Take samples'), { timeout: 10_000 })
     .toBeGreaterThan(0);
-  await recorder.getByRole('button', { name: /stop and analyze take/i }).click();
+  await recorder.getByRole('button', { name: /^Stop$/i }).click();
   await expect(page.getByLabel('Enrollment quality report')).toContainText('Quality report', {
     timeout: 10_000,
   });
   await expect(page.getByLabel('Enrollment quality report')).toContainText(
     'No audio or transcript text in report',
   );
-  const acceptAndSave = recorder.getByRole('button', { name: /manually accept and save take/i });
+  const acceptAndSave = recorder.getByRole('button', { name: /^Accept$/i });
   await expect(acceptAndSave).toBeEnabled();
   await acceptAndSave.click();
   await expect(profileStore).toContainText(/Accepted take saved/i, { timeout: 10_000 });
@@ -60,7 +64,8 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await expect(readiness).toContainText('Aggregate counts only');
   await profileStore.getByRole('button', { name: /enable local profile/i }).click();
   await expect(profileStore).toContainText(/Profile enabled locally/i, { timeout: 10_000 });
-  await expect(profileStore).toContainText('local-enrollment-profile');
+  await expect(profileStore).toContainText('active locally');
+  await expect(profileStore).not.toContainText('local-enrollment-profile');
   const downloadPromise = page.waitForEvent('download');
   await profileStore.getByRole('button', { name: /export sensitive profile package/i }).click();
   const exportedPath = await requireDownloadPath(await downloadPromise);
@@ -69,6 +74,8 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   });
 
   await page.reload();
+  const resumedRecorder = page.getByLabel('Enrollment recorder', { exact: true });
+  await resumedRecorder.getByText('Recording details', { exact: true }).click();
   const resumedProfileStore = page.getByLabel('Enrollment profile storage');
   await expect(resumedProfileStore).toContainText(/resumed accepted enrollment takes/i, {
     timeout: 10_000,
