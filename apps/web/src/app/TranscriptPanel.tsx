@@ -6,6 +6,7 @@ import {
   type PcmCaptureWorkletController,
   type PcmCaptureWorkletMessage,
 } from '@speech/audio';
+import { MenuButton, type MenuButtonItem } from '@speech/ui';
 import pcmCaptureWorkletUrl from '../worklets/pcm-capture.worklet.ts?worker&url';
 import {
   buildTranscriptDownloadText,
@@ -35,10 +36,10 @@ interface TranscriptSettingsState {
 }
 
 const languageModeLabels: Record<SpeechLanguageMode, string> = {
-  vi: 'Vietnamese',
+  vi: 'Tiếng Việt',
   en: 'English',
-  auto: 'Auto/code-switch',
-  mixed: 'Mixed/code-switch',
+  auto: 'Auto',
+  mixed: 'Mixed',
 };
 
 const defaultTranscriptSettings: TranscriptSettingsState = {
@@ -58,7 +59,7 @@ export function TranscriptPanel() {
     initialTranscriptWorkspaceState,
   );
   const [settings, setSettings] = useState<TranscriptSettingsState>(defaultTranscriptSettings);
-  const [copyStatus, setCopyStatus] = useState('Transcript has not been copied yet.');
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
   const updateWorkspace = useCallback(
     (updater: (current: TranscriptWorkspaceState) => TranscriptWorkspaceState) => {
@@ -218,7 +219,7 @@ export function TranscriptPanel() {
     if (!hasTranscriptText) return;
     try {
       await navigator.clipboard.writeText(transcriptText);
-      setCopyStatus('Transcript copied to clipboard locally.');
+      setCopyStatus('Copied.');
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : 'Clipboard copy failed.');
     }
@@ -249,274 +250,293 @@ export function TranscriptPanel() {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
+  function clearCommittedTranscript(actionLabel: 'New transcript' | 'Clear transcript') {
+    if (!canClear) return;
+    if (
+      !window.confirm(`${actionLabel}? This removes the current transcript text from this page.`)
+    ) {
+      return;
+    }
+    updateWorkspace(clearTranscript);
+    setCopyStatus(null);
+  }
+
+  const transcriptActionItems: readonly MenuButtonItem[] = hasTranscriptText
+    ? [
+        {
+          id: 'new-transcript',
+          label: 'New transcript',
+          disabled: !canClear,
+          onSelect: () => clearCommittedTranscript('New transcript'),
+        },
+        { id: 'download-transcript', label: 'Download text…', onSelect: downloadTranscript },
+        {
+          id: 'clear-transcript',
+          label: 'Clear transcript',
+          destructive: true,
+          disabled: !canClear,
+          onSelect: () => clearCommittedTranscript('Clear transcript'),
+        },
+      ]
+    : [];
+
   return (
-    <section className="panel transcript" id="dictate" aria-labelledby="transcript-title">
-      <div className="transcript-layout">
-        <div className="section-heading transcript-heading">
-          <p className="eyebrow">Transcription workspace</p>
-          <h2 id="transcript-title">Focused push-to-talk dictation</h2>
-          <p>
-            Hold the control or press {pushToTalkKeyLabel} while this PWA is focused. Audio stays in
-            the local capture path; worker ASR output will replace the provisional suffix as model
-            integration progresses.
-          </p>
-        </div>
-
-        <div className="transcript-status-grid" aria-label="Transcript runtime state">
-          <StatusPill label="Model" value="Model runtime not active" tone="neutral" />
-          <StatusPill
-            label="Microphone"
-            value={formatCaptureStatus(workspace.status)}
-            tone={statusTone(workspace.status)}
-          />
-          <StatusPill
-            label="Mode"
-            value={formatModeStatus(workspace.languageDiagnostics)}
-            tone={workspace.languageDiagnostics.fallbackReason ? 'warn' : 'neutral'}
-          />
-        </div>
-      </div>
-
-      <div className="transcript-display">
-        <label className="transcript-editor-label" htmlFor="committed-transcript-text">
-          Transcript output — committed text
-        </label>
-        <textarea
-          id="committed-transcript-text"
-          className="transcript-editor"
-          value={workspace.committed}
-          placeholder="Transcript will appear here."
-          onChange={(event) => {
-            const { value } = event.currentTarget;
-            updateWorkspace((current) => editTranscriptCommittedText(current, value));
-            setCopyStatus('Transcript has local edits that have not been copied yet.');
-          }}
-          spellCheck="true"
-        />
-        {displayProvisional.length > 0 ? (
-          <p
-            className="transcript-provisional"
-            aria-label="Provisional transcript suffix"
-            aria-live="polite"
+    <section
+      className="panel transcript dictate-workspace"
+      id="dictate"
+      aria-labelledby="transcript-title"
+    >
+      <div className="dictate-toolbar" aria-label="Dictate context controls">
+        <label className="dictate-toolbar__field" htmlFor="language-mode-select">
+          <span>Language</span>
+          <select
+            id="language-mode-select"
+            value={settings.languageMode}
+            onChange={(event) => {
+              const value = event.currentTarget.value as SpeechLanguageMode;
+              setSettings((current) => ({ ...current, languageMode: value }));
+              updateWorkspace((current) => setTranscriptLanguageMode(current, value));
+            }}
           >
-            {displayProvisional}
-          </p>
+            <option value="auto">Auto</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="en">English</option>
+            <option value="mixed">Mixed</option>
+          </select>
+        </label>
+        <a className="dictate-toolbar__link" href="/models">
+          <span>Model</span>
+          <strong>Generic</strong>
+        </a>
+        <a className="dictate-toolbar__link" href="/vocabulary">
+          <span>Vocabulary</span>
+          <strong>Manage</strong>
+        </a>
+        {hasTranscriptText ? (
+          <button
+            type="button"
+            className="secondary dictate-copy"
+            onClick={() => void copyTranscript()}
+          >
+            Copy
+          </button>
+        ) : null}
+        {transcriptActionItems.length > 0 ? (
+          <MenuButton
+            buttonSize="sm"
+            className="dictate-actions-menu"
+            items={transcriptActionItems}
+            label="Transcript actions"
+            menuLabel="Transcript actions"
+            placement="bottom-end"
+          />
         ) : null}
       </div>
 
-      <div className="transcript-controls" aria-label="Transcript controls">
-        <button
-          type="button"
-          className="push-to-talk-button"
-          aria-label="Hold to talk"
-          aria-pressed={isPressing}
-          onPointerDown={(event) => {
-            event.preventDefault();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            void startPushToTalk();
-          }}
-          onPointerUp={(event) => {
-            event.preventDefault();
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              event.currentTarget.releasePointerCapture(event.pointerId);
-            }
-            void stopPushToTalk();
-          }}
-          onPointerCancel={(event) => {
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              event.currentTarget.releasePointerCapture(event.pointerId);
-            }
-            void stopPushToTalk();
-          }}
-          disabled={workspace.status === 'stopping'}
-        >
-          {isPressing ? 'Release to finalize' : 'Hold to talk'}
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => void copyTranscript()}
-          disabled={!hasTranscriptText}
-        >
-          Copy
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={downloadTranscript}
-          disabled={!hasTranscriptText}
-        >
-          Download .txt
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => updateWorkspace(clearTranscript)}
-          disabled={!canClear}
-        >
-          Clear
-        </button>
+      <div className="dictate-stage">
+        <div className="dictate-stage__heading">
+          <h2 id="transcript-title">Dictate</h2>
+          <p className="sr-only" id="dictate-shortcut-help">
+            Press and hold Space outside form controls to record. Release to stop recording.
+          </p>
+        </div>
+
+        <div className="transcript-display dictate-transcript-area">
+          <label className="sr-only" htmlFor="committed-transcript-text">
+            Transcript
+          </label>
+          <textarea
+            id="committed-transcript-text"
+            className="transcript-editor"
+            value={workspace.committed}
+            placeholder="Hold to speak"
+            aria-describedby="dictate-shortcut-help"
+            onChange={(event) => {
+              const { value } = event.currentTarget;
+              updateWorkspace((current) => editTranscriptCommittedText(current, value));
+              setCopyStatus(null);
+            }}
+            spellCheck="true"
+          />
+          {displayProvisional.length > 0 ? (
+            <p
+              className="transcript-provisional"
+              aria-label="Provisional transcript suffix"
+              aria-live="polite"
+            >
+              {displayProvisional}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="dictate-recording-bar" aria-label="Recording control">
+          <button
+            type="button"
+            className="push-to-talk-button"
+            aria-label={isPressing ? 'Release to stop recording' : 'Hold to speak'}
+            aria-pressed={isPressing}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              void startPushToTalk();
+            }}
+            onPointerUp={(event) => {
+              event.preventDefault();
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+              void stopPushToTalk();
+            }}
+            onPointerCancel={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+              void stopPushToTalk();
+            }}
+            disabled={workspace.status === 'stopping'}
+          >
+            {isPressing ? 'Stop' : 'Hold to speak'}
+          </button>
+          {workspace.status !== 'idle' ? (
+            <span
+              className="dictate-state"
+              data-tone={statusTone(workspace.status)}
+              aria-live="polite"
+            >
+              {formatCaptureStatus(workspace.status)}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {workspace.errorMessage ? (
         <p role="alert" className="status-message error-message">
-          {workspace.errorMessage} Release the push-to-talk control, verify microphone permission,
-          and try again.
+          {workspace.errorMessage} Check microphone permission and try again.
         </p>
       ) : null}
 
-      <p className="status-message" aria-live="polite">
-        {workspace.statusMessage}
-      </p>
-      <p className="status-message" aria-live="polite">
-        {copyStatus}
-      </p>
+      {workspace.status !== 'idle' && !workspace.errorMessage ? (
+        <p className="status-message" aria-live="polite">
+          {workspace.statusMessage}
+        </p>
+      ) : null}
+      {copyStatus ? (
+        <p className="status-message" aria-live="polite">
+          {copyStatus}
+        </p>
+      ) : null}
 
-      <div
-        className="transcript-settings-privacy"
-        aria-label="Transcript settings, language diagnostics, and privacy"
-      >
-        <fieldset className="transcript-settings-card">
-          <legend>Transcript settings</legend>
-          <label htmlFor="language-mode-select">
-            Recognition mode
-            <select
-              id="language-mode-select"
-              value={settings.languageMode}
-              onChange={(event) => {
-                const value = event.currentTarget.value as SpeechLanguageMode;
-                setSettings((current) => ({ ...current, languageMode: value }));
-                updateWorkspace((current) => setTranscriptLanguageMode(current, value));
-              }}
-            >
-              <option value="vi">Vietnamese</option>
-              <option value="en">English</option>
-              <option value="auto">Auto/code-switch</option>
-              <option value="mixed">Mixed/code-switch</option>
-            </select>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.formattingEnabled}
-              onChange={(event) => {
-                const { checked } = event.currentTarget;
-                setSettings((current) => ({ ...current, formattingEnabled: checked }));
-              }}
-            />
-            Enable final formatting when formatter integration is active
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.spokenCommandsEnabled}
-              onChange={(event) => {
-                const { checked } = event.currentTarget;
-                setSettings((current) => ({ ...current, spokenCommandsEnabled: checked }));
-              }}
-            />
-            Enable spoken commands only after explicit opt-in
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.includeTimingMetadataInDownload}
-              onChange={(event) => {
-                const { checked } = event.currentTarget;
-                setSettings((current) => ({
-                  ...current,
-                  includeTimingMetadataInDownload: checked,
-                }));
-              }}
-            />
-            Include local timing metadata in downloaded .txt files
-          </label>
-        </fieldset>
-
-        <article
-          className="transcript-language-card"
-          aria-labelledby="transcript-language-diagnostics-title"
+      <details className="dictate-details">
+        <summary>Dictation details</summary>
+        <div
+          className="transcript-settings-privacy"
+          aria-label="Transcript settings, language diagnostics, and privacy"
         >
-          <h3 id="transcript-language-diagnostics-title">Language-span diagnostics</h3>
-          <dl aria-label="Language-span diagnostics">
-            <div>
-              <dt>Requested mode</dt>
-              <dd>{languageModeLabels[workspace.languageDiagnostics.requestedMode]}</dd>
-            </div>
-            <div>
-              <dt>Effective mode</dt>
-              <dd>{languageModeLabels[workspace.languageDiagnostics.effectiveMode]}</dd>
-            </div>
-            <div>
-              <dt>Spans</dt>
-              <dd>{formatLanguageSpanSummary(workspace.languageDiagnostics)}</dd>
-            </div>
-          </dl>
-          <p>
-            {workspace.languageDiagnostics.fallbackReason ??
-              'No ASR language spans have been emitted yet. Future partial/final events will update this local diagnostic without telemetry.'}
-          </p>
-        </article>
+          <fieldset className="transcript-settings-card">
+            <legend>Transcript options</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={settings.formattingEnabled}
+                onChange={(event) => {
+                  const { checked } = event.currentTarget;
+                  setSettings((current) => ({ ...current, formattingEnabled: checked }));
+                }}
+              />
+              Enable final formatting when available
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={settings.spokenCommandsEnabled}
+                onChange={(event) => {
+                  const { checked } = event.currentTarget;
+                  setSettings((current) => ({ ...current, spokenCommandsEnabled: checked }));
+                }}
+              />
+              Enable spoken commands
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={settings.includeTimingMetadataInDownload}
+                onChange={(event) => {
+                  const { checked } = event.currentTarget;
+                  setSettings((current) => ({
+                    ...current,
+                    includeTimingMetadataInDownload: checked,
+                  }));
+                }}
+              />
+              Include timing in downloaded text
+            </label>
+          </fieldset>
 
-        <article className="transcript-privacy-card" aria-labelledby="transcript-privacy-title">
-          <h3 id="transcript-privacy-title">Privacy and export</h3>
-          <ul>
-            <li>
-              Copy uses the browser Clipboard API and never sends transcript text to a server.
-            </li>
-            <li>Download creates a local text file from the committed transcript only.</li>
-            <li>Provisional text remains visual guidance and is excluded from copy/download.</li>
-            <li>Network use is limited to app updates and explicit model lifecycle actions.</li>
-          </ul>
-        </article>
-      </div>
+          <article
+            className="transcript-language-card"
+            aria-labelledby="transcript-language-diagnostics-title"
+          >
+            <h3 id="transcript-language-diagnostics-title">Language details</h3>
+            <dl aria-label="Language-span diagnostics">
+              <div>
+                <dt>Requested</dt>
+                <dd>{languageModeLabels[workspace.languageDiagnostics.requestedMode]}</dd>
+              </div>
+              <div>
+                <dt>Effective</dt>
+                <dd>{languageModeLabels[workspace.languageDiagnostics.effectiveMode]}</dd>
+              </div>
+              <div>
+                <dt>Spans</dt>
+                <dd>{formatLanguageSpanSummary(workspace.languageDiagnostics)}</dd>
+              </div>
+            </dl>
+            <p>
+              {workspace.languageDiagnostics.fallbackReason ??
+                'Local language-span details appear after ASR output arrives.'}
+            </p>
+          </article>
 
-      <dl className="transcript-footer" aria-label="Transcript latency and capture status">
-        <div>
-          <dt>Shortcut</dt>
-          <dd>{pushToTalkKeyLabel}</dd>
+          <article className="transcript-privacy-card" aria-labelledby="transcript-privacy-title">
+            <h3 id="transcript-privacy-title">Privacy and export</h3>
+            <ul>
+              <li>Copy uses the browser Clipboard API.</li>
+              <li>Download saves committed transcript text locally.</li>
+              <li>Provisional words are excluded from copy and download.</li>
+            </ul>
+          </article>
         </div>
-        <div>
-          <dt>Chunks</dt>
-          <dd>{workspace.timings.capturedChunks}</dd>
-        </div>
-        <div>
-          <dt>Samples</dt>
-          <dd>{workspace.timings.capturedSamples}</dd>
-        </div>
-        <div>
-          <dt>Sample rate</dt>
-          <dd>
-            {workspace.timings.sampleRateHz ? `${workspace.timings.sampleRateHz} Hz` : 'pending'}
-          </dd>
-        </div>
-        <div>
-          <dt>First partial</dt>
-          <dd>{formatLatency(workspace.timings.firstPartialLatencyMs)}</dd>
-        </div>
-        <div>
-          <dt>Finalization</dt>
-          <dd>{formatLatency(workspace.timings.finalizationLatencyMs)}</dd>
-        </div>
-      </dl>
+
+        <dl className="transcript-footer" aria-label="Transcript latency and capture status">
+          <div>
+            <dt>Shortcut</dt>
+            <dd>{pushToTalkKeyLabel}</dd>
+          </div>
+          <div>
+            <dt>Chunks</dt>
+            <dd>{workspace.timings.capturedChunks}</dd>
+          </div>
+          <div>
+            <dt>Samples</dt>
+            <dd>{workspace.timings.capturedSamples}</dd>
+          </div>
+          <div>
+            <dt>Sample rate</dt>
+            <dd>
+              {workspace.timings.sampleRateHz ? `${workspace.timings.sampleRateHz} Hz` : 'pending'}
+            </dd>
+          </div>
+          <div>
+            <dt>First partial</dt>
+            <dd>{formatLatency(workspace.timings.firstPartialLatencyMs)}</dd>
+          </div>
+          <div>
+            <dt>Finalization</dt>
+            <dd>{formatLatency(workspace.timings.finalizationLatencyMs)}</dd>
+          </div>
+        </dl>
+      </details>
     </section>
-  );
-}
-
-function StatusPill({
-  label,
-  value,
-  tone,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly tone: 'neutral' | 'good' | 'warn' | 'error';
-}) {
-  return (
-    <div className="status-pill" data-tone={tone}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }
 
@@ -549,12 +569,6 @@ function statusTone(
     case 'error':
       return 'error';
   }
-}
-
-function formatModeStatus(diagnostics: LanguageModeDiagnostics): string {
-  const effective = languageModeLabels[diagnostics.effectiveMode];
-  if (diagnostics.requestedMode === diagnostics.effectiveMode) return effective;
-  return `${effective} fallback`;
 }
 
 function formatLanguageSpanSummary(diagnostics: LanguageModeDiagnostics): string {

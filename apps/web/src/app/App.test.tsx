@@ -38,7 +38,11 @@ describe('App', () => {
     expect(html).not.toContain('Privacy baseline');
 
     expect(html).toContain('id="dictate"');
-    expect(html).toContain('Focused push-to-talk dictation');
+    expect(html).toContain('Dictate');
+    expect(html).toContain('Hold to speak');
+    expect(html).toContain('Dictation details');
+    expect(html).not.toContain('Download .txt');
+    expect(html).not.toContain('Clear transcript');
     expect(html).toContain('id="vocabulary"');
     expect(html).toContain('Local vocabulary sets');
     expect(html).toContain('id="models"');

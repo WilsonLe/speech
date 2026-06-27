@@ -56,7 +56,7 @@ export const initialTranscriptWorkspaceState: TranscriptWorkspaceState = {
   utteranceId: null,
   committed: '',
   provisional: '',
-  statusMessage: 'Ready. Hold the push-to-talk control or press Space while the page is focused.',
+  statusMessage: 'Ready.',
   errorMessage: null,
   languageDiagnostics: initialTranscriptLanguageDiagnostics,
   timings: initialTranscriptTimingState,
@@ -118,7 +118,7 @@ export function startTranscriptRequest(state: TranscriptWorkspaceState): Transcr
     status: 'requesting',
     errorMessage: null,
     provisional: '',
-    statusMessage: 'Requesting microphone permission for push-to-talk…',
+    statusMessage: 'Requesting microphone permission…',
     timings: initialTranscriptTimingState,
   };
 }
@@ -133,7 +133,7 @@ export function startTranscriptUtterance(
     status: 'listening',
     utteranceId: options.utteranceId,
     provisional: '',
-    statusMessage: 'Listening locally. ASR worker partials will replace the provisional suffix.',
+    statusMessage: 'Recording locally.',
     timings: {
       ...initialTranscriptTimingState,
       utteranceStartedAtMs: options.startedAtMs,
@@ -154,7 +154,7 @@ export function applyTranscriptPartial(
     ...state,
     committed: options.committed,
     provisional: options.provisional,
-    statusMessage: 'Live partial received from the ASR worker.',
+    statusMessage: 'Live words updated.',
     languageDiagnostics: updateLanguageDiagnosticsForSpans(state, options.languageSpans),
     timings: {
       ...state.timings,
@@ -200,9 +200,7 @@ export function finishTranscriptUtterance(
     committed: finalText,
     provisional: '',
     languageDiagnostics: updateLanguageDiagnosticsForSpans(state, options.languageSpans),
-    statusMessage: hasFinalOutput
-      ? 'Utterance finalized locally.'
-      : 'Audio capture ended. Transcript output is pending model integration.',
+    statusMessage: hasFinalOutput ? 'Recording finished.' : 'Recording stopped.',
     timings: {
       ...state.timings,
       utteranceEndedAtMs,
@@ -222,7 +220,7 @@ export function markTranscriptStopping(state: TranscriptWorkspaceState): Transcr
   return {
     ...state,
     status: 'stopping',
-    statusMessage: 'Stopping capture and finalizing the current utterance…',
+    statusMessage: 'Stopping recording…',
   };
 }
 
@@ -236,7 +234,7 @@ export function failTranscriptCapture(
     utteranceId: null,
     provisional: '',
     errorMessage: message,
-    statusMessage: 'Push-to-talk capture failed. Release the key/control and try again.',
+    statusMessage: 'Recording failed.',
   };
 }
 

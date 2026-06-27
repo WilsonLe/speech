@@ -158,7 +158,7 @@ describe('transcript workspace state', () => {
     expect(cleared.provisional).toBe('');
   });
 
-  it('marks stopping and errors with actionable status text', () => {
+  it('marks stopping and errors with concise status text', () => {
     const listening = startTranscriptUtterance(
       startTranscriptRequest(initialTranscriptWorkspaceState),
       {
@@ -171,6 +171,6 @@ describe('transcript workspace state', () => {
     const failed = failTranscriptCapture(listening, 'Microphone permission denied.');
     expect(failed.status).toBe('error');
     expect(failed.errorMessage).toBe('Microphone permission denied.');
-    expect(failed.statusMessage).toContain('try again');
+    expect(failed.statusMessage).toBe('Recording failed.');
   });
 });
