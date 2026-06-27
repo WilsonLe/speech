@@ -7,6 +7,8 @@
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts",
+    "./feedback": "./src/feedback/index.ts",
+    "./feedback.css": "./src/feedback/index.css",
     "./primitives": "./src/primitives/index.ts",
     "./primitives.css": "./src/primitives/index.css",
     "./testing": "./src/testing/index.ts",
