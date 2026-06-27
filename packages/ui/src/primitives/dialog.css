@@ -1,0 +1,121 @@
+.speech-dialog {
+  align-items: center;
+  background: color-mix(in srgb, var(--speech-color-surface-page) 72%, transparent);
+  color: var(--speech-color-text-primary);
+  display: grid;
+  font-family: var(--speech-font-family-sans);
+  inset: 0;
+  justify-items: center;
+  padding: var(--speech-space-5);
+  position: fixed;
+  z-index: var(--speech-layer-dialog);
+}
+
+.speech-dialog[hidden] {
+  display: none;
+}
+
+.speech-dialog__panel {
+  background: var(--speech-color-surface-panel-strong);
+  border: 1px solid var(--speech-color-border-muted);
+  border-radius: var(--speech-radius-lg);
+  box-shadow: var(--speech-shadow-dialog);
+  display: grid;
+  gap: var(--speech-space-4);
+  inline-size: min(100%, 40rem);
+  max-block-size: min(42rem, calc(100dvh - (var(--speech-space-5) * 2)));
+  overflow: auto;
+  padding: var(--speech-space-5);
+}
+
+.speech-dialog__panel:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.speech-dialog__panel[data-size='sm'] {
+  inline-size: min(100%, 28rem);
+}
+
+.speech-dialog__panel[data-size='lg'] {
+  inline-size: min(100%, 56rem);
+}
+
+.speech-dialog__header,
+.speech-dialog__footer {
+  align-items: center;
+  display: flex;
+  gap: var(--speech-space-3);
+  justify-content: space-between;
+}
+
+.speech-dialog__footer {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.speech-dialog__title {
+  font-size: var(--speech-text-lg);
+  font-weight: var(--speech-font-weight-semibold);
+  line-height: var(--speech-line-heading);
+  margin: 0;
+}
+
+.speech-dialog__description,
+.speech-dialog__content {
+  line-height: var(--speech-line-body);
+}
+
+.speech-dialog__description {
+  color: var(--speech-color-text-secondary);
+  margin: 0;
+}
+
+.speech-dialog__content > :first-child {
+  margin-block-start: 0;
+}
+
+.speech-dialog__content > :last-child {
+  margin-block-end: 0;
+}
+
+@media (max-width: 480px) {
+  .speech-dialog {
+    align-items: end;
+    padding: var(--speech-space-3);
+  }
+
+  .speech-dialog__panel {
+    border-end-end-radius: 0;
+    border-end-start-radius: 0;
+    max-block-size: min(100%, calc(100dvh - var(--speech-space-3)));
+    padding: var(--speech-space-4);
+  }
+
+  .speech-dialog__header,
+  .speech-dialog__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speech-dialog,
+  .speech-dialog__panel {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .speech-dialog {
+    background: Canvas;
+    forced-color-adjust: auto;
+  }
+
+  .speech-dialog__panel {
+    background: Canvas;
+    border-color: ButtonBorder;
+    box-shadow: none;
+    color: CanvasText;
+  }
+}

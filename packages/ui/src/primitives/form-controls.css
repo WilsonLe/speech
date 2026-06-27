@@ -1,0 +1,172 @@
+.speech-field {
+  color: var(--speech-color-text-primary);
+  display: grid;
+  font-family: var(--speech-font-family-sans);
+  gap: var(--speech-space-2);
+}
+
+.speech-field__label {
+  color: var(--speech-color-text-primary);
+  font-weight: var(--speech-font-weight-semibold);
+  line-height: var(--speech-line-body);
+}
+
+.speech-field__hint,
+.speech-field__error {
+  font-size: var(--speech-text-sm);
+  line-height: var(--speech-line-body);
+  margin: 0;
+}
+
+.speech-field__hint {
+  color: var(--speech-color-text-secondary);
+}
+
+.speech-field__error {
+  color: var(--speech-color-danger);
+}
+
+.speech-select-field__control-wrap {
+  display: inline-grid;
+  position: relative;
+}
+
+.speech-select-field__control {
+  appearance: none;
+  background: var(--speech-color-surface-control);
+  border: 1px solid var(--speech-color-border-muted);
+  border-radius: var(--speech-radius-md);
+  color: var(--speech-color-text-primary);
+  font: inherit;
+  inline-size: 100%;
+  line-height: var(--speech-line-body);
+  min-block-size: var(--speech-size-touch-target);
+  padding-block: var(--speech-space-2);
+  padding-inline: var(--speech-space-3) calc(var(--speech-space-5) + var(--speech-space-2));
+  touch-action: manipulation;
+  transition:
+    background-color var(--speech-motion-transition-fast),
+    border-color var(--speech-motion-transition-fast),
+    color var(--speech-motion-transition-fast),
+    opacity var(--speech-motion-transition-fast);
+}
+
+.speech-select-field[data-size='sm'] .speech-select-field__control {
+  font-size: var(--speech-text-sm);
+  padding-block: var(--speech-space-2);
+}
+
+.speech-select-field[data-size='lg'] .speech-select-field__control {
+  font-size: var(--speech-text-lg);
+  min-block-size: calc(var(--speech-size-touch-target) + var(--speech-space-2));
+  padding-block: var(--speech-space-3);
+}
+
+.speech-select-field__control:focus-visible,
+.speech-radio-group__input:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.speech-select-field__control[aria-invalid='true'],
+.speech-radio-group[aria-invalid='true'] .speech-radio-group__input {
+  outline: var(--speech-focus-ring-width) solid var(--speech-color-danger);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.speech-select-field__control:disabled,
+.speech-radio-group:disabled,
+.speech-radio-group__input:disabled + .speech-radio-group__label {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.speech-select-field__chevron {
+  border-block-end: 2px solid currentcolor;
+  border-inline-end: 2px solid currentcolor;
+  block-size: 0.5em;
+  color: var(--speech-color-text-secondary);
+  inline-size: 0.5em;
+  inset-block-start: 50%;
+  inset-inline-end: var(--speech-space-3);
+  pointer-events: none;
+  position: absolute;
+  transform: translateY(-60%) rotate(45deg);
+}
+
+.speech-radio-group {
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.speech-radio-group__options {
+  display: grid;
+  gap: var(--speech-space-2);
+}
+
+.speech-radio-group[data-orientation='horizontal'] .speech-radio-group__options {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--speech-space-3);
+}
+
+.speech-radio-group__option {
+  align-items: start;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--speech-space-2);
+  min-block-size: var(--speech-size-touch-target);
+}
+
+.speech-radio-group__input {
+  accent-color: var(--speech-color-accent);
+  block-size: 1.125rem;
+  inline-size: 1.125rem;
+  margin: calc((var(--speech-size-touch-target) - 1.125rem) / 2) 0 0;
+}
+
+.speech-radio-group__label {
+  align-items: start;
+  cursor: pointer;
+  display: grid;
+  gap: var(--speech-space-1);
+  line-height: var(--speech-line-body);
+  min-block-size: var(--speech-size-touch-target);
+  padding-block: var(--speech-space-2);
+}
+
+.speech-radio-group__description {
+  color: var(--speech-color-text-secondary);
+  font-size: var(--speech-text-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speech-select-field__control {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .speech-field,
+  .speech-select-field__control,
+  .speech-radio-group__label {
+    forced-color-adjust: auto;
+  }
+
+  .speech-select-field__control {
+    background: Field;
+    border-color: ButtonBorder;
+    color: FieldText;
+  }
+
+  .speech-radio-group__input {
+    accent-color: Highlight;
+  }
+
+  .speech-field__error {
+    color: Mark;
+  }
+}

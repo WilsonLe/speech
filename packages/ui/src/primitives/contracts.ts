@@ -29,9 +29,42 @@ export const speechMenuPlacements = ['bottom-start', 'bottom-end'] as const;
 export const speechMenuKeyboardKeys = ['ArrowDown', 'ArrowUp', 'Home', 'End'] as const;
 export const speechTooltipPlacements = ['top', 'bottom', 'inline-start', 'inline-end'] as const;
 
+export const speechDialogSizes = ['sm', 'md', 'lg'] as const;
+export const speechFieldSizes = ['sm', 'md', 'lg'] as const;
+export const speechRadioGroupOrientations = ['vertical', 'horizontal'] as const;
+export const speechDialogKeyboardKeys = ['Escape', 'Tab', 'Shift+Tab'] as const;
+export const speechSelectKeyboardKeys = ['Tab', 'ArrowDown', 'ArrowUp', 'Home', 'End'] as const;
+export const speechRadioGroupKeyboardKeys = [
+  'Tab',
+  'ArrowDown',
+  'ArrowUp',
+  'ArrowLeft',
+  'ArrowRight',
+  'Space',
+] as const;
+
 export type SpeechMenuPlacement = (typeof speechMenuPlacements)[number];
 export type SpeechMenuKeyboardKey = (typeof speechMenuKeyboardKeys)[number];
 export type SpeechTooltipPlacement = (typeof speechTooltipPlacements)[number];
+export type SpeechDialogSize = (typeof speechDialogSizes)[number];
+export type SpeechFieldSize = (typeof speechFieldSizes)[number];
+export type SpeechRadioGroupOrientation = (typeof speechRadioGroupOrientations)[number];
+export type SpeechDialogKeyboardKey = (typeof speechDialogKeyboardKeys)[number];
+export type SpeechSelectKeyboardKey = (typeof speechSelectKeyboardKeys)[number];
+export type SpeechRadioGroupKeyboardKey = (typeof speechRadioGroupKeyboardKeys)[number];
+
+export interface SpeechSelectOption {
+  readonly value: string;
+  readonly label: string;
+  readonly disabled?: boolean;
+}
+
+export interface SpeechRadioGroupOption {
+  readonly value: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly disabled?: boolean;
+}
 
 export function getAccordionKeyboardTargetIndex(
   currentIndex: number,
@@ -54,6 +87,26 @@ export function getAccordionKeyboardTargetIndex(
     case 'End':
       return itemCount - 1;
   }
+}
+
+export function getDialogTabTargetIndex(
+  currentIndex: number,
+  direction: 'forward' | 'backward',
+  focusableCount: number,
+): number {
+  if (focusableCount <= 0) {
+    return -1;
+  }
+
+  if (currentIndex < 0) {
+    return direction === 'forward' ? 0 : focusableCount - 1;
+  }
+
+  if (direction === 'forward') {
+    return (currentIndex + 1) % focusableCount;
+  }
+
+  return (currentIndex - 1 + focusableCount) % focusableCount;
 }
 
 export function getMenuKeyboardTargetIndex(
