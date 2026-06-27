@@ -293,6 +293,7 @@ export async function installModelPack(
     await writeInstalledModelRecord(storage, record);
     return record;
   } catch (error) {
+    emitProgress(options, modelProgress(manifest, 'cleaning-temporary-version'));
     await clearTemporaryVersionAfterFailure(storage, manifest.id, tempVersion);
     throw normalizeInstallError(error);
   }

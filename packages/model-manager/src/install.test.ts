@@ -78,20 +78,23 @@ describe('model pack installation', () => {
     ).resolves.toHaveLength(0);
   });
 
-  it('rejects checksum mismatches and leaves no active model behind', async () => {
+  it('rejects checksum mismatches, reports cleanup progress, and leaves no active model behind', async () => {
     const storage = new InMemoryModelStorageBackend();
     const expectedFiles = modelFileBytes({ encoder: [1, 2], predictor: [3], joiner: [4] });
     const manifest = await makeManifest('1.0.0', expectedFiles);
     const corruptedFiles = { ...expectedFiles, encoder: bytes([9, 9]) };
+    const progress: ModelInstallProgress[] = [];
 
     await expect(
       installModelPack(manifest, {
         storage,
         installId: 'bad-checksum',
         downloadFile: fakeDownloader(corruptedFiles),
+        onProgress: (event) => progress.push(event),
       }),
     ).rejects.toMatchObject({ code: 'MODEL_CHECKSUM_MISMATCH' });
 
+    expect(progress.map((event) => event.phase)).toContain('cleaning-temporary-version');
     expect(await getInstalledModelRecord(storage, manifest.id)).toBeUndefined();
     expect(await storage.listFiles({ modelId: manifest.id })).toEqual([]);
   });

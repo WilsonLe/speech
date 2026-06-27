@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Download, type Locator, type Page } from '@playwright/test';
+import { seedInstalledBaseModel } from './model-setup-fixture';
 
 const requiredBenchmarkMetrics = [
   'firstPartialLatencyMs',
@@ -138,7 +139,7 @@ test('active push-to-talk stress cycles do not make network requests or surface 
     }
   });
 
-  await page.goto('/');
+  await seedInstalledBaseModel(page);
   await page.waitForLoadState('networkidle');
   await expect(page.getByLabel('Offline app shell status')).toContainText('opfs', {
     timeout: 10_000,

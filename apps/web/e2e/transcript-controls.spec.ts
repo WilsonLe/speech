@@ -1,8 +1,38 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { mockTinyBaseModelInstall, seedInstalledBaseModel } from './model-setup-fixture';
+
+test('shows in-place model setup and installs a verified model before dictation', async ({
+  page,
+}) => {
+  await mockTinyBaseModelInstall(page);
+  await page.goto('/');
+
+  const setup = page.getByRole('region', { name: /speech model required/i });
+  await expect(setup).toBeVisible({ timeout: 10_000 });
+  await expect(setup.locator('.dictate-setup-card__summary')).toContainText(
+    /Version 2025-07-24-e827965 · \d+ B download/,
+  );
+  await expect(setup.getByRole('button', { name: 'Install model', exact: true })).toBeEnabled({
+    timeout: 10_000,
+  });
+  await expect(setup.locator('.push-to-talk-button')).toHaveCount(0);
+
+  await setup.getByText('Model details', { exact: true }).click();
+  await expect(setup.getByLabel('Required speech model details')).toContainText('Apache-2.0');
+  await expect(setup.getByLabel('Model provenance notes')).toContainText('No model weights');
+
+  await setup.getByRole('button', { name: 'Install model', exact: true }).click();
+  await expect(page.getByRole('status', { name: 'Model setup progress' })).toContainText(
+    /Downloading model|Verifying model|Saving download|Activating model|Removing partial download/,
+    { timeout: 10_000 },
+  );
+  const transcript = page.getByRole('region', { name: /^dictate$/i });
+  await expect(transcript.locator('.push-to-talk-button')).toBeVisible({ timeout: 10_000 });
+});
 
 test('captures while the hold-to-talk control is pressed', async ({ page }) => {
-  await page.goto('/');
+  await seedInstalledBaseModel(page);
 
   const transcript = page.getByRole('region', { name: /^dictate$/i });
   const pushToTalk = transcript.locator('.push-to-talk-button');
@@ -25,7 +55,7 @@ test('captures while the hold-to-talk control is pressed', async ({ page }) => {
 });
 
 test('uses Space as a page-scoped push-to-talk shortcut without scrolling', async ({ page }) => {
-  await page.goto('/');
+  await seedInstalledBaseModel(page);
   await page.evaluate(() => window.scrollTo(0, 0));
 
   const transcript = page.getByRole('region', { name: /^dictate$/i });
@@ -46,7 +76,7 @@ test('edits, copies, downloads, and clears committed transcript text locally', a
   context,
   page,
 }) => {
-  await page.goto('/');
+  await seedInstalledBaseModel(page);
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
     origin: new URL(page.url()).origin,
   });

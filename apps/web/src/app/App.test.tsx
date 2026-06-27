@@ -39,8 +39,11 @@ describe('App', () => {
 
     expect(html).toContain('id="dictate"');
     expect(html).toContain('Dictate');
-    expect(html).toContain('Hold to speak');
-    expect(html).toContain('Dictation details');
+    expect(html).toContain('Checking speech model');
+    expect(html).toContain('Checking download size');
+    expect(html).toContain('Model details');
+    expect(html).not.toContain('Hold to speak');
+    expect(html).not.toContain('Dictation details');
     expect(html).not.toContain('Download .txt');
     expect(html).not.toContain('Clear transcript');
     expect(html).toContain('id="vocabulary"');

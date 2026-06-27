@@ -71,7 +71,10 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(bottomNav.getByRole('link', { name: 'Vocabulary' })).toBeVisible();
   await expect(bottomNav.getByRole('link', { name: 'Models' })).toBeVisible();
 
-  await expect(page.getByRole('button', { name: /hold to speak/i })).toBeVisible();
+  const setup = page.getByRole('region', { name: /speech model required/i });
+  await expect(setup).toBeVisible({ timeout: 10_000 });
+  await expect(setup.getByRole('button', { name: 'Install model', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /hold to speak/i })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /local vocabulary sets/i })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: /profile cards and local lifecycle/i }),
