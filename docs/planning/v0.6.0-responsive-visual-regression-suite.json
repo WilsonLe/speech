@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "issue": 252,
+  "release": "v0.6.0",
+  "title": "Responsive and visual regression suite",
+  "artifactPolicy": {
+    "mode": "runtime-playwright-attachments",
+    "committedScreenshots": false,
+    "privacy": "Synthetic/local fixtures only; no private transcript, audio, vocabulary, profile, adapter, or support-bundle payloads are captured.",
+    "residualGaps": [
+      "The suite captures runtime PNG artifacts and layout metrics instead of committed screenshot baselines so CI stays deterministic across Linux font/rendering updates.",
+      "Diagnostics may contain intentionally scrollable internal tables, but the page shell itself must not overflow horizontally at 320 CSS px.",
+      "Dark/system appearance is not captured because this release does not add a separate dark-mode implementation."
+    ]
+  },
+  "referenceViewports": [
+    { "id": "phone", "width": 360, "height": 800 },
+    { "id": "tablet-portrait", "width": 768, "height": 1024 },
+    { "id": "tablet-landscape", "width": 1024, "height": 768 },
+    { "id": "laptop", "width": 1366, "height": 768 },
+    { "id": "desktop", "width": 1440, "height": 900 },
+    { "id": "wide", "width": 1920, "height": 1080 }
+  ],
+  "requiredStates": [
+    {
+      "id": "default-dictate-ready",
+      "category": "default",
+      "route": "/",
+      "target": "Dictate region with installed speech model and ready recording control"
+    },
+    {
+      "id": "loading-model-install",
+      "category": "loading",
+      "route": "/",
+      "target": "Aggregate local setup checking state while speech-model availability is being resolved"
+    },
+    {
+      "id": "recording-dictate",
+      "category": "recording",
+      "route": "/",
+      "target": "Dictate region while fake microphone capture is pressed"
+    },
+    {
+      "id": "error-import-validation",
+      "category": "error",
+      "route": "/models/import",
+      "target": "Import route after rejecting an invalid .speechmodel prefix"
+    },
+    {
+      "id": "empty-vocabulary-search",
+      "category": "empty",
+      "route": "/vocabulary",
+      "target": "Vocabulary list with a search that returns no matching sets"
+    },
+    {
+      "id": "active-model-list",
+      "category": "active",
+      "route": "/models",
+      "target": "Voice-model list and selected active model detail"
+    },
+    {
+      "id": "paused-training-recovery",
+      "category": "paused",
+      "route": "/",
+      "target": "Training support panel with a seeded reload-recovery checkpoint"
+    },
+    {
+      "id": "incompatible-export-blocker",
+      "category": "incompatible",
+      "route": "/models/local-enrollment-profile/export",
+      "target": "Export route blocked until the exact required speech model is installed"
+    },
+    {
+      "id": "completed-training-check",
+      "category": "completed",
+      "route": "/",
+      "target": "Training support panel after the synthetic training check reaches Ready"
+    }
+  ],
+  "responsiveRoutes": [
+    "/",
+    "/vocabulary",
+    "/models",
+    "/models/new",
+    "/models/import",
+    "/models/local-enrollment-profile/export",
+    "/models/local-enrollment-profile/results",
+    "/settings",
+    "/settings/audio",
+    "/settings/storage",
+    "/settings/privacy",
+    "/settings/shortcuts",
+    "/settings/diagnostics",
+    "/about"
+  ],
+  "visualAssertions": [
+    "Each required state is captured at every reference viewport as a Playwright PNG attachment.",
+    "Every captured state asserts a visible target region, non-empty screenshot bytes, and no document-level horizontal overflow.",
+    "A separate 320 CSS px reflow test visits every responsive route and rejects page-level horizontal scrolling."
+  ]
+}

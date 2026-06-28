@@ -56,3 +56,4 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**,MODEL_LICENSES
 
 - #250 copy-deletion changes must not reintroduce raw worker errors, storage backend names, checksums, profile IDs, adapter details, or provider/runtime terms into default status messages; use details/diagnostics for technical verification copy.
 - #251 content-budget/accessibility gates must keep default workflow terminology scans active for task routes and keep diagnostics/about exceptions explicit; do not move private identifiers or technical acronyms into default copy merely to satisfy shorter labels.
+- #252 responsive/visual regression artifacts must stay synthetic and local: attach runtime screenshots only from seeded or fake browser states, never commit binary screenshots, and do not capture private transcript text, microphone audio, vocabulary terms, raw profile data, model weights, passphrases, storage paths, hashes, or support bundles.
