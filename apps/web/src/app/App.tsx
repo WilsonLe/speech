@@ -1,11 +1,13 @@
 import { lazy, Suspense } from 'react';
 import { AppShell } from './AppShell';
+import { useAppRoute } from './appRouteContext';
 import { BenchmarkPanel } from './BenchmarkPanel';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { MicrophonePanel } from './MicrophonePanel';
 import { ModelRuntimePanel } from './ModelRuntimePanel';
 import { OfflineModelPanel } from './OfflineModelPanel';
 import { PersonalModelsPanel } from './PersonalModelsPanel';
+import { SettingsPanel } from './SettingsPanel';
 import { TranscriptPanel } from './TranscriptPanel';
 import { VocabularyPanel } from './VocabularyPanel';
 import { getBrowserHash, shouldRenderComponentGalleryRoute } from './component-gallery-route';
@@ -26,6 +28,24 @@ export function App() {
 
   return (
     <AppShell>
+      <RoutedAppContent />
+    </AppShell>
+  );
+}
+
+function RoutedAppContent() {
+  const route = useAppRoute();
+
+  if (route.routeId === 'settings-index') {
+    return <SettingsPanel />;
+  }
+
+  if (route.routeId === 'settings-audio') {
+    return <MicrophonePanel mode="settings-audio" />;
+  }
+
+  return (
+    <>
       <TranscriptPanel />
       <VocabularyPanel />
       <PersonalModelsPanel />
@@ -49,6 +69,6 @@ export function App() {
           ))}
         </div>
       </section>
-    </AppShell>
+    </>
   );
 }

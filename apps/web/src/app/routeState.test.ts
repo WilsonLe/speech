@@ -32,6 +32,8 @@ describe('v0.6 route migration and navigation guards', () => {
         '/models/import',
         '/models/:profileId/enroll',
         '/models/:profileId/train',
+        '/settings',
+        '/settings/audio',
         '/settings/diagnostics',
         '/about',
         '/setup/model',
@@ -78,6 +80,22 @@ describe('v0.6 route migration and navigation guards', () => {
     expect(createRouteRestorationPlan(exportRoute)).toMatchObject({
       headingId: 'model-export-title',
       scrollRestoration: 'reset-on-new-task',
+    });
+
+    const settings = resolveAppRoute({ pathname: '/settings' });
+    expect(settings.routeId).toBe('settings-index');
+    expect(settings.headingId).toBe('settings-title');
+    expect(createRouteRestorationPlan(settings)).toMatchObject({
+      headingId: 'settings-title',
+      stateSource: 'ui-preferences',
+    });
+
+    const audio = resolveAppRoute({ pathname: '/settings/audio' });
+    expect(audio.routeId).toBe('settings-audio');
+    expect(audio.headingId).toBe('audio-settings-title');
+    expect(createRouteRestorationPlan(audio)).toMatchObject({
+      headingId: 'audio-settings-title',
+      stateSource: 'domain-storage',
     });
 
     const training = resolveAppRoute({

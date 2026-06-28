@@ -413,8 +413,99 @@ h2 {
 .transcript,
 .vocabulary,
 .personal-models,
-.offline-model {
+.offline-model,
+.settings-screen,
+.audio-settings-screen {
   margin-bottom: 1rem;
+}
+
+.settings-list,
+.audio-settings-grid {
+  display: grid;
+  gap: var(--speech-space-3);
+}
+
+.settings-list-row,
+.audio-settings-card,
+.audio-settings-diagnostics-card {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--speech-space-4);
+  align-items: flex-start;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--speech-radius-md);
+  padding: var(--speech-space-4);
+  background: rgba(2, 6, 23, 0.38);
+}
+
+.settings-list-row h3,
+.audio-settings-card h3,
+.audio-settings-diagnostics-card h3 {
+  margin: 0 0 var(--speech-space-2);
+}
+
+.settings-list-row p,
+.audio-settings-card p,
+.audio-settings-diagnostics-card p {
+  margin: 0;
+}
+
+.settings-list-row__status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  color: #cbd5e1;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.audio-settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.audio-settings-card {
+  flex-direction: column;
+}
+
+.audio-settings-note {
+  color: #94a3b8 !important;
+}
+
+.audio-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--speech-space-2);
+}
+
+.audio-settings-processing {
+  margin: 0;
+}
+
+.audio-settings-advanced {
+  margin-top: var(--speech-space-4);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--speech-radius-md);
+  padding: var(--speech-space-3) var(--speech-space-4);
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.audio-settings-advanced summary {
+  cursor: pointer;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.audio-settings-advanced__content {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--speech-space-3);
+  margin-top: var(--speech-space-3);
+}
+
+.audio-settings-diagnostics-card {
+  flex-direction: column;
 }
 
 .section-heading {
@@ -2969,6 +3060,9 @@ button.danger,
   .transcript-footer,
   .dictate-model-details__meta,
   .offline-status-summary dl,
+  .settings-list-row,
+  .audio-settings-grid,
+  .audio-settings-advanced__content,
   .vocabulary-summary,
   .vocabulary-layout,
   .vocabulary-form-grid,
@@ -3033,16 +3127,25 @@ button.danger,
     width: 100%;
   }
 
+  .settings-list-row {
+    display: grid;
+  }
+
   .vocabulary-set-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .vocabulary-set-row__toggle,
   .vocabulary-set-row .speech-menu-button,
-  .vocabulary-set-row .speech-button {
+  .vocabulary-set-row .speech-button,
+  .settings-list-row .button,
+  .audio-settings-actions button,
+  .audio-settings-card > button {
     width: 100%;
   }
 
+  .settings-screen,
+  .audio-settings-screen,
   .vocabulary-entry-editor__heading,
   .create-model-flow,
   .import-model-flow,
