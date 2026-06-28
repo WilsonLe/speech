@@ -33,23 +33,31 @@ describe('browser training progress UI helpers', () => {
       warnings: [],
     });
 
-    expect(view.currentPhaseLabel).toBe('Training adapter epochs');
+    expect(view.title).toBe('Training voice model');
+    expect(view.summary).toBe('Checking pronunciation');
+    expect(view.currentStageLabel).toBe('Training');
     expect(view.progressPercent).toBe(25);
     expect(view.progressValueText).toContain('epoch 40/160');
-    expect(view.liveRegionText).toContain('Training adapter epochs. Progress epoch 40/160');
-    expect(view.phaseTextEquivalent).toContain('Step 3 Train adapter epochs: active.');
+    expect(view.liveRegionText).toContain('Training voice model. Training. Progress epoch 40/160');
+    expect(view.phaseTextEquivalent).toContain('Step 2 Training: active.');
     expect(view.isBusy).toBe(true);
     expect(view.phases.map((phase) => phase.label)).toEqual([
-      'Prepare worker',
-      'Coordinate local lock',
-      'Train adapter epochs',
-      'Save reload recovery',
-      'Await activation gate',
+      'Preparing',
+      'Training',
+      'Checking',
+      'Ready',
     ]);
-    expect(view.phases.find((phase) => phase.id === 'train-adapter')).toMatchObject({
+    expect(view.phases.find((phase) => phase.id === 'training')).toMatchObject({
       status: 'active',
-      detail: 'epoch 40/160 · loss 0.012345 · validation 0.014000',
+      detail: 'epoch 40/160 complete.',
     });
+    expect(view.technicalDetails).toEqual(
+      expect.arrayContaining([
+        { label: 'Loss', value: '0.012345' },
+        { label: 'Learning rate', value: '0.010000' },
+        { label: 'Validation loss', value: '0.014000' },
+      ]),
+    );
     expect(view.privacy.containsFeatureTensors).toBe(false);
   });
 
@@ -70,15 +78,16 @@ describe('browser training progress UI helpers', () => {
       warnings: [],
     });
 
-    expect(view.currentPhaseLabel).toBe('Training paused with reload recovery');
+    expect(view.title).toBe('Training paused');
+    expect(view.currentStageLabel).toBe('Training');
     expect(view.recovery).toMatchObject({
       status: 'paused',
       checkpointEpoch: 8,
       resumable: true,
     });
-    expect(view.phases.find((phase) => phase.id === 'checkpoint-recovery')).toMatchObject({
+    expect(view.phases.find((phase) => phase.id === 'checking')).toMatchObject({
       status: 'attention',
-      detail: 'Reload recovery paused at epoch 8.',
+      detail: 'Resume training before quality checks run.',
     });
     expect(view.liveRegionText).toContain('Reload recovery paused at epoch 8.');
     expect(JSON.stringify(view)).not.toContain(paused.checkpoint.checkpointId);
@@ -103,10 +112,11 @@ describe('browser training progress UI helpers', () => {
       warnings: [],
     });
 
-    expect(view.currentPhaseLabel).toBe('Training completed; activation gate still required');
-    expect(view.phases.find((phase) => phase.id === 'checkpoint-recovery')).toMatchObject({
-      status: 'complete',
-      detail: 'Completed run cleared prototype recovery; no resume checkpoint is needed.',
+    expect(view.title).toBe('Checking results');
+    expect(view.currentStageLabel).toBe('Checking');
+    expect(view.phases.find((phase) => phase.id === 'checking')).toMatchObject({
+      status: 'active',
+      detail: 'Quality checks are needed before this model can be used.',
     });
   });
 
@@ -118,11 +128,10 @@ describe('browser training progress UI helpers', () => {
       warnings: [],
     });
 
-    expect(view.currentPhaseLabel).toBe('Training worker needs attention');
-    expect(view.phases.find((phase) => phase.id === 'train-adapter')).toMatchObject({
+    expect(view.title).toBe('Training needs attention');
+    expect(view.phases.find((phase) => phase.id === 'training')).toMatchObject({
       status: 'blocked',
-      detail:
-        'Training worker returned an error; review the alert message and retry after resolving it.',
+      detail: 'Resolve the training error, then retry or resume from recovery.',
     });
     expect(JSON.stringify(view)).not.toContain('/private/checkpoint.ckpt');
   });
@@ -147,7 +156,7 @@ describe('browser training progress UI helpers', () => {
       controlIntent: 'pause-requested',
     });
 
-    expect(view.currentPhaseLabel).toBe('Pause requested at next safe checkpoint');
+    expect(view.title).toBe('Pausing training');
     expect(view.liveRegionText).toContain('Pause requested.');
     expect(view.resourceWarnings).toContain(
       'ASR runtime activity can pause training at a cooperative checkpoint boundary.',

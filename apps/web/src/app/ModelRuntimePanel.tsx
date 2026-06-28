@@ -6,6 +6,7 @@ import type {
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   buildBrowserTrainingProgressView,
+  summarizeBrowserTrainingResourceWarnings,
   type BrowserTrainingControlIntent,
   type BrowserTrainingProgressViewV1,
 } from './browser-training-ui';
@@ -330,111 +331,19 @@ function BrowserTrainingStatusMessage({
 }) {
   const recoverySummary = formatBrowserTrainingRecovery(recovery);
   const latestCoordination = coordination ?? recovery?.coordination ?? null;
-  if (status.state === 'idle') {
-    return (
-      <>
-        <BrowserTrainingProgressDetails view={progressView} />
-        <p className="status-message">
-          Browser-training worker prototype has not run yet. It uses synthetic frozen features and
-          does not touch the active ASR worker or profile.
-        </p>
-        <BrowserTrainingRecoveryDetails
-          recovery={recovery}
-          coordination={latestCoordination}
-          warnings={warnings}
-        />
-      </>
-    );
-  }
-  if (status.state === 'training') {
-    const progress = status.latestProgress;
-    return (
-      <>
-        <BrowserTrainingProgressDetails view={progressView} />
-        <p className="status-message">
-          Training tiny adapter in a dedicated worker…{' '}
-          {progress === undefined
-            ? 'starting'
-            : `epoch ${progress.epoch.toString()}/${progress.epochs.toString()}, loss ${progress.loss.toFixed(6)}`}
-        </p>
-        <dl className="microphone-settings" aria-label="Browser training prototype status">
-          <div>
-            <dt>Prototype status</dt>
-            <dd>training</dd>
-          </div>
-          <div>
-            <dt>Checkpoint recovery</dt>
-            <dd>{recoverySummary}</dd>
-          </div>
-        </dl>
-        <BrowserTrainingRecoveryDetails
-          recovery={recovery}
-          coordination={latestCoordination}
-          warnings={warnings}
-        />
-      </>
-    );
-  }
-  if (status.state === 'error') {
-    return (
-      <>
-        <BrowserTrainingProgressDetails view={progressView} />
-        <p role="alert" className="status-message error-message">
-          {status.message}
-        </p>
-        <BrowserTrainingRecoveryDetails
-          recovery={recovery}
-          coordination={latestCoordination}
-          warnings={warnings}
-        />
-      </>
-    );
-  }
-  const { result } = status;
+  const statusMessage = formatBrowserTrainingStatusMessage(status, recoverySummary);
   return (
     <>
       <BrowserTrainingProgressDetails view={progressView} />
-      <dl className="microphone-settings" aria-label="Browser training prototype status">
-        <div>
-          <dt>Training worker</dt>
-          <dd>{result.workerOwner}</dd>
-        </div>
-        <div>
-          <dt>Prototype status</dt>
-          <dd>{result.status}</dd>
-        </div>
-        <div>
-          <dt>Training examples</dt>
-          <dd>{result.metrics.examples.toString()}</dd>
-        </div>
-        <div>
-          <dt>Epochs completed</dt>
-          <dd>{result.metrics.epochsCompleted.toString()}</dd>
-        </div>
-        <div>
-          <dt>Checkpoint epoch</dt>
-          <dd>{result.checkpoint.epoch.toString()}</dd>
-        </div>
-        <div>
-          <dt>Checkpoint recovery</dt>
-          <dd>{recoverySummary}</dd>
-        </div>
-        <div>
-          <dt>Loss reduction</dt>
-          <dd>{result.metrics.lossReduction.toFixed(6)}</dd>
-        </div>
-        <div>
-          <dt>Adapter parameters</dt>
-          <dd>{result.artifact.parameterCount.toString()}</dd>
-        </div>
-        <div>
-          <dt>Activation gate</dt>
-          <dd>
-            {result.compatibility.activationGateRequired ? 'required before activation' : 'missing'}
-          </dd>
-        </div>
-      </dl>
-      <BrowserTrainingRecoveryDetails
+      {status.state === 'error' ? (
+        <p role="alert" className="status-message error-message">
+          {formatBrowserTrainingErrorMessage(status.message)}
+        </p>
+      ) : (
+        <p className="status-message">{statusMessage}</p>
+      )}
+      <BrowserTrainingDetailsDisclosure
+        view={progressView}
         recovery={recovery}
         coordination={latestCoordination}
         warnings={warnings}
@@ -455,7 +364,7 @@ function BrowserTrainingProgressDetails({
   return (
     <section
       className="browser-training-progress"
-      aria-label="Browser training named-phase progress"
+      aria-label="Training progress"
       aria-describedby={`${phaseDescriptionId} ${localOnlyId}`}
       aria-busy={view.isBusy}
     >
@@ -467,15 +376,22 @@ function BrowserTrainingProgressDetails({
       </p>
       <div className="browser-training-progress__header">
         <div>
-          <p className="eyebrow">Training progress</p>
-          <h3 id={titleId}>{view.currentPhaseLabel}</h3>
+          <p className="eyebrow">Training</p>
+          <h3 id={titleId}>{view.title}</h3>
+          <p>{view.summary}</p>
         </div>
-        <strong>{view.progressPercent.toString()}%</strong>
+        <strong aria-label={`${view.progressPercent.toString()} percent complete`}>
+          {view.progressPercent.toString()}%
+        </strong>
+      </div>
+      <div className="browser-training-stage" aria-label="Current training stage">
+        <span>{view.currentStageLabel}</span>
+        <small>{view.progressValueText}</small>
       </div>
       <div
         className="browser-training-progress__bar"
         role="progressbar"
-        aria-label="Browser training overall progress"
+        aria-label="Training overall progress"
         aria-describedby={`${phaseDescriptionId} ${liveRegionId}`}
         aria-valuemin={0}
         aria-valuemax={100}
@@ -484,7 +400,7 @@ function BrowserTrainingProgressDetails({
       >
         <span style={{ width: `${view.progressPercent.toString()}%` }} />
       </div>
-      <ol className="training-phase-list" aria-label="Browser training phase details">
+      <ol className="training-phase-list" aria-label="Training stage details">
         {view.phases.map((phase, index) => (
           <li
             key={phase.id}
@@ -503,27 +419,59 @@ function BrowserTrainingProgressDetails({
           </li>
         ))}
       </ol>
-      <dl className="microphone-settings" aria-label="Browser training reload recovery summary">
-        <div>
-          <dt>Reload recovery</dt>
-          <dd>{view.recovery.label}</dd>
-        </div>
-        <div>
-          <dt>Recovery updated</dt>
-          <dd>{view.recovery.updatedAt ?? 'not stored'}</dd>
-        </div>
-      </dl>
+      {view.recovery.resumable ? <p className="status-message">{view.recovery.label}</p> : null}
       <p id={localOnlyId} className="status-message">
         {view.localOnlyDisclosure}
       </p>
       {view.resourceWarnings.length > 0 ? (
-        <ul className="runtime-warnings" aria-label="Browser training resource guidance">
+        <ul className="runtime-warnings" aria-label="Training resource guidance">
           {view.resourceWarnings.map((warning) => (
             <li key={warning}>{warning}</li>
           ))}
         </ul>
       ) : null}
     </section>
+  );
+}
+
+function BrowserTrainingDetailsDisclosure({
+  view,
+  recovery,
+  coordination,
+  warnings,
+}: {
+  readonly view: BrowserTrainingProgressViewV1;
+  readonly recovery: BrowserTrainingRecoveryRecordV1 | null;
+  readonly coordination: BrowserTrainingCoordinationEventV1 | null;
+  readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
+}) {
+  return (
+    <details className="training-details-disclosure">
+      <summary>Training details</summary>
+      <BrowserTrainingTechnicalDetails view={view} />
+      <BrowserTrainingRecoveryDetails
+        recovery={recovery}
+        coordination={coordination}
+        warnings={warnings}
+      />
+    </details>
+  );
+}
+
+function BrowserTrainingTechnicalDetails({
+  view,
+}: {
+  readonly view: BrowserTrainingProgressViewV1;
+}) {
+  return (
+    <dl className="microphone-settings" aria-label="Training technical details">
+      {view.technicalDetails.map((detail) => (
+        <div key={detail.label}>
+          <dt>{detail.label}</dt>
+          <dd>{detail.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -536,7 +484,7 @@ function BrowserTrainingRecoveryDetails({
   readonly coordination: BrowserTrainingCoordinationEventV1 | null;
   readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
 }) {
-  const visibleWarnings = uniqueBrowserTrainingWarnings([
+  const visibleWarnings = summarizeBrowserTrainingResourceWarnings([
     ...warnings,
     ...(recovery?.warnings ?? []),
   ]);
@@ -567,7 +515,7 @@ function BrowserTrainingRecoveryDetails({
       {visibleWarnings.length > 0 ? (
         <ul className="runtime-warnings" aria-label="Browser training runtime warnings">
           {visibleWarnings.map((warning) => (
-            <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>
+            <li key={warning}>{warning}</li>
           ))}
         </ul>
       ) : null}
@@ -575,8 +523,41 @@ function BrowserTrainingRecoveryDetails({
   );
 }
 
+function formatBrowserTrainingStatusMessage(
+  status: BrowserTrainingStatus,
+  recoverySummary: string,
+): string {
+  if (status.state === 'idle') {
+    return recoverySummary === 'none'
+      ? 'Training has not started.'
+      : 'Training can resume from the saved checkpoint.';
+  }
+  if (status.state === 'training') {
+    return 'Training is running locally.';
+  }
+  if (status.state === 'complete') {
+    switch (status.result.status) {
+      case 'completed':
+        return 'Training finished. Review results before using the model.';
+      case 'paused':
+        return 'Training paused. Progress is saved on this device.';
+      case 'cancelled':
+        return 'Training cancelled. Start again or resume if recovery is available.';
+    }
+  }
+  return 'Training needs attention.';
+}
+
 function confirmBrowserTrainingAction(message: string): boolean {
   return typeof globalThis.confirm !== 'function' || globalThis.confirm(message);
+}
+
+function formatBrowserTrainingErrorMessage(message: string): string {
+  const lowerMessage = message.toLowerCase();
+  if (lowerMessage.includes('another tab')) {
+    return 'Another tab is already training this voice model. Pause or cancel that run, then try again.';
+  }
+  return 'Training stopped before it finished. Retry or resume from recovery.';
 }
 
 function formatBrowserTrainingPhaseStatus(
@@ -617,18 +598,6 @@ function formatBrowserTrainingCoordination(
     case 'lock-unavailable':
       return 'Web Locks unavailable';
   }
-}
-
-function uniqueBrowserTrainingWarnings(
-  warnings: readonly BrowserTrainingRuntimeWarningV1[],
-): readonly BrowserTrainingRuntimeWarningV1[] {
-  const seen = new Set<string>();
-  return warnings.filter((warning) => {
-    const key = `${warning.code}:${warning.message}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {
