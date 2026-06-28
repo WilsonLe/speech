@@ -17,6 +17,7 @@ import {
   buildPersonalModelDetailSummary,
   buildPersonalModelListRow,
   buildPersonalModelProfileCard,
+  buildPersonalModelResultView,
   defaultPersonalProfileDisplayName,
   summarizeActiveVocabulary,
 } from './personal-models';
@@ -262,6 +263,87 @@ describe('personal model card summaries', () => {
     expect(JSON.stringify([awaiting, automatic, override, blocked])).not.toContain(
       'Secret Launch Name',
     );
+  });
+
+  it('builds outcome-first candidate result views with grouped metrics and gate summaries', () => {
+    const profileSummary = createProfileSummary();
+    const activeState: ActiveEnrollmentProfileStateV1 = {
+      schemaVersion: 1,
+      activeProfileId: 'previous-profile',
+      previousProfileId: profileSummary.profile.id,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const card = buildPersonalModelProfileCard({
+      summary: profileSummary,
+      activeState,
+      activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+    });
+    const readyReview = buildPersonalModelActivationReviewCard({
+      profileCard: card,
+      activeState,
+      activationDecision: createActivationDecision({ status: 'automatic-activation-allowed' }),
+    });
+
+    const ready = buildPersonalModelResultView({
+      review: readyReview,
+      recordingHref: '/models/local/enroll',
+      trainingHref: '/models/local/train',
+    });
+
+    expect(ready).toMatchObject({
+      status: 'ready',
+      title: 'Ready to use',
+      primaryAction: { kind: 'use-model', label: 'Use model', disabled: false },
+    });
+    expect(ready.metricGroups.map((group) => group.title)).toEqual([
+      'Personal speech',
+      'Languages',
+      'Voice levels',
+      'Vocabulary',
+      'General speech',
+      'Performance',
+    ]);
+    expect(ready.gateGroups.hard.every((gate) => gate.severity === 'hard')).toBe(true);
+    expect(ready.gateGroups.advisory.every((gate) => gate.severity === 'advisory')).toBe(true);
+    expect(ready.rollback.previousProfileAvailable).toBe(true);
+    expect(JSON.stringify(ready)).not.toContain(profileSummary.profile.id);
+    expect(JSON.stringify(ready)).not.toContain('Secret Launch Name');
+    expect(JSON.stringify(ready)).not.toContain('sha256');
+
+    const blockedReview = buildPersonalModelActivationReviewCard({
+      profileCard: card,
+      activeState,
+      activationDecision: createActivationDecision({
+        status: 'blocked-by-hard-gates',
+        activationAllowed: false,
+        automaticActivationAllowed: false,
+        hardGatePassed: false,
+      }),
+    });
+    const blocked = buildPersonalModelResultView({
+      review: blockedReview,
+      recordingHref: '/models/local/enroll',
+      trainingHref: '/models/local/train',
+    });
+    expect(blocked).toMatchObject({
+      status: 'blocked',
+      title: 'More recordings needed',
+      primaryAction: { kind: 'record-more', label: 'Record more', href: '/models/local/enroll' },
+    });
+
+    const awaiting = buildPersonalModelResultView({
+      review: buildPersonalModelActivationReviewCard({
+        profileCard: card,
+        activeState,
+        activationDecision: null,
+      }),
+      recordingHref: '/models/local/enroll',
+      trainingHref: '/models/local/train',
+    });
+    expect(awaiting).toMatchObject({
+      status: 'not-ready',
+      primaryAction: { kind: 'train-model', href: '/models/local/train' },
+    });
   });
 
   it('builds independent browser capability preflight checks from aggregate capability data', () => {

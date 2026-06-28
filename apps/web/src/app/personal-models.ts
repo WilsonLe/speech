@@ -1,4 +1,7 @@
-import type { PersonalModelActivationDecisionV1 } from '@speech/personalization';
+import type {
+  PersonalModelActivationDecisionV1,
+  PersonalModelActivationGateDecisionV1,
+} from '@speech/personalization';
 import type {
   ActiveEnrollmentProfileStateV1,
   EnrollmentProfileSummaryV1,
@@ -46,15 +49,10 @@ export interface PersonalModelActivationReviewCardV1 {
   readonly advancedOverrideAvailable: boolean;
   readonly hardGatePassed: boolean;
   readonly softGatePassed: boolean;
-  readonly comparison: {
-    readonly personalHeldoutCases: number;
-    readonly anchorCases: number;
-    readonly selectedVocabularyEntryCount: number;
-    readonly candidateVsGenericWerRelativeImprovement: number | null;
-    readonly candidateVsP1WerDelta: number | null;
-    readonly anchorWerDelta: number | null;
-    readonly rtfOverheadRatioVsP1: number | null;
-    readonly candidateAdapterSizeBytes: number | null;
+  readonly comparison: PersonalModelActivationComparisonViewV1;
+  readonly gates: {
+    readonly hard: readonly PersonalModelGateSummaryV1[];
+    readonly advisory: readonly PersonalModelGateSummaryV1[];
   };
   readonly rollback: {
     readonly genericFallbackAvailable: true;
@@ -74,6 +72,89 @@ export interface PersonalModelActivationReviewCardV1 {
     readonly containsPrivateVocabularyTerms: false;
     readonly localOnly: true;
   };
+}
+
+export interface PersonalModelActivationComparisonViewV1 {
+  readonly personalHeldoutCases: number;
+  readonly anchorCases: number;
+  readonly overallCases: number;
+  readonly selectedVocabularyEntryCount: number;
+  readonly selectedVocabularyCaseCount: number;
+  readonly candidateVsGenericWerRelativeImprovement: number | null;
+  readonly candidateVsGenericCerRelativeImprovement: number | null;
+  readonly candidateVsGenericCustomTermRecallDelta: number | null;
+  readonly candidateVsP1WerDelta: number | null;
+  readonly anchorWerDelta: number | null;
+  readonly anchorCerDelta: number | null;
+  readonly anchorFalseInsertionDelta: number | null;
+  readonly overallFalseInsertionDelta: number | null;
+  readonly rtfOverheadRatioVsP1: number | null;
+  readonly candidateAdapterSizeBytes: number | null;
+}
+
+export interface PersonalModelGateSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly label: string;
+  readonly severity: 'hard' | 'advisory';
+  readonly passed: boolean;
+  readonly detail: string;
+  readonly valueCount: number;
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsCaseIds: false;
+    readonly containsRawProfileIds: false;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
+}
+
+export type PersonalModelResultActionKindV1 =
+  | 'use-model'
+  | 'record-more'
+  | 'train-model'
+  | 'keep-draft'
+  | 'none';
+
+export interface PersonalModelResultActionV1 {
+  readonly kind: PersonalModelResultActionKindV1;
+  readonly label: string;
+  readonly href?: string;
+  readonly disabled: boolean;
+  readonly tone: 'primary' | 'secondary';
+}
+
+export interface PersonalModelResultMetricV1 {
+  readonly label: string;
+  readonly value: string;
+}
+
+export interface PersonalModelResultMetricGroupV1 {
+  readonly title:
+    | 'Personal speech'
+    | 'Languages'
+    | 'Voice levels'
+    | 'Vocabulary'
+    | 'General speech'
+    | 'Performance';
+  readonly metrics: readonly PersonalModelResultMetricV1[];
+}
+
+export interface PersonalModelResultViewV1 {
+  readonly schemaVersion: 1;
+  readonly status: 'not-ready' | 'ready' | 'review-needed' | 'blocked';
+  readonly title: string;
+  readonly detail: string;
+  readonly primaryAction: PersonalModelResultActionV1;
+  readonly secondaryActions: readonly PersonalModelResultActionV1[];
+  readonly metricGroups: readonly PersonalModelResultMetricGroupV1[];
+  readonly gateGroups: {
+    readonly hard: readonly PersonalModelGateSummaryV1[];
+    readonly advisory: readonly PersonalModelGateSummaryV1[];
+  };
+  readonly rollback: PersonalModelActivationReviewCardV1['rollback'];
+  readonly privacy: PersonalModelActivationReviewCardV1['privacy'];
 }
 
 export type PersonalModelListPrimaryActionV1 =
@@ -397,6 +478,10 @@ export function buildPersonalModelActivationReviewCard({
       hardGatePassed: false,
       softGatePassed: false,
       comparison: emptyActivationComparison(),
+      gates: {
+        hard: [],
+        advisory: [],
+      },
       rollback: {
         genericFallbackAvailable: true,
         previousAdapterRetained: activeState?.previousProfileId !== undefined,
@@ -420,14 +505,30 @@ export function buildPersonalModelActivationReviewCard({
     comparison: {
       personalHeldoutCases: activationDecision.comparison.personalHeldout.caseCount,
       anchorCases: activationDecision.comparison.anchor.caseCount,
+      overallCases: activationDecision.comparison.overall.caseCount,
       selectedVocabularyEntryCount:
         activationDecision.comparison.personalHeldout.selectedVocabularyEntryCount,
+      selectedVocabularyCaseCount:
+        activationDecision.comparison.personalHeldout.selectedVocabularyCaseCount,
       candidateVsGenericWerRelativeImprovement:
         activationDecision.comparison.personalHeldout.candidateVsGenericWerRelativeImprovement,
+      candidateVsGenericCerRelativeImprovement:
+        activationDecision.comparison.personalHeldout.candidateVsGenericCerRelativeImprovement,
+      candidateVsGenericCustomTermRecallDelta:
+        activationDecision.comparison.personalHeldout.candidateVsGenericCustomTermRecallDelta,
       candidateVsP1WerDelta: activationDecision.comparison.personalHeldout.candidateVsP1WerDelta,
       anchorWerDelta: activationDecision.comparison.anchor.candidateVsGenericWerDelta,
+      anchorCerDelta: activationDecision.comparison.anchor.candidateVsGenericCerDelta,
+      anchorFalseInsertionDelta:
+        activationDecision.comparison.anchor.candidateVsGenericFalseInsertionPer100Delta,
+      overallFalseInsertionDelta:
+        activationDecision.comparison.overall.candidateVsGenericFalseInsertionPer100Delta,
       rtfOverheadRatioVsP1: activationDecision.comparison.overall.rtfOverheadRatioVsP1,
       candidateAdapterSizeBytes: activationDecision.comparison.candidateAdapterSizeBytes,
+    },
+    gates: {
+      hard: activationDecision.hardGates.map((gate) => createGateSummary(gate)),
+      advisory: activationDecision.softGates.map((gate) => createGateSummary(gate)),
     },
     rollback: {
       genericFallbackAvailable: activationDecision.actions.genericFallbackAvailable,
@@ -480,14 +581,280 @@ function activationDecisionReasonCode(decision: PersonalModelActivationDecisionV
   }
 }
 
-function emptyActivationComparison(): PersonalModelActivationReviewCardV1['comparison'] {
+export function buildPersonalModelResultView({
+  review,
+  recordingHref,
+  trainingHref,
+}: {
+  readonly review: PersonalModelActivationReviewCardV1;
+  readonly recordingHref: string;
+  readonly trainingHref: string;
+}): PersonalModelResultViewV1 {
+  const draftAction: PersonalModelResultActionV1 = {
+    kind: 'keep-draft',
+    label: 'Keep as draft',
+    disabled: false,
+    tone: 'secondary',
+  };
+
+  if (review.status === 'automatic-ready' || review.status === 'advanced-override-accepted') {
+    return {
+      schemaVersion: 1,
+      status: 'ready',
+      title: 'Ready to use',
+      detail: 'Your model improved on your held-out recordings and passed general checks.',
+      primaryAction: {
+        kind: 'use-model',
+        label: 'Use model',
+        disabled: !review.activationAllowed,
+        tone: 'primary',
+      },
+      secondaryActions: [draftAction],
+      metricGroups: createActivationMetricGroups(review),
+      gateGroups: review.gates,
+      rollback: review.rollback,
+      privacy: review.privacy,
+    };
+  }
+
+  if (review.status === 'blocked') {
+    return {
+      schemaVersion: 1,
+      status: 'blocked',
+      title: 'More recordings needed',
+      detail: 'A required quality check did not meet the activation threshold.',
+      primaryAction: {
+        kind: 'record-more',
+        label: 'Record more',
+        href: recordingHref,
+        disabled: false,
+        tone: 'primary',
+      },
+      secondaryActions: [draftAction],
+      metricGroups: createActivationMetricGroups(review),
+      gateGroups: review.gates,
+      rollback: review.rollback,
+      privacy: review.privacy,
+    };
+  }
+
+  if (review.status === 'advanced-override-required') {
+    return {
+      schemaVersion: 1,
+      status: 'review-needed',
+      title: 'Review advisory checks',
+      detail:
+        'Required quality checks passed, but advisory checks need explicit review before activation.',
+      primaryAction: draftAction,
+      secondaryActions: [
+        {
+          kind: 'record-more',
+          label: 'Record more',
+          href: recordingHref,
+          disabled: false,
+          tone: 'secondary',
+        },
+      ],
+      metricGroups: createActivationMetricGroups(review),
+      gateGroups: review.gates,
+      rollback: review.rollback,
+      privacy: review.privacy,
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    status: 'not-ready',
+    title: 'Results not ready',
+    detail: review.detail,
+    primaryAction: {
+      kind: 'train-model',
+      label: 'Train model',
+      href: trainingHref,
+      disabled: false,
+      tone: 'primary',
+    },
+    secondaryActions: [draftAction],
+    metricGroups: createActivationMetricGroups(review),
+    gateGroups: review.gates,
+    rollback: review.rollback,
+    privacy: review.privacy,
+  };
+}
+
+function createGateSummary(
+  gate: PersonalModelActivationGateDecisionV1,
+): PersonalModelGateSummaryV1 {
+  const label = formatGateLabel(gate.name);
+  return {
+    schemaVersion: 1,
+    label,
+    severity: gate.severity === 'hard' ? 'hard' : 'advisory',
+    passed: gate.passed,
+    detail: gate.passed ? 'Passed' : `${label} needs review.`,
+    valueCount: Object.keys(gate.values).length,
+    privacy: {
+      aggregateOnly: true,
+      containsRawAudio: false,
+      containsTranscriptText: false,
+      containsCaseIds: false,
+      containsRawProfileIds: false,
+      containsPrivateVocabularyTerms: false,
+      localOnly: true,
+    },
+  };
+}
+
+function createActivationMetricGroups(
+  review: PersonalModelActivationReviewCardV1,
+): readonly PersonalModelResultMetricGroupV1[] {
+  const comparison = review.comparison;
+  return [
+    {
+      title: 'Personal speech',
+      metrics: [
+        { label: 'Held-out recordings', value: formatCount(comparison.personalHeldoutCases) },
+        {
+          label: 'Word-error improvement',
+          value: formatPercent(comparison.candidateVsGenericWerRelativeImprovement),
+        },
+        {
+          label: 'Character-error improvement',
+          value: formatPercent(comparison.candidateVsGenericCerRelativeImprovement),
+        },
+      ],
+    },
+    {
+      title: 'Languages',
+      metrics: [
+        { label: 'Evaluation recordings', value: formatCount(comparison.overallCases) },
+        { label: 'General speech recordings', value: formatCount(comparison.anchorCases) },
+      ],
+    },
+    {
+      title: 'Voice levels',
+      metrics: [
+        {
+          label: 'Previous-model word-error change',
+          value: formatSignedRatio(comparison.candidateVsP1WerDelta),
+        },
+      ],
+    },
+    {
+      title: 'Vocabulary',
+      metrics: [
+        { label: 'Selected words', value: formatCount(comparison.selectedVocabularyEntryCount) },
+        {
+          label: 'Vocabulary recordings',
+          value: formatCount(comparison.selectedVocabularyCaseCount),
+        },
+        {
+          label: 'Custom-word recall change',
+          value: formatSignedRatio(comparison.candidateVsGenericCustomTermRecallDelta),
+        },
+      ],
+    },
+    {
+      title: 'General speech',
+      metrics: [
+        {
+          label: 'Word-error change',
+          value: formatSignedRatio(comparison.anchorWerDelta),
+        },
+        {
+          label: 'Character-error change',
+          value: formatSignedRatio(comparison.anchorCerDelta),
+        },
+        {
+          label: 'False insertions change',
+          value: formatSignedRatio(comparison.anchorFalseInsertionDelta),
+        },
+        {
+          label: 'Overall false insertions',
+          value: formatSignedRatio(comparison.overallFalseInsertionDelta),
+        },
+      ],
+    },
+    {
+      title: 'Performance',
+      metrics: [
+        {
+          label: 'Processing overhead',
+          value: formatRatio(comparison.rtfOverheadRatioVsP1),
+        },
+        {
+          label: 'Model size',
+          value: formatBytes(comparison.candidateAdapterSizeBytes),
+        },
+      ],
+    },
+  ];
+}
+
+function formatGateLabel(name: PersonalModelActivationGateDecisionV1['name']): string {
+  switch (name) {
+    case 'personal-improvement-vs-generic':
+      return 'Personal speech improvement';
+    case 'candidate-parity-vs-p1':
+      return 'Previous model comparison';
+    case 'anchor-regression-vs-generic':
+      return 'General speech regression';
+    case 'slice-regression-vs-generic':
+      return 'Language or voice-level regression';
+    case 'rtf-overhead-vs-p1':
+      return 'Processing overhead';
+    case 'false-insertion-regression-vs-generic':
+      return 'False insertions';
+    case 'candidate-adapter-size':
+      return 'Model size';
+    default:
+      return 'Quality check';
+  }
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? 'Not measured' : `${formatSignedNumber(value * 100)}%`;
+}
+
+function formatSignedRatio(value: number | null): string {
+  return value === null ? 'Not measured' : formatSignedNumber(value);
+}
+
+function formatRatio(value: number | null): string {
+  return value === null ? 'Not measured' : `${value.toFixed(2)}×`;
+}
+
+function formatSignedNumber(value: number): string {
+  const rounded = Math.abs(value) < 0.005 ? 0 : value;
+  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(2)}`;
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null) return 'Not measured';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function emptyActivationComparison(): PersonalModelActivationComparisonViewV1 {
   return {
     personalHeldoutCases: 0,
     anchorCases: 0,
+    overallCases: 0,
     selectedVocabularyEntryCount: 0,
+    selectedVocabularyCaseCount: 0,
     candidateVsGenericWerRelativeImprovement: null,
+    candidateVsGenericCerRelativeImprovement: null,
+    candidateVsGenericCustomTermRecallDelta: null,
     candidateVsP1WerDelta: null,
     anchorWerDelta: null,
+    anchorCerDelta: null,
+    anchorFalseInsertionDelta: null,
+    overallFalseInsertionDelta: null,
     rtfOverheadRatioVsP1: null,
     candidateAdapterSizeBytes: null,
   };

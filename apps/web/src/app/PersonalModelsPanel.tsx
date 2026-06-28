@@ -53,13 +53,17 @@ import {
   buildPersonalModelDetailSummary,
   buildPersonalModelListRow,
   buildPersonalModelProfileCard,
+  buildPersonalModelResultView,
   defaultPersonalProfileId,
   summarizeActiveVocabulary,
   type ActiveVocabularySummaryV1,
   type PersonalModelActivationReviewCardV1,
   type PersonalModelDetailSummaryV1,
   type PersonalModelListRowV1,
+  type PersonalModelGateSummaryV1,
   type PersonalModelProfileCardV1,
+  type PersonalModelResultActionV1,
+  type PersonalModelResultViewV1,
 } from './personal-models';
 import {
   buildPersonalModelCapabilityChecks,
@@ -212,6 +216,7 @@ export function PersonalModelsPanel() {
   const modelLifecycleWorkerRef = useRef<Worker | null>(null);
   const isCreateModelRoute = currentRoute.routeId === 'models-new';
   const isTrainingReadinessRoute = currentRoute.routeId === 'model-train';
+  const isModelResultsRoute = currentRoute.routeId === 'model-results';
   const routeProfileId = currentRoute.params['profileId'];
   const primarySummary = useMemo(() => {
     if (routeProfileId !== undefined) {
@@ -302,6 +307,15 @@ export function PersonalModelsPanel() {
   );
   const readinessProfileId =
     primarySummary?.profile.id ?? routeProfileId ?? defaultPersonalProfileId;
+  const modelResultView = useMemo(
+    () =>
+      buildPersonalModelResultView({
+        review: activationReview,
+        recordingHref: `/models/${encodeURIComponent(readinessProfileId)}/enroll`,
+        trainingHref: `/models/${encodeURIComponent(readinessProfileId)}/train`,
+      }),
+    [activationReview, readinessProfileId],
+  );
   const trainingReadinessView = useMemo(
     () =>
       buildPersonalModelTrainingReadinessView({
@@ -527,6 +541,11 @@ export function PersonalModelsPanel() {
     await runLifecycleAction('activating', formatModelReasonMessage('model-enable-started'), () =>
       enableEnrollmentProfile({ profileId }),
     );
+  }
+
+  async function enablePrimaryProfile() {
+    if (primarySummary === null) return;
+    await enableProfile(primarySummary.profile.id);
   }
 
   async function deactivateProfile(profileId: string) {
@@ -756,6 +775,12 @@ export function PersonalModelsPanel() {
           readinessTasks={readinessTasks}
           view={trainingReadinessView}
         />
+      ) : isModelResultsRoute ? (
+        <ModelResultsPanel
+          isBusy={isBusy}
+          onActivate={() => void enablePrimaryProfile()}
+          resultView={modelResultView}
+        />
       ) : (
         <>
           <section className="model-list-panel" aria-labelledby="voice-models-list-title">
@@ -888,7 +913,7 @@ export function PersonalModelsPanel() {
             persistentStorageGranted={state.persistentStorageGranted}
             readinessReport={readinessReport}
             readinessTasks={readinessTasks}
-            review={activationReview}
+            resultView={modelResultView}
             runtimeSelfTest={preflight.runtimeSelfTest}
             trainingCompanion={trainingCompanion}
           />
@@ -1244,7 +1269,7 @@ function PersonalModelDetailPanel({
   persistentStorageGranted,
   readinessReport,
   readinessTasks,
-  review,
+  resultView,
   runtimeSelfTest,
   trainingCompanion,
 }: {
@@ -1265,7 +1290,7 @@ function PersonalModelDetailPanel({
   readonly persistentStorageGranted: boolean | null;
   readonly readinessReport: TrainingReadinessCoverageReportV1 | null;
   readonly readinessTasks: readonly PersonalModelReadinessTaskV1[];
-  readonly review: PersonalModelActivationReviewCardV1;
+  readonly resultView: PersonalModelResultViewV1;
   readonly runtimeSelfTest: RuntimeSelfTestUiState;
   readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
 }) {
@@ -1325,7 +1350,7 @@ function PersonalModelDetailPanel({
           {
             id: 'quality-results',
             title: 'Quality results',
-            children: <PersonalModelActivationReviewPanel review={review} />,
+            children: <PersonalModelResultViewPanel isBusy={isBusy} resultView={resultView} />,
           },
           {
             id: 'compatibility',
@@ -1524,7 +1549,7 @@ function ModelDetailStorageSection({
       <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
         <div>
           <dt>Recordings and profile</dt>
-          <dd>{formatNullableBytes(card.storage.storedBytes)}</dd>
+          <dd>{formatPreflightBytes(card.storage.storedBytes)}</dd>
         </div>
         <div>
           <dt>Training support files</dt>
@@ -1761,83 +1786,190 @@ function createModelRowMenuItems({
   ];
 }
 
-function PersonalModelActivationReviewPanel({
-  review,
+function ModelResultsPanel({
+  isBusy,
+  onActivate,
+  resultView,
 }: {
-  readonly review: PersonalModelActivationReviewCardV1;
+  readonly isBusy: boolean;
+  readonly onActivate: () => void;
+  readonly resultView: PersonalModelResultViewV1;
 }) {
   return (
-    <section className="activation-review-card" aria-labelledby="activation-review-title">
+    <section className="model-results-screen" aria-labelledby="model-results-title">
+      <PersonalModelResultViewPanel
+        actionHeadingId="model-results-title"
+        isBusy={isBusy}
+        onActivate={onActivate}
+        resultView={resultView}
+      />
+    </section>
+  );
+}
+
+function PersonalModelResultViewPanel({
+  actionHeadingId = 'activation-review-title',
+  isBusy,
+  onActivate,
+  resultView,
+}: {
+  readonly actionHeadingId?: string;
+  readonly isBusy: boolean;
+  readonly onActivate?: () => void;
+  readonly resultView: PersonalModelResultViewV1;
+}) {
+  return (
+    <section className="activation-review-card" aria-labelledby={actionHeadingId}>
       <div className="section-heading compact-heading">
-        <p className="eyebrow">Quality review</p>
-        <h3 id="activation-review-title">Quality checks and rollback</h3>
-        <p>
-          Aggregate personal and general speech checks decide whether this voice model can activate
-          automatically, needs explicit review, or must stay blocked while the generic or previous
-          model remains available.
-        </p>
+        <p className="eyebrow">Candidate result</p>
+        <h3 id={actionHeadingId}>{resultView.title}</h3>
+        <p>{resultView.detail}</p>
       </div>
-      <div className="personal-models-summary" aria-label="Quality check summary">
-        <StatusPill label="Check status" value={formatActivationReviewStatus(review)} />
-        <StatusPill
-          label="Activation"
-          value={review.activationAllowed ? 'allowed at boundary' : 'not allowed'}
+
+      <div className="model-result-actions" aria-label="Candidate result actions">
+        <ResultPrimaryAction
+          isBusy={isBusy}
+          {...(onActivate === undefined ? {} : { onActivate })}
+          resultView={resultView}
         />
-        <StatusPill
-          label="Advanced override"
-          value={
-            review.advancedOverrideAvailable ? 'available for advisory checks' : 'not available'
-          }
-        />
-        <StatusPill
-          label="Rollback"
-          value={
-            review.rollback.previousProfileAvailable ? 'previous retained' : 'generic fallback'
-          }
-        />
+        {resultView.secondaryActions.map((action) => (
+          <ResultSecondaryAction action={action} key={action.kind} />
+        ))}
       </div>
-      <dl className="model-card-meta personal-model-card-meta activation-review-meta">
-        <div>
-          <dt>Personal review cases</dt>
-          <dd>{review.comparison.personalHeldoutCases.toString()}</dd>
+
+      <details className="model-result-details">
+        <summary>Results</summary>
+        <div className="model-result-metric-groups">
+          {resultView.metricGroups.map((group) => (
+            <section
+              key={group.title}
+              aria-labelledby={`model-result-${slugifyLabel(group.title)}`}
+            >
+              <h4 id={`model-result-${slugifyLabel(group.title)}`}>{group.title}</h4>
+              <dl className="model-card-meta personal-model-card-meta activation-review-meta">
+                {group.metrics.map((metric) => (
+                  <div key={metric.label}>
+                    <dt>{metric.label}</dt>
+                    <dd>{metric.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
         </div>
-        <div>
-          <dt>General speech cases</dt>
-          <dd>{review.comparison.anchorCases.toString()}</dd>
-        </div>
-        <div>
-          <dt>Selected vocabulary</dt>
-          <dd>{review.comparison.selectedVocabularyEntryCount.toString()} words</dd>
-        </div>
-        <div>
-          <dt>Personal speech improvement</dt>
-          <dd>{formatSignedPercent(review.comparison.candidateVsGenericWerRelativeImprovement)}</dd>
-        </div>
-        <div>
-          <dt>Baseline difference</dt>
-          <dd>{formatSignedPercent(review.comparison.candidateVsP1WerDelta)}</dd>
-        </div>
-        <div>
-          <dt>General speech difference</dt>
-          <dd>{formatSignedPercent(review.comparison.anchorWerDelta)}</dd>
-        </div>
-        <div>
-          <dt>Speed overhead</dt>
-          <dd>{formatNullablePercent(review.comparison.rtfOverheadRatioVsP1)}</dd>
-        </div>
-        <div>
-          <dt>Model file size</dt>
-          <dd>{formatNullableBytes(review.comparison.candidateAdapterSizeBytes)}</dd>
-        </div>
-      </dl>
+      </details>
+
+      <div className="model-result-gates" aria-label="Quality checks">
+        <GateSummary title="Required checks" gates={resultView.gateGroups.hard} />
+        <GateSummary title="Advisory checks" gates={resultView.gateGroups.advisory} />
+      </div>
+
       <p className="status-message">
-        <strong>{review.title}.</strong> {review.detail}
+        Rollback:{' '}
+        {resultView.rollback.previousProfileAvailable
+          ? 'previous model retained'
+          : 'generic fallback available'}
+        . Activation changes apply at the next utterance boundary.
       </p>
       <p className="status-message">
-        Activation privacy: aggregate metrics only; no raw audio, transcript text, case identifiers,
-        training data, model files, profile identifiers, vocabulary terms, or vocabulary item
-        identifiers are displayed.
+        Privacy: aggregate metrics only; no raw audio, transcript text, case identifiers, profile
+        identifiers, vocabulary terms, feature data, checkpoints, or model files are displayed.
       </p>
+    </section>
+  );
+}
+
+function ResultPrimaryAction({
+  isBusy,
+  onActivate,
+  resultView,
+}: {
+  readonly isBusy: boolean;
+  readonly onActivate?: () => void;
+  readonly resultView: PersonalModelResultViewV1;
+}) {
+  const action = resultView.primaryAction;
+  if (action.kind === 'use-model') {
+    return (
+      <button
+        type="button"
+        className="primary"
+        disabled={isBusy || action.disabled || onActivate === undefined}
+        onClick={onActivate}
+      >
+        {action.label}
+      </button>
+    );
+  }
+  if (action.href !== undefined) {
+    return (
+      <a
+        className={action.tone === 'primary' ? 'button primary' : 'button secondary'}
+        href={action.href}
+      >
+        {action.label}
+      </a>
+    );
+  }
+  return (
+    <button type="button" className="secondary" disabled>
+      {action.label}
+    </button>
+  );
+}
+
+function ResultSecondaryAction({ action }: { readonly action: PersonalModelResultActionV1 }) {
+  if (action.href !== undefined) {
+    return (
+      <a className="button secondary" href={action.href} aria-disabled={action.disabled}>
+        {action.label}
+      </a>
+    );
+  }
+  return (
+    <button type="button" className="secondary" disabled={action.disabled}>
+      {action.label}
+    </button>
+  );
+}
+
+function GateSummary({
+  gates,
+  title,
+}: {
+  readonly gates: readonly PersonalModelGateSummaryV1[];
+  readonly title: string;
+}) {
+  const titleId = `model-result-gates-${slugifyLabel(title)}`;
+  if (gates.length === 0) {
+    return (
+      <section aria-labelledby={titleId}>
+        <h4 id={titleId}>{title}</h4>
+        <p>No checks are available yet.</p>
+      </section>
+    );
+  }
+  return (
+    <section aria-labelledby={titleId}>
+      <h4 id={titleId}>{title}</h4>
+      <ul className="model-result-gate-list">
+        {gates.map((gate) => (
+          <li
+            key={`${gate.severity}-${gate.label}`}
+            data-status={gate.passed ? 'passed' : 'failed'}
+          >
+            <strong>{gate.label}</strong>
+            <span>
+              {gate.passed
+                ? 'Passed'
+                : gate.severity === 'hard'
+                  ? 'Required check failed'
+                  : 'Advisory check'}
+            </span>
+            <p>{gate.detail}</p>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -1899,36 +2031,11 @@ function formatImportResultMessage(result: EnrollmentProfileImportResultV1): str
   }
 }
 
-function formatActivationReviewStatus(review: PersonalModelActivationReviewCardV1): string {
-  switch (review.status) {
-    case 'generic-fallback':
-      return 'generic fallback';
-    case 'awaiting-evaluation':
-      return 'awaiting evaluation';
-    case 'automatic-ready':
-      return 'automatic ready';
-    case 'advanced-override-required':
-      return 'override required';
-    case 'advanced-override-accepted':
-      return 'override accepted';
-    case 'blocked':
-      return 'blocked';
-  }
-}
-
-function formatSignedPercent(value: number | null): string {
-  if (value === null) return 'not evaluated';
-  const percent = value * 100;
-  const sign = percent > 0 ? '+' : '';
-  return `${sign}${percent.toFixed(2)}%`;
-}
-
-function formatNullablePercent(value: number | null): string {
-  return value === null ? 'not evaluated' : `${(value * 100).toFixed(2)}%`;
-}
-
-function formatNullableBytes(value: number | null): string {
-  return value === null ? 'not evaluated' : formatPreflightBytes(value);
+function slugifyLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/(^-|-$)/gu, '');
 }
 
 function focusRuntimePanel(): void {

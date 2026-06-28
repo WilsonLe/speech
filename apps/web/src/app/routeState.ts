@@ -264,7 +264,7 @@ const appRouteSpecs = [
     pattern: '/models/:profileId/results',
     title: 'Training results',
     primaryDestinationId: 'models',
-    headingId: 'personal-models-title',
+    headingId: 'model-results-title',
     queryKeys: ['candidateId', 'returnTo'],
     scrollRestoration: 'restore-per-route-and-profileId',
     stateSource: 'domain-storage',

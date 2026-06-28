@@ -2200,6 +2200,88 @@ button.danger,
   border-color: rgba(168, 85, 247, 0.2);
 }
 
+.model-results-screen {
+  display: grid;
+  gap: 1rem;
+}
+
+.model-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+.model-result-details {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.95rem;
+  padding: 0.8rem 0.95rem;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.model-result-details summary {
+  cursor: pointer;
+  color: #e2e8f0;
+  font-weight: 800;
+}
+
+.model-result-metric-groups,
+.model-result-gates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.model-result-metric-groups section,
+.model-result-gates section {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.model-result-metric-groups h4,
+.model-result-gates h4 {
+  margin: 0 0 0.75rem;
+  color: #f8fafc;
+}
+
+.model-result-gate-list {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-result-gate-list li {
+  border-left: 3px solid rgba(34, 197, 94, 0.64);
+  padding-left: 0.75rem;
+}
+
+.model-result-gate-list li[data-status='failed'] {
+  border-left-color: rgba(245, 158, 11, 0.8);
+}
+
+.model-result-gate-list strong,
+.model-result-gate-list span {
+  display: block;
+}
+
+.model-result-gate-list span {
+  margin-top: 0.2rem;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.model-result-gate-list p {
+  margin: 0.3rem 0 0;
+}
+
 .model-detail-panel {
   border-color: rgba(14, 165, 233, 0.24);
 }
@@ -2692,6 +2774,8 @@ button.danger,
   .model-detail-summary,
   .model-detail-summary__meta,
   .model-detail-metrics,
+  .model-result-metric-groups,
+  .model-result-gates,
   .personal-models-nav,
   .personal-models-summary,
   .preflight-grid,
@@ -2745,7 +2829,9 @@ button.danger,
   }
 
   .vocabulary-entry-editor__heading,
-  .create-model-flow {
+  .create-model-flow,
+  .model-results-screen,
+  .model-detail-panel {
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
   }
 
@@ -2769,7 +2855,8 @@ button.danger,
   .create-model-flow__actions,
   .model-list-toolbar,
   .model-list-actions,
-  .model-list-meta {
+  .model-list-meta,
+  .model-result-actions {
     display: grid;
   }
 
@@ -2802,6 +2889,8 @@ button.danger,
   .model-list-toolbar .file-button,
   .model-list-actions .speech-button,
   .model-list-actions .button,
+  .model-result-actions .button,
+  .model-result-actions button,
   .model-import-options button,
   .create-model-flow__actions .button,
   .create-model-flow__actions button:not(.create-model-flow__step-dot),
