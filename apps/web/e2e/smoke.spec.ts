@@ -51,6 +51,36 @@ test('renders the task-first PWA shell', async ({ page }) => {
     'href',
     '/settings/storage',
   );
+  await expect(page.getByRole('link', { name: 'Open Privacy' })).toHaveAttribute(
+    'href',
+    '/settings/privacy',
+  );
+  await expect(page.getByRole('link', { name: 'Open Keyboard shortcuts' })).toHaveAttribute(
+    'href',
+    '/settings/shortcuts',
+  );
+  await page.getByRole('link', { name: 'Open Privacy' }).click();
+  await expect(page).toHaveURL(/\/settings\/privacy$/);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('privacy-title');
+  await expect(page.getByRole('heading', { name: 'Privacy', exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Audio, transcripts, training, and personal models stay on this device.'),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Delete local speech data' })).toHaveAttribute(
+    'href',
+    '/settings/storage?focus=delete-all',
+  );
+  await expect(page.getByText('No telemetry configured')).toBeVisible();
+  await page.goto('/settings');
+  await page.getByRole('link', { name: 'Open Keyboard shortcuts' }).click();
+  await expect(page).toHaveURL(/\/settings\/shortcuts$/);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('shortcuts-title');
+  await expect(
+    page.getByRole('heading', { name: 'Keyboard shortcuts', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Hold to record on Dictate')).toBeVisible();
+  await expect(page.getByText('Menus, dialogs, and disclosures')).toBeVisible();
+  await page.goto('/settings');
   await page.getByRole('link', { name: 'Open Storage' }).click();
   await expect(page).toHaveURL(/\/settings\/storage$/);
   await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('storage-title');

@@ -320,7 +320,7 @@ const appRouteSpecs = [
     id: 'settings-privacy',
     pattern: '/settings/privacy',
     title: 'Privacy',
-    headingId: 'transcript-privacy-title',
+    headingId: 'privacy-title',
     queryKeys: ['returnTo'],
     scrollRestoration: 'restore-per-route-when-returning',
     stateSource: 'static',
@@ -329,7 +329,7 @@ const appRouteSpecs = [
     id: 'settings-shortcuts',
     pattern: '/settings/shortcuts',
     title: 'Keyboard shortcuts',
-    headingId: 'transcript-title',
+    headingId: 'shortcuts-title',
     queryKeys: ['returnTo'],
     scrollRestoration: 'restore-per-route-when-returning',
     stateSource: 'static',
@@ -406,6 +406,8 @@ const legacyHashRedirects = new Set([
   '#transcript-title',
   '#committed-transcript-text',
   '#transcript-privacy-title',
+  '#privacy-title',
+  '#shortcuts-title',
   '#vocabulary',
   '#vocabulary-title',
   '#models',
@@ -658,7 +660,10 @@ function resolveLegacyHashRedirect(hash: string, search: string): ResolvedAppRou
       );
     }
     case '#transcript-privacy-title':
+    case '#privacy-title':
       return markLegacy(resolveCanonicalPath('/settings/privacy', search, ['returnTo']));
+    case '#shortcuts-title':
+      return markLegacy(resolveCanonicalPath('/settings/shortcuts', search, ['returnTo']));
     case '#roadmap-title':
       return markLegacy(resolveCanonicalPath('/about', search, ['returnTo']));
     case '':

@@ -37,7 +37,11 @@ export function App() {
 function RoutedAppContent() {
   const route = useAppRoute();
 
-  if (route.routeId === 'settings-index') {
+  if (
+    route.routeId === 'settings-index' ||
+    route.routeId === 'settings-privacy' ||
+    route.routeId === 'settings-shortcuts'
+  ) {
     return <SettingsPanel />;
   }
 

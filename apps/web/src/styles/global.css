@@ -617,6 +617,111 @@ h2 {
   margin-top: var(--speech-space-5);
 }
 
+.privacy-actions,
+.shortcuts-list {
+  display: grid;
+  gap: var(--speech-space-3);
+}
+
+.privacy-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.privacy-action-card,
+.privacy-network-result,
+.privacy-boundaries,
+.shortcuts-group {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--speech-radius-md);
+  padding: var(--speech-space-4);
+  background: rgba(2, 6, 23, 0.38);
+}
+
+.privacy-action-card {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--speech-space-4);
+  align-items: flex-start;
+}
+
+.privacy-action-card h3,
+.privacy-network-result h3,
+.privacy-boundaries h3,
+.shortcuts-group h3 {
+  margin: 0 0 var(--speech-space-2);
+}
+
+.privacy-action-card p,
+.privacy-network-result p,
+.privacy-boundaries p,
+.shortcuts-group p {
+  margin: 0;
+}
+
+.privacy-network-result,
+.privacy-boundaries {
+  margin-top: var(--speech-space-4);
+}
+
+.privacy-boundaries ul {
+  display: grid;
+  gap: var(--speech-space-2);
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.shortcuts-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shortcuts-group dl {
+  display: grid;
+  gap: var(--speech-space-3);
+  margin: 0;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  gap: var(--speech-space-3);
+  align-items: start;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  padding-top: var(--speech-space-3);
+}
+
+.shortcut-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.shortcut-row dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.shortcut-row dd {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.shortcut-row small {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.shortcut-row kbd {
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 0.5rem;
+  padding: 0.2rem 0.45rem;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.72);
+  font-family: var(--speech-font-family-mono);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
 .section-heading {
   max-width: 760px;
 }
@@ -3175,6 +3280,9 @@ button.danger,
   .storage-summary-grid,
   .storage-action-grid,
   .storage-confirmation-grid,
+  .privacy-actions,
+  .shortcuts-list,
+  .shortcut-row,
   .vocabulary-summary,
   .vocabulary-layout,
   .vocabulary-form-grid,
@@ -3253,6 +3361,7 @@ button.danger,
   .vocabulary-set-row .speech-menu-button,
   .vocabulary-set-row .speech-button,
   .settings-list-row .button,
+  .privacy-action-card .button,
   .audio-settings-actions button,
   .audio-settings-card > button,
   .storage-section-header button,
