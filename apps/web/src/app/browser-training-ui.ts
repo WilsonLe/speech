@@ -18,12 +18,7 @@ export type BrowserTrainingUiStatus =
   | { readonly state: 'error'; readonly message: string };
 
 export type BrowserTrainingControlIntent = 'none' | 'pause-requested' | 'cancel-requested';
-export type BrowserTrainingPhaseId =
-  | 'prepare-worker'
-  | 'coordinate-lock'
-  | 'train-adapter'
-  | 'checkpoint-recovery'
-  | 'activation-gate';
+export type BrowserTrainingPhaseId = 'preparing' | 'training' | 'checking' | 'ready';
 export type BrowserTrainingPhaseStatus =
   | 'pending'
   | 'active'
@@ -47,14 +42,22 @@ export interface BrowserTrainingRecoveryViewV1 {
   readonly resumable: boolean;
 }
 
+export interface BrowserTrainingTechnicalDetailV1 {
+  readonly label: string;
+  readonly value: string;
+}
+
 export interface BrowserTrainingProgressViewV1 {
-  readonly currentPhaseLabel: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly currentStageLabel: 'Preparing' | 'Training' | 'Checking' | 'Ready';
   readonly progressPercent: number;
   readonly progressValueText: string;
   readonly controlIntent: BrowserTrainingControlIntent;
   readonly phases: readonly BrowserTrainingPhaseViewV1[];
   readonly recovery: BrowserTrainingRecoveryViewV1;
   readonly resourceWarnings: readonly string[];
+  readonly technicalDetails: readonly BrowserTrainingTechnicalDetailV1[];
   readonly localOnlyDisclosure: string;
   readonly liveRegionText: string;
   readonly phaseTextEquivalent: string;
@@ -89,27 +92,38 @@ export function buildBrowserTrainingProgressView({
   const progress = status.state === 'training' ? status.latestProgress : undefined;
   const result = status.state === 'complete' ? status.result : undefined;
   const progressPercent = calculateProgressPercent(status, recoveryView);
-  const currentPhaseLabel = formatCurrentPhaseLabel(status, recoveryView, controlIntent);
+  const currentStageLabel = formatCurrentStageLabel(status, recoveryView, controlIntent);
+  const title = formatTrainingTitle(status, recoveryView, controlIntent);
+  const summary = formatTrainingSummary(status, recoveryView, controlIntent);
   const phases = [
-    buildPrepareWorkerPhase(status),
-    buildCoordinationPhase(status, coordination),
+    buildPreparingPhase(status, coordination),
     buildTrainingPhase(status, progress, result, controlIntent),
-    buildCheckpointPhase(status, recoveryView),
-    buildActivationGatePhase(status, result),
+    buildCheckingPhase(status, recoveryView, result),
+    buildReadyPhase(status, result),
   ];
   const progressValueText = formatProgressValueText(status, progressPercent);
   return {
-    currentPhaseLabel,
+    title,
+    summary,
+    currentStageLabel,
     progressPercent,
     progressValueText,
     controlIntent,
     phases,
     recovery: recoveryView,
     resourceWarnings: summarizeBrowserTrainingResourceWarnings(warnings),
-    localOnlyDisclosure:
-      'Browser training runs in a dedicated local worker. Recovery checkpoints stay in this browser and are not activated personal models until import, checksum, compatibility, and regression gates pass.',
+    technicalDetails: buildBrowserTrainingTechnicalDetails({
+      status,
+      progress,
+      result,
+      recovery: recoveryView,
+      coordination,
+      warnings,
+    }),
+    localOnlyDisclosure: 'Progress is saved on this device.',
     liveRegionText: buildBrowserTrainingLiveRegionText({
-      currentPhaseLabel,
+      title,
+      currentStageLabel,
       progressValueText,
       recovery: recoveryView,
       controlIntent,
@@ -192,80 +206,51 @@ export function summarizeBrowserTrainingResourceWarnings(
   return [...summaries];
 }
 
-function buildPrepareWorkerPhase(status: BrowserTrainingUiStatus): BrowserTrainingPhaseViewV1 {
+function buildPreparingPhase(
+  status: BrowserTrainingUiStatus,
+  coordination: BrowserTrainingCoordinationEventV1 | null,
+): BrowserTrainingPhaseViewV1 {
   if (status.state === 'idle') {
     return {
-      id: 'prepare-worker',
-      label: 'Prepare worker',
+      id: 'preparing',
+      label: 'Preparing',
       status: 'pending',
-      detail: 'Dedicated training worker has not started.',
+      detail: 'Ready to prepare training when you start.',
     };
   }
   if (status.state === 'error') {
     return {
-      id: 'prepare-worker',
-      label: 'Prepare worker',
+      id: 'preparing',
+      label: 'Preparing',
       status: 'blocked',
-      detail: 'Worker returned an error before the run completed.',
+      detail: 'Training needs attention before it can continue.',
+    };
+  }
+  if (coordination?.eventType === 'lock-busy') {
+    return {
+      id: 'preparing',
+      label: 'Preparing',
+      status: 'blocked',
+      detail: 'Another tab is already training this voice model.',
+    };
+  }
+  if (coordination?.eventType === 'lock-unavailable') {
+    return {
+      id: 'preparing',
+      label: 'Preparing',
+      status: 'attention',
+      detail: 'Training can continue, but another tab may not be blocked automatically.',
     };
   }
   return {
-    id: 'prepare-worker',
-    label: 'Prepare worker',
-    status: status.state === 'training' ? 'active' : 'complete',
-    detail: 'Dedicated worker owns browser-training runtime and mutable buffers.',
+    id: 'preparing',
+    label: 'Preparing',
+    status:
+      status.state === 'training' && coordination?.eventType !== 'lock-acquired'
+        ? 'active'
+        : 'complete',
+    detail: 'Training is running locally in the background.',
   };
-}
-
-function buildCoordinationPhase(
-  status: BrowserTrainingUiStatus,
-  coordination: BrowserTrainingCoordinationEventV1 | null,
-): BrowserTrainingPhaseViewV1 {
-  if (coordination === null) {
-    return {
-      id: 'coordinate-lock',
-      label: 'Coordinate local lock',
-      status: status.state === 'idle' ? 'pending' : 'active',
-      detail: 'Waiting for local cross-tab lock status.',
-    };
-  }
-  switch (coordination.eventType) {
-    case 'lock-requested':
-      return {
-        id: 'coordinate-lock',
-        label: 'Coordinate local lock',
-        status: 'active',
-        detail: 'Requesting the redacted same-profile training lock.',
-      };
-    case 'lock-acquired':
-      return {
-        id: 'coordinate-lock',
-        label: 'Coordinate local lock',
-        status: status.state === 'training' ? 'active' : 'complete',
-        detail: 'Exclusive local training lock is held by this tab.',
-      };
-    case 'lock-busy':
-      return {
-        id: 'coordinate-lock',
-        label: 'Coordinate local lock',
-        status: 'blocked',
-        detail: 'Another tab is already training this redacted profile scope.',
-      };
-    case 'lock-unavailable':
-      return {
-        id: 'coordinate-lock',
-        label: 'Coordinate local lock',
-        status: 'attention',
-        detail: 'Web Locks are unavailable; training continues without cross-tab exclusivity.',
-      };
-    case 'lock-released':
-      return {
-        id: 'coordinate-lock',
-        label: 'Coordinate local lock',
-        status: 'complete',
-        detail: 'Exclusive local training lock has been released.',
-      };
-  }
 }
 
 function buildTrainingPhase(
@@ -276,96 +261,102 @@ function buildTrainingPhase(
 ): BrowserTrainingPhaseViewV1 {
   if (status.state === 'idle') {
     return {
-      id: 'train-adapter',
-      label: 'Train adapter epochs',
+      id: 'training',
+      label: 'Training',
       status: 'pending',
-      detail: 'Start the prototype to train synthetic frozen-feature adapter epochs.',
+      detail: 'Start training when the model is ready.',
     };
   }
   if (status.state === 'error') {
     return {
-      id: 'train-adapter',
-      label: 'Train adapter epochs',
+      id: 'training',
+      label: 'Training',
       status: 'blocked',
-      detail:
-        'Training worker returned an error; review the alert message and retry after resolving it.',
+      detail: 'Resolve the training error, then retry or resume from recovery.',
     };
   }
   if (status.state === 'training') {
     return {
-      id: 'train-adapter',
-      label: 'Train adapter epochs',
+      id: 'training',
+      label: 'Training',
       status: controlIntent === 'none' ? 'active' : 'attention',
       detail:
         progress === undefined
-          ? 'Training loop is starting.'
-          : `${formatEpoch(progress.epoch, progress.epochs)} · loss ${progress.loss.toFixed(6)}${formatOptionalValidationLoss(progress)}`,
+          ? 'Starting training.'
+          : `${formatEpoch(progress.epoch, progress.epochs)} complete.`,
     };
   }
   const finalStatus = result?.status ?? 'completed';
   return {
-    id: 'train-adapter',
-    label: 'Train adapter epochs',
+    id: 'training',
+    label: 'Training',
     status: finalStatus === 'completed' ? 'complete' : 'attention',
-    detail: `${finalStatus} after ${result?.metrics.epochsCompleted.toString() ?? '0'} epochs · final loss ${result?.metrics.finalLoss.toFixed(6) ?? 'n/a'}`,
+    detail: `${formatTrainingResultStatus(finalStatus)} after ${result?.metrics.epochsCompleted.toString() ?? '0'} epochs.`,
   };
 }
 
-function buildCheckpointPhase(
+function buildCheckingPhase(
   status: BrowserTrainingUiStatus,
   recovery: BrowserTrainingRecoveryViewV1,
+  result: FrozenFeatureTinyAdapterTrainingResultV1 | undefined,
 ): BrowserTrainingPhaseViewV1 {
-  if (recovery.status === 'none') {
-    if (status.state === 'complete' && status.result.status === 'completed') {
-      return {
-        id: 'checkpoint-recovery',
-        label: 'Save reload recovery',
-        status: 'complete',
-        detail: 'Completed run cleared prototype recovery; no resume checkpoint is needed.',
-      };
-    }
-    if (status.state === 'complete') {
-      return {
-        id: 'checkpoint-recovery',
-        label: 'Save reload recovery',
-        status: 'attention',
-        detail: 'Run ended before completion, but no reload recovery checkpoint is stored.',
-      };
-    }
+  if (status.state === 'complete' && result?.status === 'completed') {
     return {
-      id: 'checkpoint-recovery',
-      label: 'Save reload recovery',
-      status: status.state === 'training' ? 'active' : 'pending',
-      detail: 'No reload recovery checkpoint is stored yet.',
+      id: 'checking',
+      label: 'Checking',
+      status: 'active',
+      detail: 'Quality checks are needed before this model can be used.',
+    };
+  }
+  if (status.state === 'complete' && result !== undefined) {
+    return {
+      id: 'checking',
+      label: 'Checking',
+      status: recovery.resumable ? 'attention' : 'pending',
+      detail: 'Resume training before quality checks run.',
+    };
+  }
+  if (status.state === 'error') {
+    return {
+      id: 'checking',
+      label: 'Checking',
+      status: 'pending',
+      detail: 'Checks are waiting for training to finish.',
     };
   }
   return {
-    id: 'checkpoint-recovery',
-    label: 'Save reload recovery',
-    status: recovery.resumable ? 'attention' : 'complete',
-    detail: recovery.label,
+    id: 'checking',
+    label: 'Checking',
+    status: 'pending',
+    detail: 'Checks run after training work is complete.',
   };
 }
 
-function buildActivationGatePhase(
+function buildReadyPhase(
   status: BrowserTrainingUiStatus,
   result: FrozenFeatureTinyAdapterTrainingResultV1 | undefined,
 ): BrowserTrainingPhaseViewV1 {
-  if (status.state !== 'complete' || result === undefined) {
+  if (status.state === 'complete' && result?.status === 'completed') {
     return {
-      id: 'activation-gate',
-      label: 'Await activation gate',
-      status: 'pending',
-      detail: 'Activation gate remains untouched until a completed adapter is explicitly imported.',
+      id: 'ready',
+      label: 'Ready',
+      status: 'attention',
+      detail: 'Review results before using the model.',
+    };
+  }
+  if (status.state === 'error') {
+    return {
+      id: 'ready',
+      label: 'Ready',
+      status: 'blocked',
+      detail: 'Training is not ready until the error is resolved.',
     };
   }
   return {
-    id: 'activation-gate',
-    label: 'Await activation gate',
-    status: result.compatibility.activationGateRequired ? 'attention' : 'complete',
-    detail: result.compatibility.activationGateRequired
-      ? 'Completed prototype output still requires import, checksum, compatibility, and regression gates.'
-      : 'Activation gate is not required for this result.',
+    id: 'ready',
+    label: 'Ready',
+    status: 'pending',
+    detail: 'This step becomes available after checks pass.',
   };
 }
 
@@ -393,34 +384,81 @@ function calculateProgressPercent(
   return 0;
 }
 
-function formatCurrentPhaseLabel(
+function formatCurrentStageLabel(
+  status: BrowserTrainingUiStatus,
+  recovery: BrowserTrainingRecoveryViewV1,
+  controlIntent: BrowserTrainingControlIntent,
+): BrowserTrainingProgressViewV1['currentStageLabel'] {
+  if (controlIntent !== 'none') return 'Training';
+  if (status.state === 'idle') return recovery.resumable ? 'Training' : 'Preparing';
+  if (status.state === 'training') return 'Training';
+  if (status.state === 'error') return 'Preparing';
+  if (status.result.status === 'completed') return 'Checking';
+  return 'Training';
+}
+
+function formatTrainingTitle(
   status: BrowserTrainingUiStatus,
   recovery: BrowserTrainingRecoveryViewV1,
   controlIntent: BrowserTrainingControlIntent,
 ): string {
-  if (controlIntent === 'pause-requested') return 'Pause requested at next safe checkpoint';
-  if (controlIntent === 'cancel-requested') return 'Cancel requested at next safe checkpoint';
+  if (controlIntent === 'pause-requested') return 'Pausing training';
+  if (controlIntent === 'cancel-requested') return 'Cancelling training';
   if (status.state === 'idle')
-    return recovery.resumable ? 'Ready to resume from reload recovery' : 'Ready to start';
-  if (status.state === 'training') return 'Training adapter epochs';
-  if (status.state === 'error') return 'Training worker needs attention';
+    return recovery.resumable ? 'Resume training' : 'Training voice model';
+  if (status.state === 'training') return 'Training voice model';
+  if (status.state === 'error') return 'Training needs attention';
   switch (status.result.status) {
     case 'completed':
-      return 'Training completed; activation gate still required';
+      return 'Checking results';
     case 'paused':
-      return 'Training paused with reload recovery';
+      return 'Training paused';
     case 'cancelled':
-      return 'Training cancelled with reload recovery';
+      return 'Training cancelled';
+  }
+}
+
+function formatTrainingSummary(
+  status: BrowserTrainingUiStatus,
+  recovery: BrowserTrainingRecoveryViewV1,
+  controlIntent: BrowserTrainingControlIntent,
+): string {
+  if (controlIntent === 'pause-requested') {
+    return 'Training will pause at the next safe checkpoint.';
+  }
+  if (controlIntent === 'cancel-requested') {
+    return 'Training will stop at the next safe checkpoint.';
+  }
+  if (status.state === 'idle') {
+    return recovery.resumable
+      ? 'Training can continue from the latest saved checkpoint.'
+      : 'Start when recordings and browser support are ready.';
+  }
+  if (status.state === 'training') {
+    return 'Checking pronunciation';
+  }
+  if (status.state === 'error') {
+    return 'Review the error, then retry or resume from recovery.';
+  }
+  switch (status.result.status) {
+    case 'completed':
+      return 'Training finished. Review results before using the model.';
+    case 'paused':
+      return 'Training is saved on this device and can resume later.';
+    case 'cancelled':
+      return 'Training stopped. Recovery is available if a checkpoint was saved.';
   }
 }
 
 function buildBrowserTrainingLiveRegionText({
-  currentPhaseLabel,
+  title,
+  currentStageLabel,
   progressValueText,
   recovery,
   controlIntent,
 }: {
-  readonly currentPhaseLabel: string;
+  readonly title: string;
+  readonly currentStageLabel: BrowserTrainingProgressViewV1['currentStageLabel'];
   readonly progressValueText: string;
   readonly recovery: BrowserTrainingRecoveryViewV1;
   readonly controlIntent: BrowserTrainingControlIntent;
@@ -432,7 +470,59 @@ function buildBrowserTrainingLiveRegionText({
         ? 'Cancel requested. '
         : '';
   const recoverySuffix = recovery.resumable ? ` ${recovery.label}` : '';
-  return `${controlPrefix}${currentPhaseLabel}. Progress ${progressValueText}.${recoverySuffix}`;
+  return `${controlPrefix}${title}. ${currentStageLabel}. Progress ${progressValueText}.${recoverySuffix}`;
+}
+
+function buildBrowserTrainingTechnicalDetails({
+  status,
+  progress,
+  result,
+  recovery,
+  coordination,
+  warnings,
+}: {
+  readonly status: BrowserTrainingUiStatus;
+  readonly progress: FrozenFeatureTinyAdapterProgressV1 | undefined;
+  readonly result: FrozenFeatureTinyAdapterTrainingResultV1 | undefined;
+  readonly recovery: BrowserTrainingRecoveryViewV1;
+  readonly coordination: BrowserTrainingCoordinationEventV1 | null;
+  readonly warnings: readonly BrowserTrainingRuntimeWarningV1[];
+}): readonly BrowserTrainingTechnicalDetailV1[] {
+  const details: BrowserTrainingTechnicalDetailV1[] = [
+    { label: 'Stage', value: formatCurrentStageLabel(status, recovery, 'none') },
+    { label: 'Backend', value: 'local fixed adapter math in a worker' },
+    { label: 'Threads', value: 'worker-managed' },
+    { label: 'Memory', value: 'worker-owned buffers' },
+    { label: 'Batch', value: 'prototype fixture batch' },
+    { label: 'Checkpoint', value: recovery.label },
+    { label: 'Cross-tab lock', value: formatCoordinationDetail(coordination) },
+  ];
+  if (progress !== undefined) {
+    details.push(
+      { label: 'Epoch', value: formatEpoch(progress.epoch, progress.epochs) },
+      { label: 'Loss', value: progress.loss.toFixed(6) },
+      { label: 'Learning rate', value: formatOptionalNumber(progress.learningRate) },
+      { label: 'Validation loss', value: formatOptionalNumber(progress.validationLoss) },
+      { label: 'Optimizer', value: progress.optimizer ?? 'not reported' },
+    );
+  }
+  if (result !== undefined) {
+    details.push(
+      { label: 'Result', value: formatTrainingResultStatus(result.status) },
+      { label: 'Epochs completed', value: result.metrics.epochsCompleted.toString() },
+      { label: 'Final loss', value: result.metrics.finalLoss.toFixed(6) },
+      { label: 'Loss reduction', value: result.metrics.lossReduction.toFixed(6) },
+      { label: 'Examples', value: result.metrics.examples.toString() },
+      {
+        label: 'Quality gate',
+        value: result.compatibility.activationGateRequired ? 'required' : 'not required',
+      },
+    );
+  }
+  if (warnings.length > 0) {
+    details.push({ label: 'Resource warnings', value: warnings.length.toString() });
+  }
+  return details;
 }
 
 function buildPhaseTextEquivalent(phases: readonly BrowserTrainingPhaseViewV1[]): string {
@@ -454,10 +544,37 @@ function formatProgressValueText(status: BrowserTrainingUiStatus, percent: numbe
   return `${percent.toString()}%`;
 }
 
-function formatOptionalValidationLoss(progress: FrozenFeatureTinyAdapterProgressV1): string {
-  return progress.validationLoss === undefined
-    ? ''
-    : ` · validation ${progress.validationLoss.toFixed(6)}`;
+function formatCoordinationDetail(coordination: BrowserTrainingCoordinationEventV1 | null): string {
+  if (coordination === null) return 'not started';
+  switch (coordination.eventType) {
+    case 'lock-requested':
+      return 'requesting local lock';
+    case 'lock-acquired':
+      return 'local lock held';
+    case 'lock-busy':
+      return 'another tab is training';
+    case 'lock-released':
+      return 'local lock released';
+    case 'lock-unavailable':
+      return 'local lock unavailable';
+  }
+}
+
+function formatTrainingResultStatus(
+  status: FrozenFeatureTinyAdapterTrainingResultV1['status'],
+): string {
+  switch (status) {
+    case 'completed':
+      return 'completed';
+    case 'paused':
+      return 'paused';
+    case 'cancelled':
+      return 'cancelled';
+  }
+}
+
+function formatOptionalNumber(value: number | undefined): string {
+  return value === undefined ? 'not reported' : value.toFixed(6);
 }
 
 function formatEpoch(epoch: number, epochs: number): string {

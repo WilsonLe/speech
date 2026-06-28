@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) => {
   await page.goto('/');
@@ -28,21 +28,26 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
     page.getByRole('button', { name: 'Restart browser training prototype' }),
   ).toBeDisabled();
   await page.getByRole('button', { name: 'Run browser training prototype' }).click();
-  let browserTrainingStatus = page.getByLabel('Browser training prototype status');
-  let browserTrainingRecovery = page.getByLabel('Browser training recovery status');
-  let browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
+  let browserTrainingProgress = page.getByLabel('Training progress');
   await expect(
-    browserTrainingProgress.getByRole('heading', { name: 'Training adapter epochs' }),
+    browserTrainingProgress.getByRole('heading', { name: 'Training voice model' }),
   ).toBeVisible({
     timeout: 10_000,
   });
-  await expect(browserTrainingProgress.getByText('Prepare worker', { exact: true })).toBeVisible();
   await expect(
-    browserTrainingProgress.getByText('Coordinate local lock', { exact: true }),
+    browserTrainingProgress.getByText('Preparing', { exact: true }).first(),
   ).toBeVisible();
-  await expect(browserTrainingStatus.getByText('training', { exact: true })).toBeVisible({
+  await expect(
+    browserTrainingProgress.getByText('Training', { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    browserTrainingProgress.getByText('Checking', { exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.getByText('Training is running locally.', { exact: true })).toBeVisible({
     timeout: 10_000,
   });
+  let trainingDetails = await openTrainingDetails(page);
+  let browserTrainingRecovery = trainingDetails.getByLabel('Browser training recovery status');
   await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible({
     timeout: 10_000,
   });
@@ -57,32 +62,34 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   });
   await page.getByRole('button', { name: 'Cancel browser training' }).click();
   expect(cancelDialogMessages.join(' ')).toMatch(/Cancel browser training/);
-  await expect(browserTrainingStatus.getByText('training', { exact: true })).toBeVisible();
+  await expect(page.getByText('Training is running locally.', { exact: true })).toBeVisible();
 
   await secondTab.getByRole('button', { name: 'Run browser training prototype' }).click();
   await expect(secondTab.locator('.error-message')).toContainText(
-    /Another tab is already training this profile\. Pause or cancel it/,
+    'Another tab is already training this voice model. Pause or cancel that run, then try again.',
     { timeout: 10_000 },
   );
-  await expect(
-    secondTab
-      .getByLabel('Browser training recovery status')
-      .getByText('another tab is training this profile', { exact: true }),
-  ).toBeVisible({ timeout: 10_000 });
+  await expect(secondTab.getByLabel('Training progress')).toContainText('Training needs attention');
   await secondTab.close();
 
   await page.getByRole('button', { name: 'Benchmark worker provider' }).click();
-  await expect(browserTrainingStatus.getByText('paused', { exact: true })).toBeVisible({
+  await expect(
+    page.getByText('Training paused. Progress is saved on this device.', { exact: true }),
+  ).toBeVisible({
     timeout: 10_000,
   });
+  trainingDetails = await openTrainingDetails(page);
+  browserTrainingRecovery = trainingDetails.getByLabel('Browser training recovery status');
   await expect(browserTrainingRecovery.getByText('paused', { exact: true })).toBeVisible();
   await expect(
-    page.getByText(/ASR runtime is active .* browser training will pause cooperatively/),
+    page
+      .getByLabel('Training resource guidance')
+      .getByText('ASR runtime activity can pause training at a cooperative checkpoint boundary.'),
   ).toBeVisible();
 
-  browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
+  browserTrainingProgress = page.getByLabel('Training progress');
   await expect(
-    browserTrainingProgress.getByRole('heading', { name: 'Training paused with reload recovery' }),
+    browserTrainingProgress.getByRole('heading', { name: 'Training paused' }),
   ).toBeVisible({
     timeout: 10_000,
   });
@@ -98,38 +105,34 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible();
 
   await page.reload({ waitUntil: 'networkidle' });
-  browserTrainingRecovery = page.getByLabel('Browser training recovery status');
-  browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
+  trainingDetails = await openTrainingDetails(page);
+  browserTrainingRecovery = trainingDetails.getByLabel('Browser training recovery status');
+  browserTrainingProgress = page.getByLabel('Training progress');
   await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible({
     timeout: 10_000,
   });
   await expect(
-    browserTrainingProgress.getByRole('heading', { name: 'Ready to resume from reload recovery' }),
+    browserTrainingProgress.getByRole('heading', { name: 'Resume training' }),
   ).toBeVisible({
     timeout: 10_000,
   });
   await page.getByRole('button', { name: 'Resume browser training prototype' }).click();
-  browserTrainingStatus = page.getByLabel('Browser training prototype status');
-  browserTrainingProgress = page.getByLabel('Browser training named-phase progress');
-  await expect(browserTrainingStatus.getByText('Training worker', { exact: true })).toBeVisible({
+  browserTrainingProgress = page.getByLabel('Training progress');
+  await expect(
+    browserTrainingProgress.getByText('Training finished. Review results before using the model.', {
+      exact: true,
+    }),
+  ).toBeVisible({
     timeout: 10_000,
   });
   await expect(
-    browserTrainingStatus.getByText('dedicated-training-worker', { exact: true }),
+    browserTrainingProgress.getByRole('heading', { name: 'Checking results' }),
   ).toBeVisible();
-  await expect(browserTrainingStatus.getByText('Prototype status', { exact: true })).toBeVisible();
-  await expect(browserTrainingStatus.getByText('completed', { exact: true })).toBeVisible();
-  await expect(browserTrainingStatus.getByText('Training examples', { exact: true })).toBeVisible();
-  await expect(browserTrainingStatus.getByText('Checkpoint epoch', { exact: true })).toBeVisible();
-  await expect(browserTrainingStatus.getByText('Loss reduction', { exact: true })).toBeVisible();
-  await expect(
-    browserTrainingStatus.getByText('required before activation', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    browserTrainingProgress.getByRole('heading', {
-      name: 'Training completed; activation gate still required',
-    }),
-  ).toBeVisible();
+  trainingDetails = await openTrainingDetails(page);
+  const technicalDetails = trainingDetails.getByLabel('Training technical details');
+  await expect(technicalDetails.getByText('Epochs completed', { exact: true })).toBeVisible();
+  await expect(technicalDetails.getByText('Loss reduction', { exact: true })).toBeVisible();
+  await expect(technicalDetails.getByText('Quality gate', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Benchmark worker provider' }).click();
 
@@ -147,3 +150,11 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(runtimeStatus.getByText('Adapter median run', { exact: true })).toBeVisible();
   await expect(runtimeStatus.getByText('Adapter RTF overhead', { exact: true })).toBeVisible();
 });
+
+async function openTrainingDetails(page: Page) {
+  const details = page.locator('details.training-details-disclosure');
+  if ((await details.getAttribute('open')) === null) {
+    await details.locator('summary').click();
+  }
+  return details;
+}

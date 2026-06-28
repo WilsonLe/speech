@@ -78,7 +78,10 @@ describe('App', () => {
     expect(html).toContain('Training readiness coverage will appear');
     expect(html).toContain('Dedicated worker ONNX Runtime loader');
     expect(html).toContain('Training progress');
-    expect(html).toContain('Prepare worker');
+    expect(html).toContain('Preparing');
+    expect(html).toContain('Training details');
+    expect(html).toContain('local fixed adapter math in a worker');
+    expect(html).not.toContain('Prepare worker');
     expect(html).toContain('Implementation roadmap');
     expect(html).toContain('Evidence-backed production claims');
     expect(html).toContain('evidence-needed');

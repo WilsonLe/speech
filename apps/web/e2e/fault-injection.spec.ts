@@ -27,11 +27,12 @@ test.describe('cross-browser personal-model fault injection', () => {
 
     const runtime = page.locator('section.runtime');
     await expect(runtime.locator('.error-message')).toContainText(
-      'Injected browser-training worker fault.',
+      'Training stopped before it finished. Retry or resume from recovery.',
       { timeout: 10_000 },
     );
-    await expect(runtime.getByLabel('Browser training named-phase progress')).toContainText(
-      'Worker returned an error before the run completed.',
+    await expect(runtime.getByLabel('Training progress')).toContainText('Training needs attention');
+    await expect(runtime.getByLabel('Training progress')).toContainText(
+      'Resolve the training error, then retry or resume from recovery.',
     );
     await assertNoPrivateArtifactLeak(runtime.locator('.error-message'));
   });
@@ -53,13 +54,19 @@ test.describe('cross-browser personal-model fault injection', () => {
     await page.getByRole('button', { name: 'Run browser training prototype' }).click();
 
     const runtime = page.locator('section.runtime');
-    const status = runtime.getByLabel('Browser training prototype status');
-    await expect(status.getByText('training', { exact: true })).toBeVisible({ timeout: 10_000 });
-    await expect(runtime.getByText(/Prototype recovery uses browser-local storage/)).toBeVisible({
+    await expect(runtime.getByText('Training is running locally.', { exact: true })).toBeVisible({
       timeout: 10_000,
     });
+    await expect(
+      runtime
+        .getByLabel('Training resource guidance')
+        .getByText(/Prototype recovery uses browser-local storage/),
+    ).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Pause browser training' }).click();
-    await expect(status.getByText('paused', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(
+      runtime.getByText('Training paused. Progress is saved on this device.', { exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
+    await runtime.locator('details.training-details-disclosure > summary').click();
     await expect(runtime.getByLabel('Browser training recovery status')).toContainText(
       'Recovery statusnone',
     );

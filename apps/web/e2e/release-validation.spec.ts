@@ -88,11 +88,12 @@ test('release UI exposes named controls, labelled sections, and keyboard focus',
   expect(accessibility.unlabeledSections).toEqual([]);
   expect(accessibility.duplicateIds).toEqual([]);
 
-  const trainingProgress = page.getByLabel('Browser training named-phase progress');
+  const trainingProgress = page.getByLabel('Training progress');
   await expect(
-    trainingProgress.getByRole('progressbar', { name: 'Browser training overall progress' }),
+    trainingProgress.getByRole('progressbar', { name: 'Training overall progress' }),
   ).toHaveAttribute('aria-valuetext', '0%');
-  await expect(trainingProgress.locator('[aria-label^="Step 1: Prepare worker"]')).toBeVisible();
+  await expect(trainingProgress.locator('[aria-label^="Step 1: Preparing"]')).toBeVisible();
+  await expect(trainingProgress.locator('[aria-label^="Step 2: Training"]')).toBeVisible();
   await expect(trainingProgress.getByText('Pending', { exact: true }).first()).toBeVisible();
 
   await page.setViewportSize({ width: 320, height: 720 });
