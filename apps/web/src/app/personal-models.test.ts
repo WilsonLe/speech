@@ -23,6 +23,7 @@ import {
 import {
   buildPersonalModelCapabilityChecks,
   buildPersonalModelReadinessTasks,
+  buildPersonalModelTrainingReadinessView,
   summarizePersonalModelTrainingCompanion,
 } from './personal-models-preflight';
 
@@ -333,6 +334,115 @@ describe('personal model card summaries', () => {
     expect(JSON.stringify(tasks)).not.toContain('prompt-secret');
     expect(JSON.stringify(tasks)).not.toContain('term-secret');
   });
+
+  it('builds a blocker-first training readiness view when recordings are missing', () => {
+    const report = createReadinessReport();
+    const card = buildPersonalModelProfileCard({
+      summary: createProfileSummary(),
+      activeState: null,
+      activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+    });
+    const view = buildPersonalModelTrainingReadinessView({
+      card,
+      readinessReport: report,
+      readinessTasks: buildPersonalModelReadinessTasks(report),
+      capabilityChecks: buildPersonalModelCapabilityChecks(createCapabilityReport()),
+      trainingCompanion: summarizePersonalModelTrainingCompanion({
+        models: [createLifecycleModel()],
+        installed: [createInstalledModelRecord()],
+        inspections: {},
+        preferredModelId: 'vietasr-local',
+      }),
+      recordingHref: '/models/local-enrollment-profile/enroll',
+      trainingHref: '/models/local-enrollment-profile/train',
+    });
+
+    expect(view.status).toBe('blocked');
+    expect(view.title).toBe('Continue recording');
+    expect(view.primaryAction).toMatchObject({
+      kind: 'continue-recording',
+      label: 'Continue recording',
+      disabled: false,
+    });
+    expect(view.blockers[0]).toMatchObject({
+      id: 'recordings',
+      label: 'More recordings needed',
+    });
+    expect(view.recording.acceptedCount).toBe(2);
+    expect(view.storage).toMatchObject({ requiredFreeBytes: 0, label: '0 B needed' });
+    expect(view.privacy.aggregateOnly).toBe(true);
+    expect(JSON.stringify(view)).not.toContain('prompt-secret');
+    expect(JSON.stringify(view)).not.toContain('vietasr-local');
+  });
+
+  it('marks readiness ready only when recordings, browser support, and support files pass', () => {
+    const report = createReadyReadinessReport();
+    const view = buildPersonalModelTrainingReadinessView({
+      card: buildPersonalModelProfileCard({
+        summary: createProfileSummary(),
+        activeState: null,
+        activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+      }),
+      readinessReport: report,
+      readinessTasks: buildPersonalModelReadinessTasks(report),
+      capabilityChecks: buildPersonalModelCapabilityChecks(createFullySupportedCapabilityReport()),
+      trainingCompanion: summarizePersonalModelTrainingCompanion({
+        models: [createLifecycleModel()],
+        installed: [createInstalledModelRecord()],
+        inspections: {},
+        preferredModelId: 'vietasr-local',
+      }),
+      recordingHref: '/models/local-enrollment-profile/enroll',
+      trainingHref: '/models/local-enrollment-profile/train',
+    });
+
+    expect(view).toMatchObject({
+      status: 'ready',
+      title: 'Ready to train',
+      primaryAction: { kind: 'train', label: 'Train model', disabled: false },
+      browserSupport: { label: 'Ready', status: 'ready' },
+      trainingSupport: { label: 'Ready', status: 'ready' },
+    });
+    expect(view.blockers).toHaveLength(0);
+    expect(view.details.passedCheckCount).toBeGreaterThan(0);
+  });
+
+  it('keeps browser and training-support gates visible without exposing raw model ids', () => {
+    const report = createReadyReadinessReport();
+    const capabilityReport = createFullySupportedCapabilityReport({ persistentStorage: false });
+    const view = buildPersonalModelTrainingReadinessView({
+      card: buildPersonalModelProfileCard({
+        summary: createProfileSummary(),
+        activeState: null,
+        activeVocabulary: summarizeActiveVocabulary(createVocabularySnapshot()),
+      }),
+      readinessReport: report,
+      readinessTasks: buildPersonalModelReadinessTasks(report),
+      capabilityChecks: buildPersonalModelCapabilityChecks(capabilityReport),
+      trainingCompanion: summarizePersonalModelTrainingCompanion({
+        models: [createLifecycleModel()],
+        installed: [],
+        inspections: {
+          'vietasr-local': createManifestInspection({ trainingCompanionFileCount: 2 }),
+        },
+        preferredModelId: 'vietasr-local',
+      }),
+      recordingHref: '/models/local-enrollment-profile/enroll',
+      trainingHref: '/models/local-enrollment-profile/train',
+    });
+
+    expect(view.status).toBe('blocked');
+    expect(view.primaryAction).toMatchObject({ kind: 'train', disabled: true });
+    expect(view.blockers.map((blocker) => blocker.id)).toEqual([
+      'training-support',
+      'browser-support',
+    ]);
+    expect(view.browserSupport.label).toBe('Needs attention');
+    expect(view.trainingSupport.label).toBe('Speech model required');
+    expect(view.storage.label).toBe('Install the speech model first');
+    expect(JSON.stringify(view)).not.toContain('vietasr-local');
+    expect(JSON.stringify(view)).not.toContain('manifest-sha');
+  });
 });
 
 function createVocabularySnapshot(): VocabularyStoreSnapshotV1 {
@@ -401,19 +511,32 @@ function createVocabularySnapshot(): VocabularyStoreSnapshotV1 {
 }
 
 function createCapabilityReport(): CapabilityReport {
+  return createFullySupportedCapabilityReport({
+    sharedArrayBuffer: false,
+    crossOriginIsolated: false,
+    webGpu: false,
+    webLocks: false,
+    webAssemblyThreads: false,
+  });
+}
+
+function createFullySupportedCapabilityReport(
+  overrides: Partial<CapabilityReport['capabilities']> &
+    Partial<CapabilityReport['browserTraining']> = {},
+): CapabilityReport {
   return {
     generatedAt: '2026-01-01T00:00:00.000Z',
     capabilities: {
-      secureContext: true,
-      mediaDevices: true,
-      audioWorklet: true,
-      webWorkers: true,
-      sharedArrayBuffer: false,
-      crossOriginIsolated: false,
-      webAssemblySimd: true,
-      webAssemblyThreads: false,
-      webGpu: false,
-      persistentStorage: true,
+      secureContext: overrides.secureContext ?? true,
+      mediaDevices: overrides.mediaDevices ?? true,
+      audioWorklet: overrides.audioWorklet ?? true,
+      webWorkers: overrides.webWorkers ?? true,
+      sharedArrayBuffer: overrides.sharedArrayBuffer ?? true,
+      crossOriginIsolated: overrides.crossOriginIsolated ?? true,
+      webAssemblySimd: overrides.webAssemblySimd ?? true,
+      webAssemblyThreads: overrides.webAssemblyThreads ?? true,
+      webGpu: overrides.webGpu ?? true,
+      persistentStorage: overrides.persistentStorage ?? true,
       selectedTier: 'C',
     },
     recommendedProvider: 'wasm',
@@ -432,9 +555,9 @@ function createCapabilityReport(): CapabilityReport {
       maxRoundTripMs: 2,
     },
     browserTraining: {
-      webLocks: false,
-      broadcastChannel: true,
-      localStorage: true,
+      webLocks: overrides.webLocks ?? true,
+      broadcastChannel: overrides.broadcastChannel ?? true,
+      localStorage: overrides.localStorage ?? true,
     },
     warnings: [],
   };
@@ -677,6 +800,37 @@ function createReadinessReport(): TrainingReadinessCoverageReportV1 {
       telemetry: false,
       localOnly: true,
     },
+  };
+}
+
+function createReadyReadinessReport(): TrainingReadinessCoverageReportV1 {
+  const report = createReadinessReport();
+  return {
+    ...report,
+    status: 'ready',
+    automaticTrainingAllowed: true,
+    totals: {
+      acceptedUtterances: 24,
+      totalDurationSeconds: 125,
+      uniquePromptIdentities: 12,
+      qualityStatusCounts: { pass: 24 },
+    },
+    promptCoverage: {
+      ...report.promptCoverage,
+      uniquePromptIdentities: 12,
+      missingPromptIdentities: 0,
+    },
+    requirements: [
+      {
+        code: 'accepted-utterances',
+        status: 'pass',
+        label: 'Accepted utterances',
+        actual: 24,
+        required: 24,
+        missing: 0,
+      },
+    ],
+    missingRequirements: [],
   };
 }
 

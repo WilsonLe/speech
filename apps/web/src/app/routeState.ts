@@ -254,7 +254,7 @@ const appRouteSpecs = [
     pattern: '/models/:profileId/train',
     title: 'Train voice model',
     primaryDestinationId: 'models',
-    headingId: 'runtime-title',
+    headingId: 'training-readiness-title',
     queryKeys: ['jobId', 'returnTo'],
     scrollRestoration: 'restore-current-stage',
     stateSource: 'domain-storage',

@@ -53,6 +53,7 @@ import {
   buildPersonalModelDetailSummary,
   buildPersonalModelListRow,
   buildPersonalModelProfileCard,
+  defaultPersonalProfileId,
   summarizeActiveVocabulary,
   type ActiveVocabularySummaryV1,
   type PersonalModelActivationReviewCardV1,
@@ -63,12 +64,14 @@ import {
 import {
   buildPersonalModelCapabilityChecks,
   buildPersonalModelReadinessTasks,
+  buildPersonalModelTrainingReadinessView,
   formatPreflightBytes,
   summarizePersonalModelTrainingCompanion,
   type PersonalModelPreflightCheckV1,
   type PersonalModelPreflightStatus,
   type PersonalModelReadinessTaskV1,
   type PersonalModelTrainingCompanionSummaryV1,
+  type PersonalModelTrainingReadinessViewV1,
 } from './personal-models-preflight';
 
 type PersonalModelsStatus =
@@ -208,15 +211,20 @@ export function PersonalModelsPanel() {
   const [createModelStep, setCreateModelStep] = useState<CreateModelWizardStep>('name');
   const modelLifecycleWorkerRef = useRef<Worker | null>(null);
   const isCreateModelRoute = currentRoute.routeId === 'models-new';
-  const primarySummary = useMemo(
-    () =>
+  const isTrainingReadinessRoute = currentRoute.routeId === 'model-train';
+  const routeProfileId = currentRoute.params['profileId'];
+  const primarySummary = useMemo(() => {
+    if (routeProfileId !== undefined) {
+      return state.summaries.find((summary) => summary.profile.id === routeProfileId) ?? null;
+    }
+    return (
       state.summaries.find(
         (summary) => summary.profile.id === state.activeState?.activeProfileId,
       ) ??
       state.summaries[0] ??
-      null,
-    [state.activeState?.activeProfileId, state.summaries],
-  );
+      null
+    );
+  }, [routeProfileId, state.activeState?.activeProfileId, state.summaries]);
   const cardRows = useMemo(() => {
     if (state.summaries.length === 0) {
       const card = buildPersonalModelProfileCard({
@@ -291,6 +299,28 @@ export function PersonalModelsPanel() {
   const readinessTasks = useMemo(
     () => buildPersonalModelReadinessTasks(readinessReport),
     [readinessReport],
+  );
+  const readinessProfileId =
+    primarySummary?.profile.id ?? routeProfileId ?? defaultPersonalProfileId;
+  const trainingReadinessView = useMemo(
+    () =>
+      buildPersonalModelTrainingReadinessView({
+        card: primaryCard,
+        readinessReport,
+        readinessTasks,
+        capabilityChecks,
+        trainingCompanion,
+        recordingHref: `/models/${encodeURIComponent(readinessProfileId)}/enroll`,
+        trainingHref: `/models/${encodeURIComponent(readinessProfileId)}/train`,
+      }),
+    [
+      capabilityChecks,
+      primaryCard,
+      readinessProfileId,
+      readinessReport,
+      readinessTasks,
+      trainingCompanion,
+    ],
   );
   const detailBlockers = useMemo(
     () =>
@@ -680,7 +710,10 @@ export function PersonalModelsPanel() {
         <a className="button secondary" href="#vocabulary-title">
           Edit vocabulary
         </a>
-        <a className="button secondary" href="#runtime-title">
+        <a
+          className="button secondary"
+          href={`/models/${encodeURIComponent(readinessProfileId)}/train`}
+        >
           Train or resume
         </a>
         <a className="button secondary" href="#offline-model-title">
@@ -715,6 +748,13 @@ export function PersonalModelsPanel() {
           onStepChange={setCreateModelStep}
           onUpdateDraft={updateCreateModelDraft}
           step={createModelStep}
+        />
+      ) : isTrainingReadinessRoute ? (
+        <TrainingReadinessPanel
+          capabilityChecks={capabilityChecks}
+          onTrain={() => focusRuntimePanel()}
+          readinessTasks={readinessTasks}
+          view={trainingReadinessView}
         />
       ) : (
         <>
@@ -1029,6 +1069,140 @@ function CreateModelReview({
       </dl>
       <p className="status-message">Recording starts next. Progress is saved on this device.</p>
     </div>
+  );
+}
+
+function TrainingReadinessPanel({
+  capabilityChecks,
+  onTrain,
+  readinessTasks,
+  view,
+}: {
+  readonly capabilityChecks: readonly PersonalModelPreflightCheckV1[];
+  readonly onTrain: () => void;
+  readonly readinessTasks: readonly PersonalModelReadinessTaskV1[];
+  readonly view: PersonalModelTrainingReadinessViewV1;
+}) {
+  return (
+    <section
+      className="training-readiness-panel"
+      aria-labelledby="training-readiness-title"
+      data-status={view.status}
+    >
+      <div className="training-readiness-hero">
+        <div>
+          <p className="eyebrow">Training readiness</p>
+          <h3 id="training-readiness-title">{view.title}</h3>
+          <p>{view.summary}</p>
+        </div>
+        {view.primaryAction.kind === 'continue-recording' ? (
+          <a className="button" href={view.primaryAction.href}>
+            {view.primaryAction.label}
+          </a>
+        ) : (
+          <button type="button" onClick={onTrain} disabled={view.primaryAction.disabled}>
+            {view.primaryAction.label}
+          </button>
+        )}
+      </div>
+
+      <dl className="training-readiness-metrics" aria-label="Training readiness summary">
+        <div>
+          <dt>Recordings</dt>
+          <dd>{view.recording.acceptedCount.toLocaleString('en')}</dd>
+        </div>
+        <div>
+          <dt>Active speech</dt>
+          <dd>{formatDurationSeconds(view.recording.acceptedDurationSeconds)}</dd>
+        </div>
+        <div>
+          <dt>Required free storage</dt>
+          <dd>{view.storage.label}</dd>
+        </div>
+        <div>
+          <dt>Browser support</dt>
+          <dd>{view.browserSupport.label}</dd>
+        </div>
+      </dl>
+
+      {view.blockers.length === 0 ? (
+        <p className="status-message success-message">All checks passed.</p>
+      ) : (
+        <ul className="training-readiness-blockers" aria-label="Training blockers">
+          {view.blockers.map((blocker) => (
+            <li key={blocker.id}>
+              <strong>{blocker.label}</strong>
+              <p>{blocker.detail}</p>
+              <span>{blocker.nextAction}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="training-readiness-disclosures" aria-label="Training readiness details">
+        <details>
+          <summary>Recording details</summary>
+          <p>{view.recording.label}</p>
+          <p>
+            Minimum: {view.recording.requiredCount.toLocaleString('en')} recordings and{' '}
+            {formatDurationSeconds(view.recording.requiredDurationSeconds)} active speech.
+          </p>
+          <ul className="model-detail-task-list" aria-label="Recording readiness tasks">
+            {readinessTasks.map((task) => (
+              <li key={task.label} data-status={task.status}>
+                <strong>{task.label}</strong>
+                <span>
+                  {task.status === 'complete' ? 'Complete' : `${task.missing.toString()} missing`}
+                </span>
+                <p>{task.detail}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+
+        <details>
+          <summary>Browser details</summary>
+          <p>{view.browserSupport.detail}</p>
+          <p>
+            {view.details.passedCheckCount.toString()} passed ·{' '}
+            {view.details.fallbackCheckCount.toString()} fallback ·{' '}
+            {view.details.actionNeededCheckCount.toString()} need attention
+          </p>
+          <ul className="preflight-check-list" aria-label="Browser readiness checks">
+            {capabilityChecks.map((check) => (
+              <li key={check.label} data-status={check.status}>
+                <strong>{check.label}</strong>
+                <span>{formatPreflightStatus(check.status)}</span>
+                <p>{check.detail}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+
+        <details>
+          <summary>Training support details</summary>
+          <dl className="model-card-meta personal-model-card-meta model-detail-metrics">
+            <div>
+              <dt>Status</dt>
+              <dd>{view.trainingSupport.label}</dd>
+            </div>
+            <div>
+              <dt>Required free storage</dt>
+              <dd>{formatPreflightBytes(view.storage.requiredFreeBytes)}</dd>
+            </div>
+          </dl>
+          <p>{view.trainingSupport.detail}</p>
+        </details>
+
+        <details>
+          <summary>Privacy and data use</summary>
+          <p>
+            Readiness uses aggregate local counts only. Audio, transcript text, vocabulary terms,
+            feature data, checkpoints, and model files stay on this device.
+          </p>
+        </details>
+      </div>
+    </section>
   );
 }
 
@@ -1755,6 +1929,15 @@ function formatNullablePercent(value: number | null): string {
 
 function formatNullableBytes(value: number | null): string {
   return value === null ? 'not evaluated' : formatPreflightBytes(value);
+}
+
+function focusRuntimePanel(): void {
+  if (typeof document === 'undefined') return;
+  const target = document.getElementById('runtime-title');
+  if (target === null) return;
+  target.setAttribute('tabIndex', '-1');
+  target.scrollIntoView({ block: 'start' });
+  target.focus({ preventScroll: true });
 }
 
 function formatDurationSeconds(seconds: number): string {
