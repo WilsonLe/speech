@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.6.0",
+  "purpose": "Automated gates for critical copy budgets, accessible names, primary actions, and default-workflow terminology after the v0.6.0 copy deletion pass.",
+  "privacy": {
+    "containsPrivateData": false,
+    "containsUserGeneratedContent": false,
+    "notes": "This artifact contains route names, CSS selectors, generic control labels, and forbidden default-copy terms only. It contains no audio, transcripts, vocabulary terms, profile identifiers, storage paths, screenshots, telemetry, or participant evidence."
+  },
+  "semanticAssertionsOnly": true,
+  "screenshotTestsAreNotUsedAsAssertions": true,
+  "criticalCopyBudgetCases": [
+    {
+      "id": "dictate-ready-default",
+      "route": "/",
+      "selector": ".dictate-workspace",
+      "budgetSurface": "default-dictate",
+      "maxVisibleInterfaceWords": 35,
+      "setup": "seed-installed-base-model",
+      "exception": null
+    },
+    {
+      "id": "vocabulary-list-default",
+      "route": "/vocabulary",
+      "selector": ".vocabulary-set-browser",
+      "budgetSurface": "ordinary-list-detail",
+      "maxVisibleInterfaceWords": 80,
+      "setup": "none",
+      "exception": null
+    },
+    {
+      "id": "models-list-default",
+      "route": "/models",
+      "selector": ".model-list-panel",
+      "budgetSurface": "ordinary-list-detail",
+      "maxVisibleInterfaceWords": 80,
+      "setup": "none",
+      "exception": null
+    },
+    {
+      "id": "create-model-current-step",
+      "route": "/models/new",
+      "selector": ".create-model-flow__card",
+      "budgetSurface": "wizard-step",
+      "maxVisibleInterfaceWords": 45,
+      "setup": "none",
+      "exception": null
+    },
+    {
+      "id": "settings-index-default",
+      "route": "/settings",
+      "selector": ".settings-screen",
+      "budgetSurface": "ordinary-list-detail",
+      "maxVisibleInterfaceWords": 80,
+      "setup": "none",
+      "exception": null
+    }
+  ],
+  "primaryActionCases": [
+    { "route": "/", "role": "button", "name": "Install model", "freshContext": true },
+    {
+      "route": "/",
+      "role": "button",
+      "name": "Hold to speak",
+      "setup": "seed-installed-base-model"
+    },
+    { "route": "/vocabulary", "role": "button", "name": "New set" },
+    { "route": "/models", "role": "link", "name": "New" },
+    { "route": "/models", "role": "link", "name": "Import" },
+    { "route": "/models/import", "role": "button", "name": "Choose file" },
+    {
+      "route": "/models/local-profile/export",
+      "role": "button",
+      "name": "Prepare export"
+    },
+    { "route": "/settings/storage", "role": "button", "name": "Delete all local speech data" },
+    { "route": "/settings/audio", "role": "button", "name": "Start input test" },
+    { "route": "/settings/diagnostics", "role": "button", "name": "Download support bundle" }
+  ],
+  "accessibleNameRoutes": [
+    "/",
+    "/vocabulary",
+    "/models",
+    "/models/new",
+    "/models/import",
+    "/models/local-profile/train",
+    "/models/local-profile/results",
+    "/models/local-profile/export",
+    "/settings",
+    "/settings/audio",
+    "/settings/storage",
+    "/settings/privacy",
+    "/settings/shortcuts",
+    "/settings/diagnostics",
+    "/about"
+  ],
+  "defaultWorkflowRoutesForTerminologyScan": [
+    "/",
+    "/vocabulary",
+    "/models",
+    "/models/new",
+    "/models/import",
+    "/models/local-profile/train",
+    "/models/local-profile/results",
+    "/models/local-profile/export",
+    "/settings",
+    "/settings/audio",
+    "/settings/storage",
+    "/settings/privacy",
+    "/settings/shortcuts"
+  ],
+  "forbiddenDefaultWorkflowTerms": [
+    "RNN-T",
+    "CTC",
+    "OPFS",
+    "WER",
+    "CER",
+    "SNR",
+    "VAD",
+    "WASM",
+    "WebGPU",
+    "ONNX",
+    "AudioWorklet",
+    "checksum",
+    "adapter",
+    "worker-owned",
+    "runtime worker",
+    "execution provider"
+  ],
+  "allowedExceptions": [
+    {
+      "route": "/settings/diagnostics",
+      "reason": "Diagnostics is the explicit technical route; it remains outside default-workflow terminology scanning while retaining privacy redaction."
+    },
+    {
+      "route": "/about",
+      "reason": "About may show public source, version, license, and provenance metadata; it is app-menu documentation rather than a default workflow."
+    }
+  ]
+}
