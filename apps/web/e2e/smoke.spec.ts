@@ -62,7 +62,17 @@ test('renders the task-first PWA shell', async ({ page }) => {
 
   await page.goto('/?profileId=office&jobId=job-2&returnTo=https://example.com#runtime-title');
   await expect(page).toHaveURL(/\/models\/office\/train\?jobId=job-2$/);
-  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('runtime-title');
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe('training-readiness-title');
+  const readinessScreen = page.getByRole('region', { name: 'Continue recording' });
+  await expect(readinessScreen).toContainText('Training readiness');
+  await expect(readinessScreen.getByLabel('Training readiness summary')).toContainText(
+    'Required free storage',
+  );
+  await expect(readinessScreen.getByLabel('Training readiness summary')).toContainText(
+    'Browser support',
+  );
 
   await page.setViewportSize({ width: 360, height: 800 });
   const bottomNav = page.locator('.app-bottom-nav');
@@ -70,6 +80,12 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(bottomNav.getByRole('link', { name: 'Dictate' })).toBeVisible();
   await expect(bottomNav.getByRole('link', { name: 'Vocabulary' })).toBeVisible();
   await expect(bottomNav.getByRole('link', { name: 'Models' })).toBeVisible();
+
+  await bottomNav.getByRole('link', { name: 'Models' }).click();
+  await expect(page).toHaveURL(/\/models$/);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe('personal-models-title');
 
   const setup = page.getByRole('region', { name: /speech model required/i });
   await expect(setup).toBeVisible({ timeout: 10_000 });

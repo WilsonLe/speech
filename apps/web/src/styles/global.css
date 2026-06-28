@@ -2187,7 +2187,8 @@ button.danger,
 
 .personal-models-preflight,
 .activation-review-card,
-.model-detail-panel {
+.model-detail-panel,
+.training-readiness-panel {
   margin: 1.25rem 0;
   border: 1px solid rgba(56, 189, 248, 0.18);
   border-radius: 1.1rem;
@@ -2201,6 +2202,123 @@ button.danger,
 
 .model-detail-panel {
   border-color: rgba(14, 165, 233, 0.24);
+}
+
+.training-readiness-panel {
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.training-readiness-panel[data-status='blocked'] {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.training-readiness-panel[data-status='checking'] {
+  border-color: rgba(56, 189, 248, 0.24);
+}
+
+.training-readiness-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 1rem;
+  align-items: start;
+}
+
+.training-readiness-hero h3 {
+  margin-bottom: 0.45rem;
+  color: #f8fafc;
+}
+
+.training-readiness-hero p {
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.training-readiness-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.training-readiness-metrics div {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.95rem;
+  padding: 0.85rem;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.training-readiness-metrics dt {
+  margin-bottom: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.training-readiness-metrics dd {
+  margin: 0;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.training-readiness-blockers {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.training-readiness-blockers li {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  background: rgba(113, 63, 18, 0.16);
+}
+
+.training-readiness-blockers strong {
+  color: #f8fafc;
+}
+
+.training-readiness-blockers p,
+.training-readiness-blockers span {
+  display: block;
+  margin: 0.3rem 0 0;
+  color: #cbd5e1;
+}
+
+.training-readiness-blockers span {
+  color: #fde68a;
+  font-weight: 700;
+}
+
+.training-readiness-disclosures {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.training-readiness-disclosures details {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.95rem;
+  padding: 0.8rem 0.95rem;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.training-readiness-disclosures summary {
+  cursor: pointer;
+  color: #e2e8f0;
+  font-weight: 800;
+}
+
+.training-readiness-disclosures details > p {
+  margin: 0.75rem 0 0;
+}
+
+.success-message {
+  color: #bbf7d0;
 }
 
 .model-detail-summary {
@@ -2586,6 +2704,11 @@ button.danger,
     align-items: stretch;
   }
 
+  .training-readiness-hero,
+  .training-readiness-metrics {
+    grid-template-columns: 1fr;
+  }
+
   .browser-training-progress__header {
     display: grid;
   }
@@ -2683,6 +2806,8 @@ button.danger,
   .create-model-flow__actions .button,
   .create-model-flow__actions button:not(.create-model-flow__step-dot),
   .personal-models-nav a,
+  .training-readiness-hero .button,
+  .training-readiness-hero button,
   .benchmark-actions button,
   .update-message button,
   .browser-training-controls button,

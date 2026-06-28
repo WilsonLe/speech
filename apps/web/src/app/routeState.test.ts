@@ -72,7 +72,7 @@ describe('v0.6 route migration and navigation guards', () => {
       '/models/profile.local/train?jobId=job-1&returnTo=%2Fmodels%2Fprofile.local',
     );
     expect(createRouteRestorationPlan(training)).toMatchObject({
-      headingId: 'runtime-title',
+      headingId: 'training-readiness-title',
       scrollKey: 'model-train:profile.local',
       scrollRestoration: 'restore-current-stage',
     });

@@ -9,6 +9,7 @@ import type {
   ManifestInspectionResult,
   ModelLifecycleModel,
 } from '../workers/model-lifecycle-client';
+import type { PersonalModelProfileCardV1 } from './personal-models';
 
 export type PersonalModelPreflightStatus = 'checking' | 'ready' | 'action-needed' | 'fallback';
 
@@ -44,6 +45,62 @@ export interface PersonalModelReadinessTaskV1 {
   readonly required: number;
   readonly missing: number;
   readonly detail: string;
+  readonly privacy: PersonalModelPreflightPrivacyV1;
+}
+
+export interface PersonalModelTrainingReadinessBlockerV1 {
+  readonly schemaVersion: 1;
+  readonly id: 'recordings' | 'browser-support' | 'training-support' | 'checking';
+  readonly label: string;
+  readonly detail: string;
+  readonly nextAction: string;
+  readonly privacy: PersonalModelPreflightPrivacyV1;
+}
+
+export interface PersonalModelTrainingReadinessViewV1 {
+  readonly schemaVersion: 1;
+  readonly status: 'ready' | 'blocked' | 'checking';
+  readonly title:
+    | 'Ready to train'
+    | 'Continue recording'
+    | 'Checking readiness'
+    | 'Training not ready';
+  readonly summary: string;
+  readonly primaryAction: {
+    readonly kind: 'train' | 'continue-recording';
+    readonly label: 'Train model' | 'Continue recording';
+    readonly href: string;
+    readonly disabled: boolean;
+  };
+  readonly recording: {
+    readonly acceptedCount: number;
+    readonly acceptedDurationSeconds: number;
+    readonly requiredCount: number;
+    readonly requiredDurationSeconds: number;
+    readonly label: string;
+  };
+  readonly storage: {
+    readonly requiredFreeBytes: number;
+    readonly label: string;
+    readonly status: 'ready' | 'checking' | 'blocked';
+  };
+  readonly browserSupport: {
+    readonly label: string;
+    readonly status: 'ready' | 'checking' | 'limited' | 'blocked';
+    readonly detail: string;
+  };
+  readonly trainingSupport: {
+    readonly label: string;
+    readonly status: 'ready' | 'checking' | 'blocked' | 'not-needed';
+    readonly detail: string;
+  };
+  readonly blockers: readonly PersonalModelTrainingReadinessBlockerV1[];
+  readonly details: {
+    readonly passedCheckCount: number;
+    readonly fallbackCheckCount: number;
+    readonly actionNeededCheckCount: number;
+    readonly recordingTaskCount: number;
+  };
   readonly privacy: PersonalModelPreflightPrivacyV1;
 }
 
@@ -278,6 +335,311 @@ export function buildPersonalModelReadinessTasks(
       detail: `${requirement.label} needs ${formatNumber(requirement.missing)} more ${requirement.code.includes('duration') ? 'seconds' : 'items'}.`,
     }),
   );
+}
+
+export function buildPersonalModelTrainingReadinessView({
+  card,
+  readinessReport,
+  readinessTasks,
+  capabilityChecks,
+  trainingCompanion,
+  recordingHref,
+  trainingHref,
+}: {
+  readonly card: PersonalModelProfileCardV1;
+  readonly readinessReport: TrainingReadinessCoverageReportV1 | null;
+  readonly readinessTasks: readonly PersonalModelReadinessTaskV1[];
+  readonly capabilityChecks: readonly PersonalModelPreflightCheckV1[];
+  readonly trainingCompanion: PersonalModelTrainingCompanionSummaryV1;
+  readonly recordingHref: string;
+  readonly trainingHref: string;
+}): PersonalModelTrainingReadinessViewV1 {
+  const recordingMissingTasks = readinessTasks.filter((task) => task.status === 'missing');
+  const actionNeededChecks = capabilityChecks.filter((check) => check.status === 'action-needed');
+  const fallbackChecks = capabilityChecks.filter((check) => check.status === 'fallback');
+  const checkingChecks = capabilityChecks.filter((check) => check.status === 'checking');
+  const browserSupport = summarizeBrowserSupport({
+    actionNeededChecks,
+    fallbackChecks,
+    checkingChecks,
+  });
+  const trainingSupport = summarizeTrainingSupport(trainingCompanion);
+  const blockers = buildTrainingReadinessBlockers({
+    recordingMissingTasks,
+    browserSupport,
+    trainingSupport,
+  });
+  const isChecking =
+    checkingChecks.length > 0 ||
+    trainingCompanion.status === 'checking' ||
+    (readinessReport === null && card.storage.acceptedUtterances > 0);
+  const status: PersonalModelTrainingReadinessViewV1['status'] =
+    blockers.length > 0 ? 'blocked' : isChecking ? 'checking' : 'ready';
+  const needsRecording = recordingMissingTasks.length > 0;
+  const primaryAction = needsRecording
+    ? {
+        kind: 'continue-recording' as const,
+        label: 'Continue recording' as const,
+        href: recordingHref,
+        disabled: false,
+      }
+    : {
+        kind: 'train' as const,
+        label: 'Train model' as const,
+        href: trainingHref,
+        disabled: status !== 'ready',
+      };
+
+  const requiredFreeBytes =
+    trainingCompanion.status === 'available-not-installed'
+      ? trainingCompanion.requiredStorageBytes
+      : 0;
+
+  return {
+    schemaVersion: 1,
+    status,
+    title: readinessTitle({ status, needsRecording }),
+    summary: readinessSummary({ status, needsRecording, browserSupport, trainingSupport }),
+    primaryAction,
+    recording: {
+      acceptedCount: card.storage.acceptedUtterances,
+      acceptedDurationSeconds: card.storage.acceptedSeconds,
+      requiredCount:
+        readinessReport?.policy.minAcceptedUtterances ??
+        Math.max(1, card.storage.acceptedUtterances),
+      requiredDurationSeconds: readinessReport?.policy.minTotalDurationSeconds ?? 0,
+      label: `${card.storage.acceptedUtterances.toLocaleString('en')} recordings · ${formatDurationSeconds(card.storage.acceptedSeconds)} active speech`,
+    },
+    storage: {
+      requiredFreeBytes,
+      label: formatTrainingStorageLabel(trainingCompanion),
+      status:
+        trainingSupport.status === 'blocked'
+          ? 'blocked'
+          : trainingSupport.status === 'checking'
+            ? 'checking'
+            : 'ready',
+    },
+    browserSupport,
+    trainingSupport,
+    blockers,
+    details: {
+      passedCheckCount: capabilityChecks.filter((check) => check.status === 'ready').length,
+      fallbackCheckCount: fallbackChecks.length,
+      actionNeededCheckCount: actionNeededChecks.length,
+      recordingTaskCount: readinessTasks.length,
+    },
+    privacy: createPreflightPrivacy(),
+  };
+}
+
+function formatTrainingStorageLabel(
+  trainingCompanion: PersonalModelTrainingCompanionSummaryV1,
+): string {
+  if (trainingCompanion.status === 'checking') return 'Checking training support size';
+  if (trainingCompanion.status === 'installed') {
+    return '0 B needed';
+  }
+  if (trainingCompanion.status === 'available-not-installed') {
+    return `${formatPreflightBytes(trainingCompanion.requiredStorageBytes)} needed for training support`;
+  }
+  if (trainingCompanion.status === 'base-model-missing') return 'Install the speech model first';
+  return '0 B needed';
+}
+
+function summarizeBrowserSupport({
+  actionNeededChecks,
+  fallbackChecks,
+  checkingChecks,
+}: {
+  readonly actionNeededChecks: readonly PersonalModelPreflightCheckV1[];
+  readonly fallbackChecks: readonly PersonalModelPreflightCheckV1[];
+  readonly checkingChecks: readonly PersonalModelPreflightCheckV1[];
+}): PersonalModelTrainingReadinessViewV1['browserSupport'] {
+  if (actionNeededChecks.length > 0) {
+    return {
+      label: 'Needs attention',
+      status: 'blocked',
+      detail:
+        actionNeededChecks[0]?.detail ?? 'This browser needs one more local capability check.',
+    };
+  }
+  if (checkingChecks.length > 0) {
+    return {
+      label: 'Checking',
+      status: 'checking',
+      detail: 'Checking local browser support without requesting microphone permission.',
+    };
+  }
+  if (fallbackChecks.length > 0) {
+    return {
+      label: 'Supported with fallback',
+      status: 'limited',
+      detail: 'Training can use a compatible local fallback when faster browser support is absent.',
+    };
+  }
+  return {
+    label: 'Ready',
+    status: 'ready',
+    detail: 'Required local browser support is available.',
+  };
+}
+
+function summarizeTrainingSupport(
+  trainingCompanion: PersonalModelTrainingCompanionSummaryV1,
+): PersonalModelTrainingReadinessViewV1['trainingSupport'] {
+  if (trainingCompanion.status === 'checking') {
+    return {
+      label: 'Checking',
+      status: 'checking',
+      detail: trainingCompanion.detail,
+    };
+  }
+  if (trainingCompanion.status === 'base-model-missing') {
+    return {
+      label: 'Speech model required',
+      status: 'blocked',
+      detail: trainingCompanion.detail,
+    };
+  }
+  if (trainingCompanion.status === 'available-not-installed') {
+    return {
+      label: 'Install support files',
+      status: 'blocked',
+      detail: trainingCompanion.detail,
+    };
+  }
+  if (trainingCompanion.status === 'not-declared') {
+    return {
+      label: 'Not needed',
+      status: 'not-needed',
+      detail: 'This speech model does not list separate training support files.',
+    };
+  }
+  return {
+    label: 'Ready',
+    status: 'ready',
+    detail: trainingCompanion.detail,
+  };
+}
+
+function buildTrainingReadinessBlockers({
+  recordingMissingTasks,
+  browserSupport,
+  trainingSupport,
+}: {
+  readonly recordingMissingTasks: readonly PersonalModelReadinessTaskV1[];
+  readonly browserSupport: PersonalModelTrainingReadinessViewV1['browserSupport'];
+  readonly trainingSupport: PersonalModelTrainingReadinessViewV1['trainingSupport'];
+}): readonly PersonalModelTrainingReadinessBlockerV1[] {
+  const blockers: PersonalModelTrainingReadinessBlockerV1[] = [];
+  const firstRecordingTask = recordingMissingTasks[0];
+  if (firstRecordingTask !== undefined) {
+    blockers.push(
+      createTrainingReadinessBlocker({
+        id: 'recordings',
+        label: 'More recordings needed',
+        detail: firstRecordingTask.detail,
+        nextAction: 'Continue recording accepted takes for this voice model.',
+      }),
+    );
+  }
+  if (trainingSupport.status === 'blocked') {
+    blockers.push(
+      createTrainingReadinessBlocker({
+        id: 'training-support',
+        label: trainingSupport.label,
+        detail: trainingSupport.detail,
+        nextAction:
+          'Install the exact speech model and its local training support before training.',
+      }),
+    );
+  }
+  if (browserSupport.status === 'blocked') {
+    blockers.push(
+      createTrainingReadinessBlocker({
+        id: 'browser-support',
+        label: 'Browser support needed',
+        detail: browserSupport.detail,
+        nextAction: 'Use a supported secure browser or fix the listed browser setting.',
+      }),
+    );
+  }
+  if (
+    blockers.length === 0 &&
+    (browserSupport.status === 'checking' || trainingSupport.status === 'checking')
+  ) {
+    blockers.push(
+      createTrainingReadinessBlocker({
+        id: 'checking',
+        label: 'Readiness checks still running',
+        detail: 'The app is checking local browser and training-support state.',
+        nextAction: 'Wait for the checks to finish before starting training.',
+      }),
+    );
+  }
+  return blockers.slice(0, 4);
+}
+
+function createTrainingReadinessBlocker({
+  id,
+  label,
+  detail,
+  nextAction,
+}: {
+  readonly id: PersonalModelTrainingReadinessBlockerV1['id'];
+  readonly label: string;
+  readonly detail: string;
+  readonly nextAction: string;
+}): PersonalModelTrainingReadinessBlockerV1 {
+  return { schemaVersion: 1, id, label, detail, nextAction, privacy: createPreflightPrivacy() };
+}
+
+function readinessTitle({
+  status,
+  needsRecording,
+}: {
+  readonly status: PersonalModelTrainingReadinessViewV1['status'];
+  readonly needsRecording: boolean;
+}): PersonalModelTrainingReadinessViewV1['title'] {
+  if (status === 'ready') return 'Ready to train';
+  if (status === 'checking') return 'Checking readiness';
+  return needsRecording ? 'Continue recording' : 'Training not ready';
+}
+
+function readinessSummary({
+  status,
+  needsRecording,
+  browserSupport,
+  trainingSupport,
+}: {
+  readonly status: PersonalModelTrainingReadinessViewV1['status'];
+  readonly needsRecording: boolean;
+  readonly browserSupport: PersonalModelTrainingReadinessViewV1['browserSupport'];
+  readonly trainingSupport: PersonalModelTrainingReadinessViewV1['trainingSupport'];
+}): string {
+  if (status === 'ready') {
+    return 'Recording coverage, browser support, and local training files are ready.';
+  }
+  if (status === 'checking') {
+    return 'Checking local browser support and training files.';
+  }
+  if (needsRecording) {
+    return 'Record more accepted takes before training can start.';
+  }
+  if (trainingSupport.status === 'blocked') {
+    return trainingSupport.detail;
+  }
+  return browserSupport.detail;
+}
+
+function formatDurationSeconds(value: number): string {
+  if (value < 60) return `${value.toFixed(value % 1 === 0 ? 0 : 1)} sec`;
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.round(value % 60);
+  return seconds === 0
+    ? `${minutes.toString()} min`
+    : `${minutes.toString()} min ${seconds.toString()} sec`;
 }
 
 function createPreflightCheck({
