@@ -34,6 +34,8 @@ describe('v0.6 route migration and navigation guards', () => {
         '/models/:profileId/train',
         '/settings',
         '/settings/audio',
+        '/settings/privacy',
+        '/settings/shortcuts',
         '/settings/diagnostics',
         '/about',
         '/setup/model',
@@ -106,6 +108,22 @@ describe('v0.6 route migration and navigation guards', () => {
       stateSource: 'domain-storage',
     });
 
+    const privacy = resolveAppRoute({ pathname: '/settings/privacy' });
+    expect(privacy.routeId).toBe('settings-privacy');
+    expect(privacy.headingId).toBe('privacy-title');
+    expect(createRouteRestorationPlan(privacy)).toMatchObject({
+      headingId: 'privacy-title',
+      stateSource: 'static',
+    });
+
+    const shortcuts = resolveAppRoute({ pathname: '/settings/shortcuts' });
+    expect(shortcuts.routeId).toBe('settings-shortcuts');
+    expect(shortcuts.headingId).toBe('shortcuts-title');
+    expect(createRouteRestorationPlan(shortcuts)).toMatchObject({
+      headingId: 'shortcuts-title',
+      stateSource: 'static',
+    });
+
     const training = resolveAppRoute({
       pathname: '/models/profile.local/train',
       search: '?jobId=job-1&returnTo=/models/profile.local',
@@ -128,6 +146,15 @@ describe('v0.6 route migration and navigation guards', () => {
     );
     expect(resolveAppRoute({ pathname: '/', hash: '#benchmark' }).href).toBe(
       '/settings/diagnostics?section=benchmark',
+    );
+    expect(resolveAppRoute({ pathname: '/', hash: '#transcript-privacy-title' }).href).toBe(
+      '/settings/privacy',
+    );
+    expect(resolveAppRoute({ pathname: '/', hash: '#privacy-title' }).href).toBe(
+      '/settings/privacy',
+    );
+    expect(resolveAppRoute({ pathname: '/', hash: '#shortcuts-title' }).href).toBe(
+      '/settings/shortcuts',
     );
     expect(
       resolveAppRoute({ pathname: '/', hash: '#vocabulary-title', search: '?setId=medical' }).href,

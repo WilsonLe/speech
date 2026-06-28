@@ -5,12 +5,16 @@ import { MicrophonePanel } from './MicrophonePanel';
 import { resolveAppRoute } from './routeState';
 import { SettingsPanel } from './SettingsPanel';
 
-function renderSettingsIndex(): string {
+function renderSettingsRoute(pathname: string): string {
   return renderToString(
-    <AppRouteContext.Provider value={resolveAppRoute({ pathname: '/settings' })}>
+    <AppRouteContext.Provider value={resolveAppRoute({ pathname })}>
       <SettingsPanel />
     </AppRouteContext.Provider>,
   );
+}
+
+function renderSettingsIndex(): string {
+  return renderSettingsRoute('/settings');
 }
 
 describe('SettingsPanel', () => {
@@ -35,7 +39,45 @@ describe('SettingsPanel', () => {
     expect(html).not.toContain('Cosmetic');
   });
 
-  it('does not render on non-settings-index routes', () => {
+  it('renders a concise Privacy screen with visible local-only controls and consequences', () => {
+    const html = renderSettingsRoute('/settings/privacy');
+
+    expect(html).toContain('id="privacy-title"');
+    expect(html).toContain(
+      'Audio, transcripts, training, and personal models stay on this device.',
+    );
+    expect(html).toContain('Export a voice model');
+    expect(html).toContain('href="/models"');
+    expect(html).toContain('Delete local speech data');
+    expect(html).toContain('href="/settings/storage?focus=delete-all"');
+    expect(html).toContain('Download support bundle');
+    expect(html).toContain('Diagnostics downloads are redacted');
+    expect(html).toContain('No telemetry configured');
+    expect(html).toContain(
+      'no accounts, analytics, sync, crash upload, or remote support endpoint',
+    );
+    expect(html).toContain('Support bundles stay redacted');
+    expect(html).not.toMatch(/sha256|OPFS|profile-[A-Za-z0-9]|checkpoint\//i);
+    expect(html).not.toContain('tooltip');
+  });
+
+  it('renders page-scoped keyboard shortcuts without hiding required instructions in tooltips', () => {
+    const html = renderSettingsRoute('/settings/shortcuts');
+
+    expect(html).toContain('id="shortcuts-title"');
+    expect(html).toContain('Recording');
+    expect(html).toContain('Hold to record on Dictate');
+    expect(html).toContain('<kbd>Space</kbd>');
+    expect(html).toContain('Navigation');
+    expect(html).toContain('<kbd>Tab</kbd>');
+    expect(html).toContain('Menus, dialogs, and disclosures');
+    expect(html).toContain('<kbd>Escape</kbd>');
+    expect(html).toContain('Workflows');
+    expect(html).toContain('Train model');
+    expect(html).not.toContain('hover only');
+  });
+
+  it('does not render on non-settings routes', () => {
     const html = renderToString(
       <AppRouteContext.Provider value={resolveAppRoute({ pathname: '/' })}>
         <SettingsPanel />
