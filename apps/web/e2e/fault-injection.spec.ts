@@ -23,7 +23,7 @@ test.describe('cross-browser personal-model fault injection', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Run browser training prototype' }).click();
+    await page.getByRole('button', { name: 'Run training check' }).click();
 
     const runtime = page.locator('section.runtime');
     await expect(runtime.locator('.error-message')).toContainText(
@@ -51,7 +51,7 @@ test.describe('cross-browser personal-model fault injection', () => {
     }, recoveryStorageKey);
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Run browser training prototype' }).click();
+    await page.getByRole('button', { name: 'Run training check' }).click();
 
     const runtime = page.locator('section.runtime');
     await expect(runtime.getByText('Training is running locally.', { exact: true })).toBeVisible({
@@ -62,17 +62,20 @@ test.describe('cross-browser personal-model fault injection', () => {
         .getByLabel('Training resource guidance')
         .getByText(/Prototype recovery uses browser-local storage/),
     ).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Pause browser training' }).click();
+    await page.getByRole('button', { name: 'Pause training check' }).click();
     await expect(
       runtime.getByText('Training paused. Progress is saved on this device.', { exact: true }),
     ).toBeVisible({ timeout: 10_000 });
-    await runtime.locator('details.training-details-disclosure > summary').click();
+    await runtime
+      .locator('details.training-details-disclosure', {
+        has: page.locator('summary', { hasText: 'Training details' }),
+      })
+      .locator('summary')
+      .click();
     await expect(runtime.getByLabel('Browser training recovery status')).toContainText(
       'Recovery statusnone',
     );
-    await expect(
-      page.getByRole('button', { name: 'Resume browser training prototype' }),
-    ).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Resume training check' })).toBeDisabled();
   });
 
   test('rejects hostile imports without echoing private identifiers', async ({ page }) => {
@@ -218,9 +221,9 @@ async function saveOneAcceptedTakeAndExport(page: Page, profileStore: Locator): 
   const acceptAndSave = recorder.getByRole('button', { name: 'Accept' });
   await expect(acceptAndSave).toBeEnabled({ timeout: 10_000 });
   await acceptAndSave.click();
-  await expect(profileStore).toContainText(/Accepted take saved/i, { timeout: 10_000 });
+  await expect(profileStore).toContainText(/Recording saved on this device/i, { timeout: 10_000 });
   await profileStore.getByRole('button', { name: /enable local profile/i }).click();
-  await expect(profileStore).toContainText(/Profile enabled locally/i, { timeout: 10_000 });
+  await expect(profileStore).toContainText(/Voice model enabled/i, { timeout: 10_000 });
 
   const downloadPromise = page.waitForEvent('download');
   await profileStore.getByRole('button', { name: /export sensitive profile package/i }).click();

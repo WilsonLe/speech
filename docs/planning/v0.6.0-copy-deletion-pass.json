@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "v0.6.0-copy-deletion-pass",
+  "sourceIssue": "https://github.com/WilsonLe/speech/issues/250",
+  "reviewDate": "2026-06-28",
+  "baselineInventory": "docs/planning/v0.6.0-ui-inventory.json",
+  "terminologyContract": "docs/planning/v0.6.0-terminology-copy-budgets.json",
+  "scope": {
+    "routesReviewed": [
+      "/",
+      "/models",
+      "/models/:profileId/enroll",
+      "/models/:profileId/train",
+      "/settings/audio",
+      "/settings/diagnostics"
+    ],
+    "statesReviewed": ["empty", "loading", "error", "success", "offline", "update", "recovery"]
+  },
+  "rewrites": [
+    {
+      "surface": "enrollment save and replay status",
+      "file": "apps/web/src/app/MicrophonePanel.tsx",
+      "deletedDefaultCopy": [
+        "Accepted take saved in private OPFS profile storage and will resume after reload.",
+        "Accepted take saved in non-durable memory fallback storage for this page session; OPFS is unavailable.",
+        "Replay finished. Captured take still exists only in memory.",
+        "Replaying the in-memory enrollment take through this browser tab."
+      ],
+      "replacementPurpose": "State that the recording was saved or replayed without naming browser storage internals."
+    },
+    {
+      "surface": "voice model activation and import status",
+      "file": "apps/web/src/app/MicrophonePanel.tsx",
+      "deletedDefaultCopy": [
+        "Profile enabled locally. Runtime workers may apply it only between utterances.",
+        "Profile import verified checksums and restored local enrollment recordings. Review before enabling."
+      ],
+      "replacementPurpose": "State the user-visible next action and timing without worker/checksum language."
+    },
+    {
+      "surface": "microphone check introduction and metrics",
+      "file": "apps/web/src/app/MicrophonePanel.tsx",
+      "deletedDefaultCopy": [
+        "attaches an AudioWorklet capture processor",
+        "AudioWorklet capture metrics",
+        "AudioWorklet status",
+        "Worklet sample rate"
+      ],
+      "replacementPurpose": "Keep the default microphone check about the user task and move implementation metrics behind Input details."
+    },
+    {
+      "surface": "training support panel",
+      "file": "apps/web/src/app/ModelRuntimePanel.tsx",
+      "deletedDefaultCopy": [
+        "Dedicated worker ONNX Runtime loader",
+        "Benchmark worker provider",
+        "Worker provider benchmark has not run yet.",
+        "Benchmarking ONNX Runtime providers in a dedicated worker…"
+      ],
+      "replacementPurpose": "Expose a task-first browser training support check while leaving technical runtime details behind disclosures."
+    },
+    {
+      "surface": "implementation roadmap",
+      "file": "apps/web/src/app/milestones.ts",
+      "deletedDefaultCopy": [
+        "AudioWorklet",
+        "SharedArrayBuffer ring buffer",
+        "ONNX RNN-T sessions"
+      ],
+      "replacementPurpose": "Keep roadmap summaries user-facing while preserving precise runtime terms in diagnostics and code."
+    },
+    {
+      "surface": "training readiness checks",
+      "file": "apps/web/src/app/personal-models-preflight.ts",
+      "deletedDefaultCopy": [
+        "AudioWorklet capture",
+        "AudioWorklet capture can run off the UI thread.",
+        "AudioWorklet is unavailable; enrollment capture cannot use the low-latency path."
+      ],
+      "replacementPurpose": "Describe the user-visible microphone capture requirement without implementation class names."
+    }
+  ],
+  "allowedTechnicalContexts": [
+    "Recording details",
+    "Training details",
+    "Training support details",
+    "Runtime details",
+    "Diagnostics",
+    "About",
+    "tests",
+    "code-only helpers"
+  ],
+  "privacy": {
+    "rawErrorMessagesDefaultVisible": false,
+    "rawIdentifiersDefaultVisible": false,
+    "storageBackendNamesDefaultVisible": false,
+    "notes": "Default status copy avoids OPFS, worker, checksum, profile ID, and adapter details. Diagnostic and advanced details may retain precise terms when explicitly opened."
+  },
+  "validation": {
+    "staticTest": "training/tests/test_v0_6_copy_deletion_pass.py",
+    "focusedBrowserSpecs": [
+      "apps/web/e2e/onnx-runtime-worker.spec.ts",
+      "apps/web/e2e/microphone-worklet.spec.ts",
+      "apps/web/e2e/fault-injection.spec.ts"
+    ]
+  }
+}

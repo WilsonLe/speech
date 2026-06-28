@@ -53,3 +53,5 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**,MODEL_LICENSES
 - A few minutes of enrollment adapts a pretrained model; never describe it as training a new ASR base model from scratch.
 
 - The v0.6 component gallery and usage documentation must use synthetic examples only. It must not render or store real profile IDs, prompt IDs, transcripts, personal audio, private vocabulary terms, feature tensors, checkpoints, adapter weights, passphrases, or storage paths; required privacy and destructive/recovery consequences remain visible in examples rather than hidden only in tooltips, menus, toasts, or collapsed panels.
+
+- #250 copy-deletion changes must not reintroduce raw worker errors, storage backend names, checksums, profile IDs, adapter details, or provider/runtime terms into default status messages; use details/diagnostics for technical verification copy.

@@ -149,11 +149,11 @@ export function buildPersonalModelCapabilityChecks(
         : 'Browser mediaDevices.getUserMedia is unavailable.',
     }),
     createPreflightCheck({
-      label: 'AudioWorklet capture',
+      label: 'Microphone capture',
       status: capabilities.audioWorklet ? 'ready' : 'action-needed',
       detail: capabilities.audioWorklet
-        ? 'AudioWorklet capture can run off the UI thread.'
-        : 'AudioWorklet is unavailable; enrollment capture cannot use the low-latency path.',
+        ? 'Local capture can run without blocking the page.'
+        : 'This browser is missing the low-latency microphone path needed for enrollment.',
     }),
     createPreflightCheck({
       label: 'Background work',

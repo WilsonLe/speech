@@ -19,7 +19,7 @@ test('runs the Audio settings input test with a fake microphone', async ({ page 
   await expect
     .poll(async () => readMetric(levelDiagnostics, 'Captured chunks'), { timeout: 10_000 })
     .toBeGreaterThan(0);
-  await expect(levelDiagnostics).toContainText('Worklet sample rate');
+  await expect(levelDiagnostics).toContainText('Sample rate');
 
   await audioSettings.getByRole('button', { name: 'Stop input test' }).click();
   await expect(audioSettings).toContainText('Input test stopped.');
@@ -30,7 +30,8 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
 
   await page.getByRole('button', { name: /start microphone check/i }).click();
 
-  const metrics = page.locator('[aria-label="AudioWorklet capture metrics"]');
+  await page.getByText('Input details', { exact: true }).click();
+  const metrics = page.locator('[aria-label="Microphone input details"]');
   await expect(metrics).toContainText('capturing', { timeout: 10_000 });
   await expect
     .poll(async () => readMetric(metrics, 'Captured chunks'), { timeout: 10_000 })
@@ -72,7 +73,7 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   const acceptAndSave = recorder.getByRole('button', { name: /^Accept$/i });
   await expect(acceptAndSave).toBeEnabled();
   await acceptAndSave.click();
-  await expect(profileStore).toContainText(/Accepted take saved/i, { timeout: 10_000 });
+  await expect(profileStore).toContainText(/Recording saved on this device/i, { timeout: 10_000 });
   await expect
     .poll(async () => readMetric(profileStore, 'Stored accepted takes'), { timeout: 10_000 })
     .toBeGreaterThan(0);
@@ -88,7 +89,7 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
   await expect(readiness).toContainText('needs-more-data');
   await expect(readiness).toContainText('Aggregate counts only');
   await profileStore.getByRole('button', { name: /enable local profile/i }).click();
-  await expect(profileStore).toContainText(/Profile enabled locally/i, { timeout: 10_000 });
+  await expect(profileStore).toContainText(/Voice model enabled/i, { timeout: 10_000 });
   await expect(profileStore).toContainText('active locally');
   await expect(profileStore).not.toContainText('local-enrollment-profile');
   const downloadPromise = page.waitForEvent('download');
@@ -120,7 +121,7 @@ test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) 
     })
     .toBe(0);
   await resumedProfileStore.locator('input[type="file"]').setInputFiles(exportedPath);
-  await expect(resumedProfileStore).toContainText(/import verified checksums/i, {
+  await expect(resumedProfileStore).toContainText(/Import restored local recordings/i, {
     timeout: 10_000,
   });
   await expect
