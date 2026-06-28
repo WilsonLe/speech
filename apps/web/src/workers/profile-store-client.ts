@@ -7,6 +7,8 @@ import type {
   EnrollmentProfileImportResultV1,
   EnrollmentProfileSummaryV1,
   EnrollmentUtteranceV1,
+  PortableSpeechModelExportMode,
+  PortableSpeechModelExportSummaryV1,
   PortableSpeechModelImportSummaryV1,
   ProfileStorageBackendKind,
   SpeechProfileManifestMigrationResultV1,
@@ -67,6 +69,11 @@ export interface ProfileStoreRenameResult extends ProfileStoreActiveResult {
 
 export interface ProfileStorePortableImportResult extends ProfileStoreActiveResult {
   readonly summary: PortableSpeechModelImportSummaryV1;
+}
+
+export interface ProfileStorePortableExportResult extends ProfileStoreActiveResult {
+  readonly envelopeBytes: ArrayBuffer;
+  readonly summary: PortableSpeechModelExportSummaryV1;
 }
 
 export interface ProfileStoreSpeechProfileMigrationResult extends ProfileStoreActiveResult {
@@ -153,6 +160,15 @@ export interface ImportPortableSpeechModelOptions {
   readonly passphrase?: string;
   readonly overwriteExisting?: boolean;
   readonly importId?: string;
+  readonly timeoutMs?: number;
+}
+
+export interface ExportPortableSpeechModelOptions {
+  readonly profileId: string;
+  readonly exactBaseModel: ExactBaseModelIdentityV1;
+  readonly sourceAppVersion: string;
+  readonly mode?: PortableSpeechModelExportMode;
+  readonly passphrase?: string;
   readonly timeoutMs?: number;
 }
 
@@ -313,6 +329,34 @@ export function exportEnrollmentProfile(
       persistentStorageGranted: response.persistentStorageGranted,
       activeState: response.activeState,
       profilePackage: response.profilePackage,
+    };
+  });
+}
+
+export function exportPortableSpeechModel(
+  options: ExportPortableSpeechModelOptions,
+): Promise<ProfileStorePortableExportResult> {
+  return requestProfileStore(
+    {
+      type: 'EXPORT_PORTABLE_SPEECH_MODEL',
+      requestId: createRequestId('portable-export'),
+      profileId: options.profileId,
+      exactBaseModel: options.exactBaseModel,
+      sourceAppVersion: options.sourceAppVersion,
+      ...(options.mode === undefined ? {} : { mode: options.mode }),
+      ...(options.passphrase === undefined ? {} : { passphrase: options.passphrase }),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_PORTABLE_EXPORT_COMPLETE') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      envelopeBytes: response.envelopeBytes,
+      summary: response.summary,
     };
   });
 }

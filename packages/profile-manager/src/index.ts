@@ -36,9 +36,15 @@ import {
   type VocabularyStoreSnapshotV1,
 } from '@speech/protocol';
 import {
+  buildPortableSpeechModelInnerBundle,
+  buildUnencryptedPortableSpeechModelEnvelope,
+  createPortableSpeechModelFileRef,
+  encryptPortableSpeechModelEnvelope,
   validatePortableSpeechModelManifestV1,
   type ImportedPortableSpeechModelArchiveV1,
   type ImportedPortableSpeechModelFileV1,
+  type PortableSpeechModelBundleFileInputV1,
+  type PortableSpeechModelEnvelopeHeaderV1,
   type PortableSpeechModelManifestV1,
 } from '@speech/portable-model';
 
@@ -277,6 +283,57 @@ export interface ImportPortableSpeechModelInput {
   readonly smokeTimeoutMs?: number;
   readonly overwriteExisting?: boolean;
   readonly importId?: string;
+}
+
+export type PortableSpeechModelExportMode = 'encrypted' | 'unencrypted';
+
+export interface ExportPortableSpeechModelInput {
+  readonly profileId: string;
+  readonly exactBaseModel: ExactBaseModelIdentityV1;
+  readonly sourceAppVersion: string;
+  readonly passphrase?: string | Uint8Array;
+  readonly mode?: PortableSpeechModelExportMode;
+  readonly randomBytes?: (length: number) => Uint8Array;
+}
+
+export interface PortableSpeechModelExportSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly fileName: string;
+  readonly exportedAt: string;
+  readonly displayName: string;
+  readonly encrypted: boolean;
+  readonly envelopeHeader: PortableSpeechModelEnvelopeHeaderV1;
+  readonly adaptationType: PortableSpeechModelManifestV1['adaptation']['type'];
+  readonly languages: readonly string[];
+  readonly supportsMixed: boolean;
+  readonly fileCount: number;
+  readonly expandedBytes: number;
+  readonly vocabulary: {
+    readonly included: boolean;
+    readonly containsPrivateTerms: false;
+  };
+  readonly excluded: {
+    readonly recordings: true;
+    readonly trainingCheckpoints: true;
+    readonly preparedFeatures: true;
+    readonly baseModel: true;
+  };
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: true;
+    readonly containsPrivateVocabularyTerms: false;
+    readonly localOnly: true;
+  };
+}
+
+export interface PortableSpeechModelExportResultV1 {
+  readonly schemaVersion: 1;
+  readonly envelopeBytes: Uint8Array;
+  readonly summary: PortableSpeechModelExportSummaryV1;
 }
 
 export interface PortableSpeechModelStoredFileV1 extends ProfileFileRef {
@@ -1411,6 +1468,48 @@ export class EnrollmentProfileStore {
     };
   }
 
+  async exportPortableSpeechModel(
+    input: ExportPortableSpeechModelInput,
+  ): Promise<PortableSpeechModelExportResultV1> {
+    const profileId = normalizeSegment(input.profileId, 'profileId');
+    const exportedAt = this.options.now?.() ?? new Date().toISOString();
+    const mode = input.mode ?? 'encrypted';
+    if (mode === 'encrypted' && input.passphrase === undefined) {
+      throw new Error('Encrypted portable speech model export requires a passphrase.');
+    }
+    const profileManifest = await this.readExportableSpeechProfileManifest(profileId);
+    assertPortableExportBaseModel(profileManifest, input.exactBaseModel);
+    assertPortableExportManifestReady(profileManifest);
+    const payloadFiles = await this.buildPortableExportPayloadFiles(profileId, profileManifest);
+    const refs = await refsForPortableExportFiles(payloadFiles);
+    const manifest = buildPortableExportManifest({
+      profile: profileManifest,
+      exactBaseModel: input.exactBaseModel,
+      sourceAppVersion: input.sourceAppVersion,
+      exportedAt,
+      refs,
+    });
+    const bundle = await buildPortableSpeechModelInnerBundle({ manifest, files: payloadFiles });
+    const envelope =
+      mode === 'encrypted'
+        ? await encryptPortableSpeechModelEnvelope({
+            body: bundle.bytes,
+            passphrase: input.passphrase as string | Uint8Array,
+            ...(input.randomBytes === undefined ? {} : { randomBytes: input.randomBytes }),
+          })
+        : buildUnencryptedPortableSpeechModelEnvelope(bundle.bytes);
+    return {
+      schemaVersion: 1,
+      envelopeBytes: envelope.bytes,
+      summary: summarizePortableSpeechModelExport({
+        manifest,
+        envelopeHeader: envelope.header,
+        envelopeBytes: envelope.bytes,
+        exportedAt,
+      }),
+    };
+  }
+
   async importProfile(input: ImportEnrollmentProfileInput): Promise<EnrollmentProfileSummaryV1> {
     return (await this.importProfilePackage(input)).summary;
   }
@@ -2174,6 +2273,166 @@ export class EnrollmentProfileStore {
     for (const revision of revisions) {
       await this.backend.deleteDirectory(['training-jobs', revision.jobId]);
     }
+  }
+
+  private async readExportableSpeechProfileManifest(
+    profileId: string,
+  ): Promise<SpeechProfileManifestV2> {
+    const v2Bytes = await this.backend.getFile(speechProfileManifestV2Path(profileId));
+    if (v2Bytes !== undefined) {
+      return parseSpeechProfileManifestV2(parseJson(v2Bytes));
+    }
+    const v1Bytes = await this.backend.getFile(speechProfileManifestV1Path(profileId));
+    if (v1Bytes === undefined) {
+      throw new Error('This voice model does not have an exportable personal-model artifact.');
+    }
+    try {
+      const parsed = parseSpeechProfileManifest(parseJson(v1Bytes));
+      return parsed.schemaVersion === 2 ? parsed : migrateSpeechProfileManifestV1ToV2(parsed);
+    } catch {
+      throw new Error('This voice model does not have an exportable personal-model artifact.');
+    }
+  }
+
+  private async buildPortableExportPayloadFiles(
+    profileId: string,
+    profile: SpeechProfileManifestV2,
+  ): Promise<PortableSpeechModelBundleFileInputV1[]> {
+    const adaptationFiles = await this.buildPortableExportAdaptationFiles(profileId, profile);
+    const profileManifest = portableExportFile(
+      'metadata/profile-manifest.json',
+      'application/json',
+      stableJsonBytes(profile),
+    );
+    const evaluationSummary = portableExportFile(
+      'evaluation/summary.json',
+      'application/json',
+      stableJsonBytes({
+        schemaVersion: 1,
+        gatePassed: profile.evaluation.activationGatePassed,
+        warningCount: profile.evaluation.warnings.length,
+        languages: profile.languages,
+        aggregateOnly: true,
+        privacy: { containsRawAudio: false, containsTranscriptText: false },
+      }),
+    );
+    const evaluationMetrics = portableExportFile(
+      'evaluation/metrics.json',
+      'application/json',
+      stableJsonBytes({
+        schemaVersion: 1,
+        baseMetrics: profile.evaluation.baseMetrics,
+        adaptedMetrics: profile.evaluation.adaptedMetrics,
+        privacy: { containsCaseIds: false, aggregateOnly: true },
+      }),
+    );
+    const notices = portableExportFile(
+      'notices/THIRD_PARTY_NOTICES.txt',
+      'text/plain',
+      textEncoder.encode(
+        'Portable personal voice model exported by WilsonLe Speech. Contains voice-derived adapter weights and excludes recordings, prepared features, checkpoints, and the shared base model.\n',
+      ),
+    );
+    const smokeVector = portableExportFile(
+      'test-vectors/forward.json',
+      'application/json',
+      stableJsonBytes({
+        schemaVersion: 1,
+        vectorType: 'portable-smoke-vector-v1',
+        source: 'exported-adapter-artifact',
+        expectedFileCount: adaptationFiles.length,
+        privacy: { containsRawAudio: false, containsFeatureTensors: false },
+      }),
+    );
+    const payloadWithoutChecksums = [
+      ...adaptationFiles,
+      profileManifest,
+      evaluationSummary,
+      evaluationMetrics,
+      notices,
+      smokeVector,
+    ];
+    const refs = Object.values(await refsForPortableExportFiles(payloadWithoutChecksums)).sort(
+      (left, right) => left.path.localeCompare(right.path),
+    );
+    const checksums = portableExportFile(
+      'metadata/checksums.json',
+      'application/json',
+      stableJsonBytes({ schemaVersion: 1, files: refs }),
+    );
+    return [...payloadWithoutChecksums, checksums];
+  }
+
+  private async buildPortableExportAdaptationFiles(
+    profileId: string,
+    profile: SpeechProfileManifestV2,
+  ): Promise<PortableSpeechModelBundleFileInputV1[]> {
+    if (profile.adaptation.type === 'browser-top-adapter') {
+      const files = [
+        await this.readPortableExportReferencedFile(
+          profileId,
+          profile.adaptation.weights,
+          'artifacts/browser-top-adapter.bin',
+        ),
+      ];
+      if (profile.adaptation.speakerEmbedding !== undefined) {
+        files.push(
+          await this.readPortableExportReferencedFile(
+            profileId,
+            profile.adaptation.speakerEmbedding,
+            'embeddings/speaker.f32',
+          ),
+        );
+      }
+      return files;
+    }
+    if (profile.adaptation.type === 'residual-adapter') {
+      const graphRef = profile.adaptation.files[profile.adaptation.adapter.graphFileKey];
+      if (graphRef === undefined) {
+        throw new Error('Exportable residual adapter graph file is missing from the manifest.');
+      }
+      return [
+        await this.readPortableExportReferencedFile(
+          profileId,
+          graphRef,
+          'artifacts/adapter-weights.bin',
+          'application/octet-stream',
+        ),
+      ];
+    }
+    throw new Error(
+      'This voice model artifact type cannot be exported as a portable speech model.',
+    );
+  }
+
+  private async readPortableExportReferencedFile(
+    profileId: string,
+    ref: ProfileFileRef,
+    exportPath: string,
+    exportMediaType = ref.mediaType,
+  ): Promise<PortableSpeechModelBundleFileInputV1> {
+    const candidates = [
+      portablePathToSegments(ref.path),
+      profilePath(profileId, ...portablePathToSegments(ref.path)),
+    ];
+    let bytes: ArrayBuffer | undefined;
+    for (const candidate of candidates) {
+      bytes = await this.backend.getFile(candidate);
+      if (bytes !== undefined) break;
+    }
+    if (bytes === undefined) {
+      throw new Error('Exportable personal-model artifact file is missing from device storage.');
+    }
+    if (bytes.byteLength !== ref.sizeBytes) {
+      throw new Error('Exportable personal-model artifact file size does not match its manifest.');
+    }
+    const actualSha256 = await this.digest(bytes);
+    if (actualSha256 !== ref.sha256) {
+      throw new Error(
+        'Exportable personal-model artifact file checksum does not match its manifest.',
+      );
+    }
+    return portableExportFile(exportPath, exportMediaType, bytes);
   }
 
   private async decodeProfileExportFiles(
@@ -4039,6 +4298,202 @@ function assertBaseModelCompatible(
     actual.graphContractSha256 !== expected.graphContractSha256
   ) {
     throw new Error(`Profile ${profileId} base-model identity does not match the active model.`);
+  }
+}
+
+interface BuildPortableExportManifestInput {
+  readonly profile: SpeechProfileManifestV2;
+  readonly exactBaseModel: ExactBaseModelIdentityV1;
+  readonly sourceAppVersion: string;
+  readonly exportedAt: string;
+  readonly refs: Readonly<Record<string, ProfileFileRef>>;
+}
+
+function portableExportFile(
+  path: string,
+  mediaType: string,
+  bytes: ArrayBuffer | ArrayBufferView,
+): PortableSpeechModelBundleFileInputV1 {
+  return { path, mediaType, bytes };
+}
+
+async function refsForPortableExportFiles(
+  files: readonly PortableSpeechModelBundleFileInputV1[],
+): Promise<Record<string, ProfileFileRef>> {
+  const refs: Record<string, ProfileFileRef> = {};
+  for (const file of files) {
+    refs[file.path] = await createPortableSpeechModelFileRef(file);
+  }
+  return refs;
+}
+
+function buildPortableExportManifest({
+  profile,
+  exactBaseModel,
+  sourceAppVersion,
+  exportedAt,
+  refs,
+}: BuildPortableExportManifestInput): PortableSpeechModelManifestV1 {
+  const adaptation = buildPortableExportAdaptation(profile, refs);
+  const evaluationSummaryFile = requirePortableExportRef(refs, 'evaluation/summary.json');
+  const evaluationMetricsFile = requirePortableExportRef(refs, 'evaluation/metrics.json');
+  const noticesFile = requirePortableExportRef(refs, 'notices/THIRD_PARTY_NOTICES.txt');
+  const checksumsFile = requirePortableExportRef(refs, 'metadata/checksums.json');
+  const testVector = requirePortableExportRef(refs, 'test-vectors/forward.json');
+  const files = Object.values(refs).sort((left, right) => left.path.localeCompare(right.path));
+  return {
+    schemaVersion: 1,
+    bundleType: 'personal-voice-model',
+    bundleId: normalizePortableExportBundleId(profile.id),
+    modelRevision: `profile-${profile.updatedAt}`,
+    displayName: profile.displayName,
+    createdAt: profile.createdAt,
+    exportedAt,
+    sourceAppVersion,
+    profile: {
+      sourceProfileId: profile.id,
+      languages: profile.languages,
+      supportsMixed: profile.languages.length > 1,
+    },
+    baseModel: exactBaseModel,
+    adaptation,
+    evaluation: {
+      gatePassed: profile.evaluation.activationGatePassed,
+      summaryFile: evaluationSummaryFile,
+      metricsFile: evaluationMetricsFile,
+    },
+    noticesFile,
+    checksumsFile,
+    testVectors: [testVector],
+    privacy: {
+      containsRawAudio: false,
+      containsPreparedFeatures: false,
+      containsVoiceDerivedWeights: true,
+    },
+    files,
+  };
+}
+
+function buildPortableExportAdaptation(
+  profile: SpeechProfileManifestV2,
+  refs: Readonly<Record<string, ProfileFileRef>>,
+): PortableSpeechModelManifestV1['adaptation'] {
+  if (profile.adaptation.type === 'browser-top-adapter') {
+    const files: Record<string, ProfileFileRef> = {
+      weights: requirePortableExportRef(refs, 'artifacts/browser-top-adapter.bin'),
+    };
+    if (profile.adaptation.speakerEmbedding !== undefined) {
+      files['speakerEmbedding'] = requirePortableExportRef(refs, 'embeddings/speaker.f32');
+    }
+    return {
+      type: 'browser-top-adapter',
+      contractVersion: profile.adaptation.contractVersion,
+      algorithmId: profile.adaptation.algorithmId,
+      files,
+    };
+  }
+  if (profile.adaptation.type === 'residual-adapter') {
+    return {
+      type: 'cli-residual-adapter',
+      contractVersion: profile.adaptation.contractVersion,
+      algorithmId: 'cli-residual-adapter-v1',
+      files: {
+        adapterGraph: requirePortableExportRef(refs, 'artifacts/adapter-weights.bin'),
+        profileManifest: requirePortableExportRef(refs, 'metadata/profile-manifest.json'),
+      },
+    };
+  }
+  throw new Error('Unsupported portable export adaptation type.');
+}
+
+function summarizePortableSpeechModelExport(input: {
+  readonly manifest: PortableSpeechModelManifestV1;
+  readonly envelopeHeader: PortableSpeechModelEnvelopeHeaderV1;
+  readonly envelopeBytes: Uint8Array;
+  readonly exportedAt: string;
+}): PortableSpeechModelExportSummaryV1 {
+  const expandedBytes = input.manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
+  return {
+    schemaVersion: 1,
+    fileName: portableSpeechModelExportFileName(input.manifest.displayName),
+    exportedAt: input.exportedAt,
+    displayName: input.manifest.displayName,
+    encrypted: input.envelopeHeader.mode === 'encrypted',
+    envelopeHeader: input.envelopeHeader,
+    adaptationType: input.manifest.adaptation.type,
+    languages: input.manifest.profile.languages,
+    supportsMixed: input.manifest.profile.supportsMixed,
+    fileCount: input.manifest.files.length,
+    expandedBytes,
+    vocabulary: { included: false, containsPrivateTerms: false },
+    excluded: {
+      recordings: true,
+      trainingCheckpoints: true,
+      preparedFeatures: true,
+      baseModel: true,
+    },
+    privacy: createPortableExportSummaryPrivacy(),
+  };
+}
+
+function requirePortableExportRef(
+  refs: Readonly<Record<string, ProfileFileRef>>,
+  path: string,
+): ProfileFileRef {
+  const ref = refs[path];
+  if (ref === undefined) throw new Error(`Portable export file ${path} is missing.`);
+  return ref;
+}
+
+function normalizePortableExportBundleId(profileId: string): string {
+  return `${normalizeSegment(profileId, 'profileId')}-portable`;
+}
+
+function portableSpeechModelExportFileName(displayName: string): string {
+  const slug = slugifyProfileId(displayName);
+  return `${slug.length > 0 ? slug : 'voice-model'}.speechmodel`;
+}
+
+function createPortableExportSummaryPrivacy(): PortableSpeechModelExportSummaryV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsFeatureTensors: false,
+    containsCheckpoints: false,
+    containsAdapterWeights: true,
+    containsPrivateVocabularyTerms: false,
+    localOnly: true,
+  };
+}
+
+function assertPortableExportBaseModel(
+  profile: SpeechProfileManifestV2,
+  exactBaseModel: ExactBaseModelIdentityV1,
+): void {
+  if (
+    profile.baseModel.id !== exactBaseModel.id ||
+    profile.baseModel.version !== exactBaseModel.version ||
+    profile.baseModel.manifestSha256 !== exactBaseModel.manifestSha256 ||
+    profile.baseModel.graphContractSha256 !== exactBaseModel.graphContractSha256
+  ) {
+    throw new Error('Portable speech model export requires the exact installed base model.');
+  }
+}
+
+function assertPortableExportManifestReady(profile: SpeechProfileManifestV2): void {
+  const parsed = parseSpeechProfileManifestV2(profile);
+  if (!parsed.evaluation.activationGatePassed) {
+    throw new Error('Portable speech model export requires a model that passed quality checks.');
+  }
+  if (parsed.privacy.containsRawAudio) {
+    throw new Error('Portable speech model export source must not contain raw audio.');
+  }
+  if (
+    parsed.adaptation.type !== 'browser-top-adapter' &&
+    parsed.adaptation.type !== 'residual-adapter'
+  ) {
+    throw new Error('Portable speech model export requires adapter weights.');
   }
 }
 

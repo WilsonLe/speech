@@ -1435,6 +1435,117 @@ describe('enrollment profile store', () => {
     expect(await readBytes(backend, targetPath)).toEqual(Array.from(new Uint8Array(invalidTarget)));
   });
 
+  it('exports stored speech-profile adapter artifacts as encrypted portable speechmodel bytes', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend, { now: () => '2026-06-27T12:00:00.000Z' });
+    const { profile, exactBaseModel } = await writeExportableSpeechProfileFixture(backend);
+
+    const result = await store.exportPortableSpeechModel({
+      profileId: profile.id,
+      exactBaseModel,
+      sourceAppVersion: '0.6.0-test',
+      passphrase: 'correct horse battery staple',
+      randomBytes: deterministicPortableExportRandomBytes,
+    });
+
+    expect(result.summary).toMatchObject({
+      schemaVersion: 1,
+      fileName: 'synthetic-v0-4-0-residual-adapter.speechmodel',
+      encrypted: true,
+      adaptationType: 'cli-residual-adapter',
+      vocabulary: { included: false, containsPrivateTerms: false },
+      excluded: {
+        recordings: true,
+        trainingCheckpoints: true,
+        preparedFeatures: true,
+        baseModel: true,
+      },
+      privacy: {
+        aggregateOnly: true,
+        containsRawAudio: false,
+        containsTranscriptText: false,
+        containsFeatureTensors: false,
+        containsCheckpoints: false,
+        containsAdapterWeights: true,
+      },
+    });
+    expect(result.summary.envelopeHeader.mode).toBe('encrypted');
+    const archive = await importPortableSpeechModelArchive(result.envelopeBytes, {
+      passphrase: 'correct horse battery staple',
+    });
+    expect(archive.manifest).toMatchObject({
+      bundleType: 'personal-voice-model',
+      displayName: profile.displayName,
+      sourceAppVersion: '0.6.0-test',
+      adaptation: { type: 'cli-residual-adapter', algorithmId: 'cli-residual-adapter-v1' },
+      baseModel: exactBaseModel,
+      privacy: {
+        containsRawAudio: false,
+        containsPreparedFeatures: false,
+        containsVoiceDerivedWeights: true,
+      },
+    });
+    expect(archive.files.map((file) => file.path)).toEqual(
+      expect.arrayContaining([
+        'artifacts/adapter-weights.bin',
+        'metadata/profile-manifest.json',
+        'evaluation/summary.json',
+        'evaluation/metrics.json',
+        'metadata/checksums.json',
+        'notices/THIRD_PARTY_NOTICES.txt',
+        'test-vectors/forward.json',
+      ]),
+    );
+    expect(archive.files.map((file) => file.path).join('\n')).not.toContain('profiles/');
+  });
+
+  it('rejects portable speechmodel export for ordinary enrollment profiles without adapter artifacts', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await store.saveEnrollmentUtterance({
+      profileId: 'profile-local',
+      profileDisplayName: 'Local profile',
+      sentenceBankVersion: 'synthetic-v1',
+      promptId: 'prompt-001',
+      promptVersion: 1,
+      referenceText: 'Tôi vừa update dashboard.',
+      language: 'mixed',
+      voiceCondition: 'normal',
+      repetitionIndex: 1,
+      wavBytes: encodePcm16Wav(makeTone(1_200, 0.1), 16_000),
+      sampleRateHz: 16_000,
+      durationMs: 1_200,
+      capture,
+      quality,
+      acceptedBy: 'manual',
+      utteranceId: 'utt-001',
+    });
+
+    await expect(
+      store.exportPortableSpeechModel({
+        profileId: 'profile-local',
+        exactBaseModel: portableBaseModel,
+        sourceAppVersion: '0.6.0-test',
+        passphrase: 'secret-passphrase',
+      }),
+    ).rejects.toThrow(/does not have an exportable personal-model artifact/);
+  });
+
+  it('rejects portable speechmodel export when the installed base model is not exact', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    const { profile, exactBaseModel } = await writeExportableSpeechProfileFixture(backend);
+
+    await expect(
+      store.exportPortableSpeechModel({
+        profileId: profile.id,
+        exactBaseModel: { ...exactBaseModel, graphContractSha256: 'f'.repeat(64) },
+        sourceAppVersion: '0.6.0-test',
+        passphrase: 'secret-passphrase',
+      }),
+    ).rejects.toThrow(/requires the exact installed base model/);
+  });
+
   it('stages portable speechmodel imports, runs smoke vectors, and commits the record last', async () => {
     const backend = new InMemoryProfileStorageBackend();
     const store = createStore(backend, { now: () => '2026-06-26T06:30:00.000Z' });
@@ -1709,6 +1820,41 @@ function createActivationReview(
     },
     ...overrides,
   };
+}
+
+async function writeExportableSpeechProfileFixture(backend: ProfileStorageBackend): Promise<{
+  readonly profile: SpeechProfileManifestV2;
+  readonly exactBaseModel: ExactBaseModelIdentityV1;
+}> {
+  const adapterBytes = bytes(1, 2, 3, 4, 5, 6);
+  const legacyAdapterRef = legacySpeechProfileFixture.adaptation.files['adapterGraph'];
+  if (legacyAdapterRef === undefined) throw new Error('legacy fixture is missing adapterGraph');
+  const adapterBuffer = new ArrayBuffer(adapterBytes.byteLength);
+  new Uint8Array(adapterBuffer).set(adapterBytes);
+  const adapterRef: ProfileFileRef = {
+    ...legacyAdapterRef,
+    sha256: await digest(adapterBuffer),
+    sizeBytes: adapterBytes.byteLength,
+  };
+  const profile: SpeechProfileManifestV2 = {
+    ...legacySpeechProfileFixture,
+    schemaVersion: 2,
+    adaptation: {
+      ...legacySpeechProfileFixture.adaptation,
+      files: { adapterGraph: adapterRef },
+    },
+  };
+  const exactBaseModel: ExactBaseModelIdentityV1 = {
+    ...profile.baseModel,
+    tokenizerSha256: 'c'.repeat(64),
+  };
+  await backend.putFile(['profiles', profile.id, 'profile.v2.json'], jsonBytes(profile));
+  await backend.putFile(adapterRef.path.split('/'), adapterBytes);
+  return { profile, exactBaseModel };
+}
+
+function deterministicPortableExportRandomBytes(length: number): Uint8Array {
+  return new Uint8Array(Array.from({ length }, (_value, index) => (index + length) % 251));
 }
 
 async function createPortableArchiveFixture(

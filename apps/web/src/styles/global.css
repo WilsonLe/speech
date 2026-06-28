@@ -2058,7 +2058,8 @@ button.danger,
   background: var(--speech-color-accent);
 }
 
-.import-model-flow {
+.import-model-flow,
+.export-model-flow {
   display: grid;
   gap: 1rem;
   margin: 1.25rem 0;
@@ -2068,35 +2069,48 @@ button.danger,
   background: rgba(2, 6, 23, 0.32);
 }
 
-.import-model-flow__header {
+.import-model-flow__header,
+.export-model-flow__header {
   display: grid;
   gap: 0.45rem;
 }
 
-.import-model-flow__header .button {
+.import-model-flow__header .button,
+.export-model-flow__header .button {
   width: max-content;
 }
 
 .import-model-flow__header h3,
 .import-model-flow__header p,
 .import-model-card h4,
-.import-model-card p {
+.import-model-card p,
+.export-model-flow__header h3,
+.export-model-flow__header p,
+.export-model-card h4,
+.export-model-card p {
   margin: 0;
 }
 
 .import-model-flow__header h3,
 .import-model-card h4,
-.import-model-details summary {
+.import-model-details summary,
+.export-model-flow__header h3,
+.export-model-card h4,
+.export-model-details summary {
   color: #f8fafc;
 }
 
 .import-model-flow__header p,
 .import-model-card p,
-.import-model-details p {
+.import-model-details p,
+.export-model-flow__header p,
+.export-model-card p,
+.export-model-details p {
   color: #cbd5e1;
 }
 
-.import-model-steps {
+.import-model-steps,
+.export-model-steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.65rem;
@@ -2105,7 +2119,8 @@ button.danger,
   list-style: none;
 }
 
-.import-model-steps li {
+.import-model-steps li,
+.export-model-steps li {
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 999px;
   padding: 0.55rem 0.75rem;
@@ -2115,26 +2130,31 @@ button.danger,
   background: rgba(15, 23, 42, 0.5);
 }
 
-.import-model-steps li[data-status='complete'] {
+.import-model-steps li[data-status='complete'],
+.export-model-steps li[data-status='complete'] {
   border-color: rgba(34, 197, 94, 0.45);
   color: #bbf7d0;
   background: rgba(22, 101, 52, 0.22);
 }
 
-.import-model-steps li[data-status='current'] {
+.import-model-steps li[data-status='current'],
+.export-model-steps li[data-status='current'] {
   border-color: rgba(56, 189, 248, 0.55);
   color: #e0f2fe;
   background: rgba(14, 116, 144, 0.24);
 }
 
-.import-model-steps li[data-status='blocked'] {
+.import-model-steps li[data-status='blocked'],
+.export-model-steps li[data-status='blocked'] {
   border-color: rgba(248, 113, 113, 0.55);
   color: #fecaca;
   background: rgba(127, 29, 29, 0.24);
 }
 
 .import-model-card,
-.import-model-details {
+.import-model-details,
+.export-model-card,
+.export-model-details {
   display: grid;
   gap: 0.85rem;
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -2144,16 +2164,19 @@ button.danger,
   background: rgba(15, 23, 42, 0.62);
 }
 
-.import-model-card[data-status='error'] {
+.import-model-card[data-status='error'],
+.export-model-card[data-status='error'] {
   border-color: rgba(248, 113, 113, 0.55);
 }
 
 .import-model-file-button,
-.import-model-card > button {
+.import-model-card > button,
+.export-model-card > button {
   width: max-content;
 }
 
-.import-model-passphrase {
+.import-model-passphrase,
+.export-model-passphrases label {
   display: grid;
   gap: 0.5rem;
   max-width: 28rem;
@@ -2161,7 +2184,8 @@ button.danger,
   font-weight: 800;
 }
 
-.import-model-passphrase input {
+.import-model-passphrase input,
+.export-model-passphrases input {
   border: 1px solid rgba(148, 163, 184, 0.32);
   border-radius: 0.85rem;
   padding: 0.8rem 0.9rem;
@@ -2170,45 +2194,76 @@ button.danger,
   font: inherit;
 }
 
-.import-model-passphrase input:focus-visible {
+.import-model-passphrase input:focus-visible,
+.export-model-passphrases input:focus-visible {
   outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
   outline-offset: var(--speech-focus-ring-offset);
 }
 
-.import-model-summary {
+.import-model-summary,
+.export-model-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   margin: 0;
 }
 
-.import-model-summary div {
+.import-model-summary div,
+.export-model-summary div {
   border: 1px solid rgba(148, 163, 184, 0.14);
   border-radius: 0.85rem;
   padding: 0.75rem;
   background: rgba(2, 6, 23, 0.28);
 }
 
-.import-model-summary dt {
+.import-model-summary dt,
+.export-model-summary dt {
   color: #94a3b8;
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.import-model-summary dd {
+.import-model-summary dd,
+.export-model-summary dd {
   margin: 0.35rem 0 0;
   color: #f8fafc;
   font-weight: 800;
 }
 
-.import-model-actions {
+.import-model-actions,
+.export-model-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-.import-model-details summary {
+.export-model-checkbox {
+  display: inline-flex;
+  gap: 0.55rem;
+  align-items: center;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.export-model-passphrases {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.export-model-review {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.export-model-review h5 {
+  margin: 0;
+  color: #f8fafc;
+}
+
+.import-model-details summary,
+.export-model-details summary {
   font-weight: 800;
   cursor: pointer;
 }
@@ -2927,7 +2982,10 @@ button.danger,
   .model-import-options,
   .create-model-flow__review dl,
   .import-model-steps,
+  .export-model-steps,
   .import-model-summary,
+  .export-model-summary,
+  .export-model-passphrases,
   .model-detail-summary,
   .model-detail-summary__meta,
   .model-detail-metrics,
@@ -2988,6 +3046,7 @@ button.danger,
   .vocabulary-entry-editor__heading,
   .create-model-flow,
   .import-model-flow,
+  .export-model-flow,
   .model-results-screen,
   .model-detail-panel {
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
@@ -3012,6 +3071,7 @@ button.danger,
 
   .create-model-flow__actions,
   .import-model-actions,
+  .export-model-actions,
   .model-list-toolbar,
   .model-list-actions,
   .model-list-meta,

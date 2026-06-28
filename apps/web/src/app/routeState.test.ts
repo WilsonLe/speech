@@ -72,6 +72,14 @@ describe('v0.6 route migration and navigation guards', () => {
       scrollRestoration: 'reset-on-new-task',
     });
 
+    const exportRoute = resolveAppRoute({ pathname: '/models/profile.local/export' });
+    expect(exportRoute.routeId).toBe('model-export');
+    expect(exportRoute.headingId).toBe('model-export-title');
+    expect(createRouteRestorationPlan(exportRoute)).toMatchObject({
+      headingId: 'model-export-title',
+      scrollRestoration: 'reset-on-new-task',
+    });
+
     const training = resolveAppRoute({
       pathname: '/models/profile.local/train',
       search: '?jobId=job-1&returnTo=/models/profile.local',

@@ -8,6 +8,7 @@ import {
   type EnrollmentProfileImportMode,
   type EnrollmentProfileImportResultV1,
   type EnrollmentProfileSummaryV1,
+  type PortableSpeechModelExportSummaryV1,
   type PortableSpeechModelImportSummaryV1,
   type ProfileStorageBackendKind,
 } from '@speech/profile-manager';
@@ -17,6 +18,7 @@ import {
   deleteEnrollmentProfile,
   enableEnrollmentProfile,
   exportEnrollmentProfile,
+  exportPortableSpeechModel,
   importEnrollmentProfile,
   importPortableSpeechModel,
   listEnrollmentProfiles,
@@ -80,6 +82,13 @@ import {
   type PersonalModelTrainingReadinessViewV1,
 } from './personal-models-preflight';
 import {
+  buildPortableExportBaseModelReview,
+  buildPortableExportReview,
+  buildPortableExportStepView,
+  formatPortableExportError,
+  validatePortableExportPassphrase,
+} from './personal-model-export-flow';
+import {
   buildPortableImportBaseModelReview,
   buildPortableImportReview,
   buildPortableImportStepView,
@@ -129,7 +138,21 @@ interface PersonalModelsPreflightState {
   readonly runtimeSelfTest: RuntimeSelfTestUiState;
 }
 
+type PortableExportStatus = 'idle' | 'exporting' | 'ready' | 'error';
+
 type PortableImportStatus = 'idle' | 'selected' | 'validating' | 'staged' | 'error';
+
+interface PortableExportUiState {
+  readonly status: PortableExportStatus;
+  readonly profileId: string | null;
+  readonly encrypted: boolean;
+  readonly passphrase: string;
+  readonly confirmPassphrase: string;
+  readonly summary: PortableSpeechModelExportSummaryV1 | null;
+  readonly envelopeBytes: ArrayBuffer | null;
+  readonly error: string | null;
+  readonly technicalError: string | null;
+}
 
 interface PortableImportUiState {
   readonly status: PortableImportStatus;
@@ -139,6 +162,18 @@ interface PortableImportUiState {
   readonly summary: PortableSpeechModelImportSummaryV1 | null;
   readonly error: string | null;
 }
+
+const initialPortableExportState: PortableExportUiState = {
+  status: 'idle',
+  profileId: null,
+  encrypted: true,
+  passphrase: '',
+  confirmPassphrase: '',
+  summary: null,
+  envelopeBytes: null,
+  error: null,
+  technicalError: null,
+};
 
 const initialVocabularySummary = summarizeActiveVocabulary(createDefaultVocabularyStore());
 
@@ -241,6 +276,9 @@ export function PersonalModelsPanel() {
   const [state, setState] = useState<PersonalModelsUiState>(initialPersonalModelsState);
   const [preflight, setPreflight] = useState<PersonalModelsPreflightState>(initialPreflightState);
   const [importMode, setImportMode] = useState<EnrollmentProfileImportMode>('dedupe');
+  const [portableExport, setPortableExport] = useState<PortableExportUiState>(
+    initialPortableExportState,
+  );
   const [portableImport, setPortableImport] = useState<PortableImportUiState>(
     initialPortableImportState,
   );
@@ -251,6 +289,7 @@ export function PersonalModelsPanel() {
   const modelLifecycleWorkerRef = useRef<Worker | null>(null);
   const isCreateModelRoute = currentRoute.routeId === 'models-new';
   const isImportModelRoute = currentRoute.routeId === 'models-import';
+  const isExportModelRoute = currentRoute.routeId === 'model-export';
   const isTrainingReadinessRoute = currentRoute.routeId === 'model-train';
   const isModelResultsRoute = currentRoute.routeId === 'model-results';
   const routeProfileId = currentRoute.params['profileId'];
@@ -336,6 +375,51 @@ export function PersonalModelsPanel() {
         ...(preferredBaseModelId === undefined ? {} : { preferredModelId: preferredBaseModelId }),
       }),
     [preflight.inspections, preflight.installed, preflight.models, preferredBaseModelId],
+  );
+  const portableExportBaseModel = useMemo(
+    () =>
+      buildPortableExportBaseModelReview(preflight.installed, primarySummary?.profile.baseModel),
+    [preflight.installed, primarySummary?.profile.baseModel],
+  );
+  const portableExportMatchesRoute =
+    portableExport.profileId === null || portableExport.profileId === primarySummary?.profile.id;
+  const currentPortableExport: PortableExportUiState = portableExportMatchesRoute
+    ? portableExport
+    : {
+        ...portableExport,
+        status: 'idle',
+        summary: null,
+        envelopeBytes: null,
+        error: null,
+        technicalError: null,
+      };
+  const portableExportSteps = useMemo(
+    () =>
+      buildPortableExportStepView({
+        baseModelReady: portableExportBaseModel.exactBaseModel !== undefined,
+        encrypted: currentPortableExport.encrypted,
+        passphrase: currentPortableExport.passphrase,
+        confirmPassphrase: currentPortableExport.confirmPassphrase,
+        exporting: currentPortableExport.status === 'exporting',
+        summary: currentPortableExport.summary,
+        error: currentPortableExport.error,
+      }),
+    [
+      currentPortableExport.confirmPassphrase,
+      currentPortableExport.encrypted,
+      currentPortableExport.error,
+      currentPortableExport.passphrase,
+      currentPortableExport.status,
+      currentPortableExport.summary,
+      portableExportBaseModel.exactBaseModel,
+    ],
+  );
+  const portableExportReview = useMemo(
+    () =>
+      currentPortableExport.summary === null
+        ? null
+        : buildPortableExportReview(currentPortableExport.summary),
+    [currentPortableExport.summary],
   );
   const portableImportBaseModel = useMemo(
     () => buildPortableImportBaseModelReview(preflight.installed),
@@ -625,7 +709,7 @@ export function PersonalModelsPanel() {
     );
   }
 
-  async function exportProfile(profileId: string) {
+  async function exportLegacyProfile(profileId: string) {
     setState((current) => ({
       ...current,
       status: 'exporting',
@@ -647,6 +731,99 @@ export function PersonalModelsPanel() {
         message: formatModelReasonMessage('model-export-failed'),
       }));
     }
+  }
+
+  async function exportPortableModel() {
+    if (primarySummary === null) return;
+    if (portableExportBaseModel.exactBaseModel === undefined) {
+      const error = portableExportBaseModel.detail;
+      setPortableExport((current) => ({
+        ...current,
+        status: 'error',
+        error,
+        technicalError: null,
+      }));
+      setState((current) => ({ ...current, status: 'error', message: error }));
+      return;
+    }
+    const passphraseError = validatePortableExportPassphrase(
+      portableExport.encrypted,
+      portableExport.passphrase,
+      portableExport.confirmPassphrase,
+    );
+    if (passphraseError !== null) {
+      setPortableExport((current) => ({
+        ...current,
+        status: 'error',
+        error: passphraseError,
+        technicalError: null,
+      }));
+      setState((current) => ({ ...current, status: 'error', message: passphraseError }));
+      return;
+    }
+    setPortableExport((current) => ({
+      ...current,
+      status: 'exporting',
+      profileId: primarySummary.profile.id,
+      summary: null,
+      envelopeBytes: null,
+      error: null,
+      technicalError: null,
+    }));
+    setState((current) => ({
+      ...current,
+      status: 'exporting',
+      message: 'Preparing encrypted voice model export on this device.',
+    }));
+    try {
+      const result = await exportPortableSpeechModel({
+        profileId: primarySummary.profile.id,
+        exactBaseModel: portableExportBaseModel.exactBaseModel,
+        sourceAppVersion: '0.5.0',
+        mode: portableExport.encrypted ? 'encrypted' : 'unencrypted',
+        timeoutMs: 60_000,
+        ...(portableExport.encrypted ? { passphrase: portableExport.passphrase } : {}),
+      });
+      setPortableExport((current) => ({
+        ...current,
+        status: 'ready',
+        profileId: primarySummary.profile.id,
+        summary: result.summary,
+        envelopeBytes: result.envelopeBytes,
+        passphrase: '',
+        confirmPassphrase: '',
+        error: null,
+        technicalError: null,
+      }));
+      setState((current) => ({
+        ...current,
+        status: 'ready',
+        message: `${result.summary.displayName} is ready to save.`,
+      }));
+    } catch (error) {
+      const safeError = formatPortableExportError(error instanceof Error ? error.message : '');
+      setPortableExport((current) => ({
+        ...current,
+        status: 'error',
+        error: safeError,
+        technicalError: error instanceof Error ? error.message : null,
+      }));
+      setState((current) => ({ ...current, status: 'error', message: safeError }));
+    }
+  }
+
+  function savePortableExport() {
+    if (
+      currentPortableExport.envelopeBytes === null ||
+      currentPortableExport.summary === null ||
+      currentPortableExport.profileId !== primarySummary?.profile.id
+    ) {
+      return;
+    }
+    downloadPortableSpeechModel(
+      currentPortableExport.envelopeBytes,
+      currentPortableExport.summary.fileName,
+    );
   }
 
   async function importProfile(event: ChangeEvent<HTMLInputElement>) {
@@ -937,6 +1114,56 @@ export function PersonalModelsPanel() {
           onUpdateImportMode={setImportMode}
           steps={portableImportSteps}
         />
+      ) : isExportModelRoute ? (
+        <ExportModelFlowPanel
+          baseModelReview={portableExportBaseModel}
+          detailSummary={detailSummary}
+          exportState={currentPortableExport}
+          isBusy={isBusy}
+          legacyExportDisabled={primarySummary === null || isBusy}
+          onConfirmPassphraseChange={(confirmPassphrase) =>
+            setPortableExport((current) => ({
+              ...current,
+              profileId: null,
+              confirmPassphrase,
+              summary: null,
+              envelopeBytes: null,
+              error: null,
+              technicalError: null,
+            }))
+          }
+          onEncryptedChange={(encrypted) =>
+            setPortableExport((current) => ({
+              ...current,
+              profileId: null,
+              encrypted,
+              error: null,
+              technicalError: null,
+              summary: null,
+              envelopeBytes: null,
+              passphrase: encrypted ? current.passphrase : '',
+              confirmPassphrase: encrypted ? current.confirmPassphrase : '',
+            }))
+          }
+          onExport={() => void exportPortableModel()}
+          onLegacyExport={() => {
+            if (primarySummary !== null) void exportLegacyProfile(primarySummary.profile.id);
+          }}
+          onPassphraseChange={(passphrase) =>
+            setPortableExport((current) => ({
+              ...current,
+              profileId: null,
+              passphrase,
+              summary: null,
+              envelopeBytes: null,
+              error: null,
+              technicalError: null,
+            }))
+          }
+          onSave={savePortableExport}
+          review={portableExportReview}
+          steps={portableExportSteps}
+        />
       ) : isTrainingReadinessRoute ? (
         <TrainingReadinessPanel
           capabilityChecks={capabilityChecks}
@@ -1025,7 +1252,7 @@ export function PersonalModelsPanel() {
                           onRename: () => void renameProfile(row.profileId, row.row.displayName),
                           onDuplicate: () =>
                             void duplicateProfile(row.profileId, row.row.displayName),
-                          onExport: () => void exportProfile(row.profileId),
+                          exportHref: `/models/${encodeURIComponent(row.profileId)}/export`,
                           onDeactivate: () => void deactivateProfile(row.profileId),
                           onRollback: () => void rollbackProfile(),
                           onDelete: () => void deleteProfile(row.profileId, row.row.displayName),
@@ -1079,6 +1306,198 @@ export function PersonalModelsPanel() {
         Models privacy: aggregate counts only; no raw audio, transcript text, training data, model
         files, vocabulary terms, or vocabulary item identifiers are displayed.
       </p>
+    </section>
+  );
+}
+
+function ExportModelFlowPanel({
+  baseModelReview,
+  detailSummary,
+  exportState,
+  isBusy,
+  legacyExportDisabled,
+  onConfirmPassphraseChange,
+  onEncryptedChange,
+  onExport,
+  onLegacyExport,
+  onPassphraseChange,
+  onSave,
+  review,
+  steps,
+}: {
+  readonly baseModelReview: ReturnType<typeof buildPortableExportBaseModelReview>;
+  readonly detailSummary: PersonalModelDetailSummaryV1;
+  readonly exportState: PortableExportUiState;
+  readonly isBusy: boolean;
+  readonly legacyExportDisabled: boolean;
+  readonly onConfirmPassphraseChange: (passphrase: string) => void;
+  readonly onEncryptedChange: (encrypted: boolean) => void;
+  readonly onExport: () => void;
+  readonly onLegacyExport: () => void;
+  readonly onPassphraseChange: (passphrase: string) => void;
+  readonly onSave: () => void;
+  readonly review: ReturnType<typeof buildPortableExportReview> | null;
+  readonly steps: readonly ReturnType<typeof buildPortableExportStepView>[number][];
+}) {
+  const passphraseError = validatePortableExportPassphrase(
+    exportState.encrypted,
+    exportState.passphrase,
+    exportState.confirmPassphrase,
+  );
+  const canExport =
+    !isBusy &&
+    exportState.status !== 'exporting' &&
+    baseModelReview.exactBaseModel !== undefined &&
+    passphraseError === null;
+  return (
+    <section className="export-model-flow" aria-labelledby="model-export-title">
+      <div className="export-model-flow__header">
+        <a className="button secondary" href="/models">
+          Back to models
+        </a>
+        <p className="eyebrow">Export voice model</p>
+        <h3 id="model-export-title">Export {detailSummary.displayName}</h3>
+        <p>Save a portable .speechmodel file. Encryption is recommended.</p>
+      </div>
+
+      <ol className="export-model-steps" aria-label="Export steps">
+        {steps.map((step) => (
+          <li key={step.id} data-status={step.status}>
+            <span>{step.label}</span>
+          </li>
+        ))}
+      </ol>
+
+      <section className="export-model-card" aria-labelledby="export-contents-title">
+        <div>
+          <p className="eyebrow">Step 1</p>
+          <h4 id="export-contents-title">Choose contents</h4>
+          <p>Recordings and training checkpoints are not included.</p>
+        </div>
+        <dl className="export-model-summary" aria-label="Export contents summary">
+          <div>
+            <dt>Name</dt>
+            <dd>{detailSummary.displayName}</dd>
+          </div>
+          <div>
+            <dt>Vocabulary</dt>
+            <dd>Not included</dd>
+          </div>
+          <div>
+            <dt>Metric detail</dt>
+            <dd>Aggregate results</dd>
+          </div>
+        </dl>
+        <p className="status-message" data-status={baseModelReview.status}>
+          {baseModelReview.title}. {baseModelReview.detail}
+        </p>
+      </section>
+
+      <section className="export-model-card" aria-labelledby="export-encryption-title">
+        <div>
+          <p className="eyebrow">Step 2</p>
+          <h4 id="export-encryption-title">Protect file</h4>
+          <p>Passphrases are used only for this export and are not stored.</p>
+        </div>
+        <label className="export-model-checkbox">
+          <input
+            type="checkbox"
+            checked={exportState.encrypted}
+            onChange={(event) => onEncryptedChange(event.currentTarget.checked)}
+            disabled={isBusy || exportState.status === 'exporting'}
+          />
+          <span>Encrypt export</span>
+        </label>
+        {exportState.encrypted ? (
+          <div className="export-model-passphrases">
+            <label htmlFor="export-model-passphrase">
+              <span>Passphrase</span>
+              <input
+                id="export-model-passphrase"
+                type="password"
+                autoComplete="new-password"
+                value={exportState.passphrase}
+                onChange={(event) => onPassphraseChange(event.currentTarget.value)}
+                disabled={isBusy || exportState.status === 'exporting'}
+              />
+            </label>
+            <label htmlFor="export-model-confirm-passphrase">
+              <span>Confirm passphrase</span>
+              <input
+                id="export-model-confirm-passphrase"
+                type="password"
+                autoComplete="new-password"
+                value={exportState.confirmPassphrase}
+                onChange={(event) => onConfirmPassphraseChange(event.currentTarget.value)}
+                disabled={isBusy || exportState.status === 'exporting'}
+              />
+            </label>
+            {passphraseError === null ? null : <p className="error-message">{passphraseError}</p>}
+          </div>
+        ) : (
+          <p className="status-message warning-message">Unencrypted exports are sensitive files.</p>
+        )}
+      </section>
+
+      <section className="export-model-card" aria-labelledby="export-review-title">
+        <div>
+          <p className="eyebrow">Step 3</p>
+          <h4 id="export-review-title">Review and save</h4>
+          <p>Packaging and encryption run in the profile worker.</p>
+        </div>
+        <div className="export-model-actions">
+          <button type="button" onClick={onExport} disabled={!canExport}>
+            {exportState.status === 'exporting' ? 'Preparing…' : 'Prepare export'}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onSave}
+            disabled={exportState.envelopeBytes === null || exportState.summary === null}
+          >
+            Save file
+          </button>
+        </div>
+        {exportState.error === null ? null : <p className="error-message">{exportState.error}</p>}
+        {review === null ? null : (
+          <div className="export-model-review" aria-label="Prepared export review">
+            <h5>{review.title}</h5>
+            <p>{review.summary}</p>
+            <dl className="export-model-summary">
+              {review.rows.map((row) => (
+                <div key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="status-message success-message">{review.privacySummary}</p>
+          </div>
+        )}
+      </section>
+
+      <details className="export-model-details">
+        <summary>Export details</summary>
+        <p>Manifest fields, checksums, and encryption parameters are kept here for verification.</p>
+        {review === null ? null : <p>{review.technicalSummary}</p>}
+        {exportState.technicalError === null ? null : <p>{exportState.technicalError}</p>}
+      </details>
+
+      <details className="export-model-details">
+        <summary>Legacy profile export</summary>
+        <p>
+          Older profile JSON exports can include recordings and prompt text. Use .speechmodel for
+          portable model sharing.
+        </p>
+        <button
+          type="button"
+          className="secondary"
+          onClick={onLegacyExport}
+          disabled={legacyExportDisabled}
+        >
+          Export legacy profile JSON
+        </button>
+      </details>
     </section>
   );
 }
@@ -2083,7 +2502,7 @@ function createModelRowMenuItems({
   previousProfileAvailable,
   onRename,
   onDuplicate,
-  onExport,
+  exportHref,
   onDeactivate,
   onRollback,
   onDelete,
@@ -2097,7 +2516,7 @@ function createModelRowMenuItems({
   readonly previousProfileAvailable: boolean;
   readonly onRename: () => void;
   readonly onDuplicate: () => void;
-  readonly onExport: () => void;
+  readonly exportHref: string;
   readonly onDeactivate: () => void;
   readonly onRollback: () => void;
   readonly onDelete: () => void;
@@ -2107,9 +2526,10 @@ function createModelRowMenuItems({
     { id: `${profileId}-duplicate`, label: 'Duplicate…', disabled: isBusy, onSelect: onDuplicate },
     {
       id: `${profileId}-export`,
+      kind: 'link',
       label: 'Export…',
+      href: exportHref,
       disabled: isBusy || !canExport,
-      onSelect: onExport,
     },
     {
       id: `${profileId}-deactivate`,
@@ -2471,6 +2891,19 @@ function formatProfileStoreBackend(kind: ProfileStorageBackendKind | null): stri
 function formatPersistentStorage(value: boolean | null): string {
   if (value === null) return 'checking';
   return value ? 'granted' : 'not granted';
+}
+
+function downloadPortableSpeechModel(bytes: ArrayBuffer, fileName: string): void {
+  const blob = new Blob([bytes], { type: 'application/vnd.wilsonle.speech.personal-model' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = 'noopener';
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function downloadProfilePackage(profilePackage: EnrollmentProfileExportPackageV1): void {
