@@ -143,17 +143,11 @@ export function ModelRuntimePanel() {
   return (
     <section className="panel runtime" aria-labelledby="runtime-title">
       <div className="section-heading">
-        <p className="eyebrow">Model runtime</p>
-        <h2 id="runtime-title">Dedicated worker ONNX Runtime loader</h2>
+        <p className="eyebrow">Training support</p>
+        <h2 id="runtime-title">Check this browser</h2>
         <p>
-          ONNX Runtime Web is loaded only inside the ASR worker. The UI thread can request a
-          lightweight provider benchmark and fallback check, but it does not import ORT or
-          instantiate model sessions. The check also loads a tiny generated residual-adapter graph
-          in the worker and records aggregate adapter overhead without audio or transcript data.
-          Browser personal-model training uses the repository-owned BrowserTrainingBackend boundary.
-          The pinned ORT Web package does not expose the documented training WASM artifact or public
-          JS training API, so follow-on work must use the fixed adapter-math backend unless a
-          reviewed ORT Training artifact passes the worker proof.
+          Run a local support check before training a voice model. The check stays on this device
+          and does not use audio or transcript data.
         </p>
       </div>
 
@@ -163,12 +157,11 @@ export function ModelRuntimePanel() {
           onClick={() => void handleCheckRuntime()}
           disabled={status.state === 'loading'}
         >
-          {status.state === 'loading' ? 'Benchmarking provider…' : 'Benchmark worker provider'}
+          {status.state === 'loading' ? 'Checking support…' : 'Check training support'}
         </button>
         <div className="browser-training-controls" aria-label="Browser training controls">
           <p id="browser-training-start-help" className="sr-only">
-            Starts the synthetic browser-training worker locally without changing the active
-            profile.
+            Starts the local training support check without changing the active voice model.
           </p>
           <p id="browser-training-restart-help" className="sr-only">
             Restarts the local prototype after confirmation and clears reload recovery for this
@@ -193,9 +186,7 @@ export function ModelRuntimePanel() {
             disabled={trainingStatus.state === 'training'}
             aria-describedby="browser-training-start-help"
           >
-            {trainingStatus.state === 'training'
-              ? 'Training tiny adapter…'
-              : 'Run browser training prototype'}
+            {trainingStatus.state === 'training' ? 'Checking training…' : 'Run training check'}
           </button>
           <button
             type="button"
@@ -203,7 +194,7 @@ export function ModelRuntimePanel() {
             onClick={() => {
               if (
                 confirmBrowserTrainingAction(
-                  'Restart browser training prototype? This clears local reload recovery for the synthetic run only. The active profile is unchanged.',
+                  'Restart training check? This clears local recovery for the test run only. The active voice model is unchanged.',
                 )
               ) {
                 void handleRunBrowserTrainingPrototype(false);
@@ -215,7 +206,7 @@ export function ModelRuntimePanel() {
             }
             aria-describedby="browser-training-restart-help"
           >
-            Restart browser training prototype
+            Restart training check
           </button>
           <button
             type="button"
@@ -225,14 +216,14 @@ export function ModelRuntimePanel() {
           >
             {trainingControlIntent === 'pause-requested'
               ? 'Pause requested…'
-              : 'Pause browser training'}
+              : 'Pause training check'}
           </button>
           <button
             type="button"
             onClick={() => {
               if (
                 confirmBrowserTrainingAction(
-                  'Cancel browser training at the next safe checkpoint? A local recovery checkpoint may remain, and the active profile is unchanged.',
+                  'Cancel training check at the next safe point? Local recovery may remain, and the active voice model is unchanged.',
                 )
               ) {
                 handleCancelBrowserTrainingPrototype();
@@ -243,7 +234,7 @@ export function ModelRuntimePanel() {
           >
             {trainingControlIntent === 'cancel-requested'
               ? 'Cancel requested…'
-              : 'Cancel browser training'}
+              : 'Cancel training check'}
           </button>
           <button
             type="button"
@@ -251,7 +242,7 @@ export function ModelRuntimePanel() {
             disabled={trainingStatus.state === 'training' || trainingRecovery === null}
             aria-describedby="browser-training-resume-help"
           >
-            Resume browser training prototype
+            Resume training check
           </button>
           <button
             type="button"
@@ -259,7 +250,7 @@ export function ModelRuntimePanel() {
             onClick={() => {
               if (
                 confirmBrowserTrainingAction(
-                  'Clear the browser training reload recovery checkpoint? This cannot be undone, but the active profile is unchanged.',
+                  'Clear local training-check recovery? This cannot be undone, but the active voice model is unchanged.',
                 )
               ) {
                 handleClearBrowserTrainingRecovery();
@@ -268,10 +259,13 @@ export function ModelRuntimePanel() {
             disabled={trainingStatus.state === 'training' || trainingRecovery === null}
             aria-describedby="browser-training-clear-help"
           >
-            Clear browser training recovery
+            Clear recovery
           </button>
         </div>
-        <TrainingSpikeStatus />
+        <details className="training-details-disclosure">
+          <summary>Training support details</summary>
+          <TrainingSpikeStatus />
+        </details>
         <BrowserTrainingStatusMessage
           status={trainingStatus}
           recovery={trainingRecovery}
@@ -602,62 +596,64 @@ function formatBrowserTrainingCoordination(
 
 function RuntimeStatusMessage({ status }: { readonly status: RuntimeStatus }) {
   if (status.state === 'idle') {
-    return <p className="status-message">Worker provider benchmark has not run yet.</p>;
+    return <p className="status-message">Training support has not been checked yet.</p>;
   }
   if (status.state === 'loading') {
-    return (
-      <p className="status-message">Benchmarking ONNX Runtime providers in a dedicated worker…</p>
-    );
+    return <p className="status-message">Checking local training support…</p>;
   }
   if (status.state === 'error') {
     return <p className="status-message error-message">{status.message}</p>;
   }
   return (
     <>
-      <dl className="microphone-settings" aria-label="ONNX Runtime worker status">
-        <div>
-          <dt>Provider</dt>
-          <dd>{status.provider ?? 'unknown'}</dd>
-        </div>
-        <div>
-          <dt>WASM threads</dt>
-          <dd>{status.wasmThreads ?? 'unknown'}</dd>
-        </div>
-        <div>
-          <dt>Language mode</dt>
-          <dd>{formatLanguageModeDiagnostics(status.languageDiagnostics)}</dd>
-        </div>
-        <div>
-          <dt>Language spans</dt>
-          <dd>{formatLanguageSpanDiagnostics(status.languageDiagnostics)}</dd>
-        </div>
-        <div>
-          <dt>Adapter profile</dt>
-          <dd>{formatAdapterProfile(status.adapterBenchmark)}</dd>
-        </div>
-        <div>
-          <dt>Adapter median run</dt>
-          <dd>{formatAdapterMedian(status.adapterBenchmark)}</dd>
-        </div>
-        <div>
-          <dt>Adapter RTF overhead</dt>
-          <dd>{formatAdapterRtf(status.adapterBenchmark)}</dd>
-        </div>
-      </dl>
-      {status.warnings.length > 0 ? (
-        <ul className="runtime-warnings" aria-label="Provider fallback warnings">
-          {status.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
-          ))}
-        </ul>
-      ) : null}
+      <p className="status-message">Training support check completed on this device.</p>
+      <details className="training-details-disclosure">
+        <summary>Runtime details</summary>
+        <dl className="microphone-settings" aria-label="Runtime details">
+          <div>
+            <dt>Processing mode</dt>
+            <dd>{status.provider ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Thread support</dt>
+            <dd>{status.wasmThreads ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Language mode</dt>
+            <dd>{formatLanguageModeDiagnostics(status.languageDiagnostics)}</dd>
+          </div>
+          <div>
+            <dt>Language spans</dt>
+            <dd>{formatLanguageSpanDiagnostics(status.languageDiagnostics)}</dd>
+          </div>
+          <div>
+            <dt>Personal-model profile</dt>
+            <dd>{formatAdapterProfile(status.adapterBenchmark)}</dd>
+          </div>
+          <div>
+            <dt>Personal-model run time</dt>
+            <dd>{formatAdapterMedian(status.adapterBenchmark)}</dd>
+          </div>
+          <div>
+            <dt>Personal-model overhead</dt>
+            <dd>{formatAdapterRtf(status.adapterBenchmark)}</dd>
+          </div>
+        </dl>
+        {status.warnings.length > 0 ? (
+          <ul className="runtime-warnings" aria-label="Runtime warnings">
+            {status.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        ) : null}
+      </details>
     </>
   );
 }
 
 function formatAdapterProfile(adapter: AsrWorkerRuntimeCheckResult['adapterBenchmark']): string {
   if (adapter === undefined) return 'not loaded';
-  return `${adapter.profileId} (${adapter.adaptationType})`;
+  return 'profile loaded';
 }
 
 function formatAdapterMedian(adapter: AsrWorkerRuntimeCheckResult['adapterBenchmark']): string {

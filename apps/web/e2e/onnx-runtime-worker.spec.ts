@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) => {
   await page.goto('/');
 
+  await page.locator('summary', { hasText: 'Training support details' }).click();
   const trainingSpikeStatus = page.getByLabel('ONNX Runtime Web training spike status');
   await expect(trainingSpikeStatus.getByText('Training artifact', { exact: true })).toBeVisible();
   await expect(
@@ -24,10 +25,8 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   const secondTab = await page.context().newPage();
   await secondTab.goto('/');
 
-  await expect(
-    page.getByRole('button', { name: 'Restart browser training prototype' }),
-  ).toBeDisabled();
-  await page.getByRole('button', { name: 'Run browser training prototype' }).click();
+  await expect(page.getByRole('button', { name: 'Restart training check' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Run training check' }).click();
   let browserTrainingProgress = page.getByLabel('Training progress');
   await expect(
     browserTrainingProgress.getByRole('heading', { name: 'Training voice model' }),
@@ -60,11 +59,11 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
     cancelDialogMessages.push(dialog.message());
     await dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'Cancel browser training' }).click();
-  expect(cancelDialogMessages.join(' ')).toMatch(/Cancel browser training/);
+  await page.getByRole('button', { name: 'Cancel training check' }).click();
+  expect(cancelDialogMessages.join(' ')).toMatch(/Cancel training check/);
   await expect(page.getByText('Training is running locally.', { exact: true })).toBeVisible();
 
-  await secondTab.getByRole('button', { name: 'Run browser training prototype' }).click();
+  await secondTab.getByRole('button', { name: 'Run training check' }).click();
   await expect(secondTab.locator('.error-message')).toContainText(
     'Another tab is already training this voice model. Pause or cancel that run, then try again.',
     { timeout: 10_000 },
@@ -72,7 +71,7 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(secondTab.getByLabel('Training progress')).toContainText('Training needs attention');
   await secondTab.close();
 
-  await page.getByRole('button', { name: 'Benchmark worker provider' }).click();
+  await page.getByRole('button', { name: 'Check training support' }).click();
   const pauseOutcome = await waitForPauseOrCompletion(page);
   trainingDetails = await openTrainingDetails(page);
   browserTrainingRecovery = trainingDetails.getByLabel('Browser training recovery status');
@@ -99,7 +98,7 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
       ),
     ).toBeVisible();
   }
-  const restartButton = page.getByRole('button', { name: 'Restart browser training prototype' });
+  const restartButton = page.getByRole('button', { name: 'Restart training check' });
   await expect(restartButton).toBeEnabled();
   const restartDialogMessages: string[] = [];
   page.once('dialog', async (dialog) => {
@@ -107,7 +106,7 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
     await dialog.dismiss();
   });
   await restartButton.click();
-  expect(restartDialogMessages.join(' ')).toMatch(/Restart browser training prototype/);
+  expect(restartDialogMessages.join(' ')).toMatch(/Restart training check/);
   await expect(browserTrainingRecovery.getByText(/available at epoch/)).toBeVisible();
 
   await page.reload({ waitUntil: 'networkidle' });
@@ -122,7 +121,7 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   ).toBeVisible({
     timeout: 10_000,
   });
-  await page.getByRole('button', { name: 'Resume browser training prototype' }).click();
+  await page.getByRole('button', { name: 'Resume training check' }).click();
   browserTrainingProgress = page.getByLabel('Training progress');
   await expect(
     browserTrainingProgress.getByText('Training finished. Review results before using the model.', {
@@ -140,10 +139,12 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(technicalDetails.getByText('Loss reduction', { exact: true })).toBeVisible();
   await expect(technicalDetails.getByText('Quality gate', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Benchmark worker provider' }).click();
+  await page.getByRole('button', { name: 'Check training support' }).click();
 
-  const runtimeStatus = page.getByLabel('ONNX Runtime worker status');
-  await expect(runtimeStatus.getByText('Provider', { exact: true })).toBeVisible({
+  const runtimeDisclosure = page.locator('details', { hasText: 'Runtime details' });
+  await runtimeDisclosure.locator('summary').click();
+  const runtimeStatus = page.getByLabel('Runtime details');
+  await expect(runtimeStatus.getByText('Processing mode', { exact: true })).toBeVisible({
     timeout: 15_000,
   });
   await expect(runtimeStatus.locator('dd').first()).toHaveText(/^(wasm|webgpu)$/);
@@ -151,14 +152,16 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await expect(runtimeStatus.getByText('auto', { exact: true })).toBeVisible();
   await expect(runtimeStatus.getByText('Language spans', { exact: true })).toBeVisible();
   await expect(runtimeStatus.getByText('no spans yet', { exact: true })).toBeVisible();
-  await expect(runtimeStatus.getByText('Adapter profile', { exact: true })).toBeVisible();
-  await expect(runtimeStatus.getByText(/profile-local-adapter-smoke/)).toBeVisible();
-  await expect(runtimeStatus.getByText('Adapter median run', { exact: true })).toBeVisible();
-  await expect(runtimeStatus.getByText('Adapter RTF overhead', { exact: true })).toBeVisible();
+  await expect(runtimeStatus.getByText('Personal-model profile', { exact: true })).toBeVisible();
+  await expect(runtimeStatus.getByText('profile loaded', { exact: true })).toBeVisible();
+  await expect(runtimeStatus.getByText('Personal-model run time', { exact: true })).toBeVisible();
+  await expect(runtimeStatus.getByText('Personal-model overhead', { exact: true })).toBeVisible();
 });
 
 async function openTrainingDetails(page: Page) {
-  const details = page.locator('details.training-details-disclosure');
+  const details = page.locator('details.training-details-disclosure', {
+    has: page.locator('summary', { hasText: 'Training details' }),
+  });
   if ((await details.getAttribute('open')) === null) {
     await details.locator('summary').click();
   }

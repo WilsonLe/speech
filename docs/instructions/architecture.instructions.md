@@ -19,3 +19,5 @@ applyTo: 'apps/**,packages/**,model-packs/**,tools/**,training/**'
 - Keep WebGPU, shared memory, graph capture, and FP16/INT8 as optimizations; correctness must preserve the WASM and transferable-buffer paths.
 
 - The v0.6 component gallery is a development-only `#ui-gallery` route accepted by ADR 0014 and `docs/planning/v0.6.0-component-gallery-contract.json`. Keep it lazy-loaded behind `import.meta.env.DEV`, unlinked from production navigation, and backed by synthetic `@speech/ui/testing` examples only; do not import domain workers, storage, audio, archive, encryption, profile, transcript, vocabulary, or model fixtures into the gallery.
+
+- #250 owns `docs/planning/v0.6.0-copy-deletion-pass.json`: default UI/status copy should stay task-first, and storage/runtime/checksum/provider/profile identifiers should appear only in explicit detail/diagnostic contexts.

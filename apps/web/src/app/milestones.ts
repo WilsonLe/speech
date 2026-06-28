@@ -13,24 +13,25 @@ export const roadmap: readonly RoadmapItem[] = [
   {
     label: 'Capability diagnostics',
     status: 'shipped',
-    description: 'API probes, execution-tier selection, worker benchmark, and downloadable report.',
+    description: 'Browser checks, local performance reports, and downloadable support summaries.',
   },
   {
     label: 'Audio transport',
     status: 'shipped',
     description:
-      'Microphone controller, AudioWorklet, SharedArrayBuffer ring buffer, and transferable fallback.',
+      'Local microphone capture, responsive recording controls, and offline-safe audio flow.',
   },
   {
-    label: 'Streaming ASR runtime',
+    label: 'Streaming speech recognition',
     status: 'shipped',
-    description: 'Resampler, log-Mel features, ONNX RNN-T sessions, decoding, and stable partials.',
+    description:
+      'Live local dictation, stable partial text, and bilingual-ready transcript formatting.',
   },
   {
     label: 'Personal Models',
     status: 'shipped',
     description:
-      'Guided enrollment, browser training infrastructure, activation review, rollback, and private profile lifecycle.',
+      'Guided recording, local training support, activation review, rollback, and private model management.',
   },
   {
     label: 'Evidence-backed production claims',

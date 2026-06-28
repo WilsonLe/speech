@@ -352,7 +352,7 @@ describe('personal model card summaries', () => {
     expect(checks.map((check) => check.label)).toEqual([
       'Secure context',
       'Microphone APIs',
-      'AudioWorklet capture',
+      'Microphone capture',
       'Background work',
       'Fast data path',
       'Local processing support',

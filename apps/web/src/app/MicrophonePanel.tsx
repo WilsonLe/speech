@@ -150,8 +150,7 @@ const idleEnrollmentRecorderSummary: EnrollmentRecorderSummary = {
   sampleRateHz: null,
   sampleCount: 0,
   durationMs: 0,
-  message:
-    'Start the microphone check, then record one in-memory enrollment take for local quality analysis.',
+  message: 'Start the microphone check, then record a short sample.',
 };
 
 const enrollmentProcessingOptions: MicrophoneProcessingOptions = {
@@ -174,7 +173,7 @@ const initialProfileStoreState: ProfileStoreUiState = {
   persistentStorageGranted: null,
   activeState: null,
   summary: null,
-  message: 'Checking private enrollment profile storage…',
+  message: 'Checking saved voice model data…',
 };
 
 type MicrophonePanelMode = 'enrollment' | 'settings-audio';
@@ -573,7 +572,7 @@ export function MicrophonePanel({
       setRecorderSummary((current) => ({
         ...current,
         status: 'error',
-        message: 'Analyze a captured take before saving it to the private profile store.',
+        message: 'Analyze a captured take before saving it to this device.',
       }));
       return;
     }
@@ -581,7 +580,7 @@ export function MicrophonePanel({
     setProfileStore((current) => ({
       ...current,
       status: 'saving',
-      message: 'Saving accepted take to the private enrollment profile store…',
+      message: 'Saving recording on this device…',
     }));
     setRecorderSummary((current) => ({
       ...current,
@@ -617,30 +616,24 @@ export function MicrophonePanel({
         summary: result.summary,
         message:
           result.backendKind === 'opfs'
-            ? 'Accepted take saved in private OPFS profile storage and will resume after reload.'
-            : 'Accepted take saved in non-durable memory fallback storage for this page session; OPFS is unavailable.',
+            ? 'Recording saved on this device and will resume after reload.'
+            : 'Recording saved for this page session because durable device storage is unavailable.',
       });
       setRecorderSummary((current) => ({
         ...current,
         status: 'accepted',
-        message: 'Accepted take saved locally.',
+        message: 'Recording saved.',
       }));
-    } catch (storeError) {
+    } catch {
       setProfileStore((current) => ({
         ...current,
         status: 'error',
-        message:
-          storeError instanceof Error
-            ? storeError.message
-            : 'Enrollment take could not be saved to private profile storage.',
+        message: 'Recording could not be saved on this device.',
       }));
       setRecorderSummary((current) => ({
         ...current,
         status: 'error',
-        message:
-          storeError instanceof Error
-            ? storeError.message
-            : 'Enrollment take could not be saved to private profile storage.',
+        message: 'Recording could not be saved on this device.',
       }));
     }
   }
@@ -650,7 +643,7 @@ export function MicrophonePanel({
     setProfileStore((current) => ({
       ...current,
       status: 'activating',
-      message: 'Enabling this local profile for the next utterance boundary…',
+      message: 'Enabling this voice model after the current recording…',
     }));
     try {
       const result = await enableEnrollmentProfile({ profileId: defaultProfileId });
@@ -660,7 +653,7 @@ export function MicrophonePanel({
         backendKind: result.backendKind,
         persistentStorageGranted: result.persistentStorageGranted,
         activeState: result.activeState,
-        message: 'Profile enabled locally. Runtime workers may apply it only between utterances.',
+        message: 'Voice model enabled. It applies after the current recording ends.',
       }));
     } catch (storeError) {
       setProfileStore((current) => ({
@@ -752,8 +745,7 @@ export function MicrophonePanel({
         persistentStorageGranted: result.persistentStorageGranted,
         activeState: result.activeState,
         summary: result.summary,
-        message:
-          'Profile import verified checksums and restored local enrollment recordings. Review before enabling.',
+        message: 'Import restored local recordings. Review before using this voice model.',
       });
     } catch (storeError) {
       setProfileStore((current) => ({
@@ -783,7 +775,7 @@ export function MicrophonePanel({
       setRecorderSummary((current) => ({
         ...current,
         status: current.status === 'recording' ? current.status : 'idle',
-        message: 'Private profile store cleared. Current in-memory take, if any, was not saved.',
+        message: 'Local voice model data cleared. The current unsaved recording was not saved.',
       }));
     } catch (storeError) {
       setProfileStore((current) => ({
@@ -816,13 +808,13 @@ export function MicrophonePanel({
         void audioContext.close();
         setRecorderSummary((current) => ({
           ...current,
-          message: 'Replay finished. Captured take still exists only in memory.',
+          message: 'Replay finished. Save the recording if you want to keep it.',
         }));
       };
       source.start();
       setRecorderSummary((current) => ({
         ...current,
-        message: 'Replaying the in-memory enrollment take through this browser tab.',
+        message: 'Replaying the captured recording in this tab.',
       }));
     } catch (replayError) {
       setRecorderSummary((current) => ({
@@ -1076,7 +1068,7 @@ export function MicrophonePanel({
                   <dd>{captureSummary.samples}</dd>
                 </div>
                 <div>
-                  <dt>Worklet sample rate</dt>
+                  <dt>Sample rate</dt>
                   <dd>
                     {captureSummary.sampleRateHz
                       ? `${captureSummary.sampleRateHz} Hz`
@@ -1124,8 +1116,7 @@ export function MicrophonePanel({
         <h2 id="microphone-title">Permission and capture check</h2>
         <p>
           Microphone access is requested only when you press start. The app asks for mono audio,
-          attaches an AudioWorklet capture processor, and reports actual browser track settings
-          because browsers may not honor every constraint.
+          runs a local input check, and shows detailed browser settings only when you open details.
         </p>
       </div>
 
@@ -1172,39 +1163,42 @@ export function MicrophonePanel({
         </p>
       ) : null}
 
-      <dl className="probe-list microphone-settings" aria-label="AudioWorklet capture metrics">
-        <div>
-          <dt>AudioWorklet status</dt>
-          <dd>{captureSummary.status}</dd>
-        </div>
-        <div>
-          <dt>Captured chunks</dt>
-          <dd>{captureSummary.chunks}</dd>
-        </div>
-        <div>
-          <dt>Captured samples</dt>
-          <dd>{captureSummary.samples}</dd>
-        </div>
-        <div>
-          <dt>Worklet sample rate</dt>
-          <dd>
-            {captureSummary.sampleRateHz ? `${captureSummary.sampleRateHz} Hz` : 'not started'}
-          </dd>
-        </div>
-        <div>
-          <dt>Peak level</dt>
-          <dd>{captureSummary.peak.toFixed(3)}</dd>
-        </div>
-        <div>
-          <dt>RMS level</dt>
-          <dd>{captureSummary.rms.toFixed(3)}</dd>
-        </div>
-        <div>
-          <dt>Clipping</dt>
-          <dd>{formatPercent(captureSummary.clippingRatio)}</dd>
-        </div>
-      </dl>
       <p className="status-message">{captureSummary.message}</p>
+      <details className="microphone-details-disclosure">
+        <summary>Input details</summary>
+        <dl className="probe-list microphone-settings" aria-label="Microphone input details">
+          <div>
+            <dt>Capture status</dt>
+            <dd>{captureSummary.status}</dd>
+          </div>
+          <div>
+            <dt>Captured chunks</dt>
+            <dd>{captureSummary.chunks}</dd>
+          </div>
+          <div>
+            <dt>Captured samples</dt>
+            <dd>{captureSummary.samples}</dd>
+          </div>
+          <div>
+            <dt>Sample rate</dt>
+            <dd>
+              {captureSummary.sampleRateHz ? `${captureSummary.sampleRateHz} Hz` : 'not started'}
+            </dd>
+          </div>
+          <div>
+            <dt>Peak level</dt>
+            <dd>{captureSummary.peak.toFixed(3)}</dd>
+          </div>
+          <div>
+            <dt>RMS level</dt>
+            <dd>{captureSummary.rms.toFixed(3)}</dd>
+          </div>
+          <div>
+            <dt>Clipping</dt>
+            <dd>{formatPercent(captureSummary.clippingRatio)}</dd>
+          </div>
+        </dl>
+      </details>
 
       <div className="enrollment-prompt-screen" aria-label="Enrollment recorder">
         <div className="enrollment-prompt-screen__topline">
@@ -1776,7 +1770,7 @@ function getStoredProfileBytes(summary: EnrollmentProfileSummaryV1 | null): numb
 
 function formatProfileStoreBackend(kind: ProfileStorageBackendKind | null): string {
   if (kind === null) return 'checking';
-  return kind === 'opfs' ? 'OPFS' : 'memory fallback (not reload-durable)';
+  return kind === 'opfs' ? 'Device storage' : 'Temporary page memory';
 }
 
 function formatPersistentStorage(value: boolean | null): string {
