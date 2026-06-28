@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.6.0",
+  "artifact": "prototype-usability-study",
+  "status": "blocked-participants-unavailable",
+  "gateStatus": "open",
+  "generatedAt": "2026-06-28T20:20:00.000Z",
+  "purpose": "Record prototype usability-study readiness, participant availability, and local substitute evidence for the v0.6.0 task-first UI without telemetry or personal speech data.",
+  "issue": 254,
+  "privacy": {
+    "usesTelemetry": false,
+    "usesRemoteAnalytics": false,
+    "storesParticipantIdentifiers": false,
+    "storesAudio": false,
+    "storesTranscripts": false,
+    "storesPrivateVocabulary": false,
+    "storesScreenshotsOrRecordings": false,
+    "usesSyntheticLocalEvidenceOnly": true
+  },
+  "participantAvailability": {
+    "sessionsRun": 0,
+    "participantNotesProvided": false,
+    "blocker": "No consented prototype-study participant notes, recordings, or task observations were provided to this Linux agent session. The agent cannot synthesize human participant evidence.",
+    "releaseImpact": "Prototype usability evidence is not complete. Keep the release usability gate open until consented participant sessions or an explicit release decision are recorded."
+  },
+  "requiredParticipantMix": [
+    {
+      "id": "vietnamese-dominant",
+      "targetCount": 5,
+      "status": "not-run"
+    },
+    {
+      "id": "bilingual-vietnamese-english",
+      "targetCount": 5,
+      "status": "not-run"
+    },
+    {
+      "id": "novice-speech-tool-users",
+      "targetCount": "mixed sample",
+      "status": "not-run"
+    },
+    {
+      "id": "experienced-speech-tool-users",
+      "targetCount": "mixed sample",
+      "status": "not-run"
+    },
+    {
+      "id": "keyboard-or-assistive-technology-participants",
+      "targetCount": 2,
+      "status": "not-run"
+    }
+  ],
+  "prototypeTasks": [
+    {
+      "id": "first-transcript",
+      "task": "Find where to dictate, install or recognize the required speech model state, and identify the first recording action.",
+      "status": "not-run"
+    },
+    {
+      "id": "enable-vocabulary",
+      "task": "Find Vocabulary, create or open a set, and understand enabled versus disabled state.",
+      "status": "not-run"
+    },
+    {
+      "id": "create-model-and-enroll",
+      "task": "Start a new voice model, understand the language/recording-plan questions, and reach the first enrollment prompt.",
+      "status": "not-run"
+    },
+    {
+      "id": "training-readiness",
+      "task": "Open a model, interpret whether it is ready to train or blocked, and identify the next action.",
+      "status": "not-run"
+    },
+    {
+      "id": "import-export",
+      "task": "Find Import and Export, understand encrypted export and local validation/privacy boundaries, and identify incompatible-model recovery.",
+      "status": "not-run"
+    },
+    {
+      "id": "delete-local-data",
+      "task": "Find Storage/Privacy deletion paths and explain what will be removed or retained before confirming.",
+      "status": "not-run"
+    }
+  ],
+  "plannedMeasures": [
+    "completion outcome",
+    "time on task",
+    "clicks or keyboard steps",
+    "wrong turns",
+    "requests for explanation",
+    "unnoticed or unread content",
+    "accessibility obstacles",
+    "participant confidence"
+  ],
+  "localSubstituteEvidence": [
+    {
+      "id": "semantic-content-gates",
+      "artifact": "docs/planning/v0.6.0-content-budget-accessible-name-gates.json",
+      "status": "pass",
+      "limitation": "Semantic content/accessibility gates do not replace participant comprehension evidence."
+    },
+    {
+      "id": "responsive-visual-regression-suite",
+      "artifact": "docs/planning/v0.6.0-responsive-visual-regression-suite.json",
+      "status": "pass",
+      "limitation": "Viewport/state screenshots do not replace observed task success or confidence."
+    },
+    {
+      "id": "manual-accessibility-matrix",
+      "artifact": "docs/planning/v0.6.0-manual-accessibility-matrix.json",
+      "status": "pass-with-external-at-limitations",
+      "limitation": "Local accessibility checks do not replace prototype usability sessions."
+    }
+  ],
+  "findings": [],
+  "highSeverityFindings": [],
+  "incorporatedChanges": [],
+  "openFollowUps": [
+    {
+      "id": "collect-prototype-participant-evidence",
+      "severity": "release-gate",
+      "status": "open",
+      "owner": "human-study operator",
+      "description": "Run consented low-fidelity route/copy prototype sessions with the required participant mix or record an explicit release decision accepting the missing evidence."
+    },
+    {
+      "id": "carry-forward-to-release-usability-study",
+      "severity": "release-gate",
+      "status": "open",
+      "owner": "issue #255",
+      "description": "Release usability study must not claim prototype participant evidence exists unless this artifact is updated with consented observations."
+    }
+  ],
+  "releaseDecision": {
+    "mayCloseIssue254": true,
+    "rationale": "Issue #254 acceptance explicitly permits recording the participant-availability blocker when participants are unavailable.",
+    "mayCloseOverallUsabilityGate": false,
+    "requiredBeforeRelease": "Consolidate prototype blocker with issue #255 release usability evidence and make an explicit release decision before tagging v0.6.0."
+  }
+}
