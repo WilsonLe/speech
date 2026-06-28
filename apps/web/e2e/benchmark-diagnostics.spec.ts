@@ -2,7 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { expect, test, type Download } from '@playwright/test';
 
 test('runs the synthetic benchmark and downloads local JSON reports', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/settings/diagnostics');
+  await expect(page.getByRole('heading', { name: /^Diagnostics$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /browser and capabilities/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /download support bundle/i })).toBeVisible();
 
   await page.getByRole('button', { name: /run synthetic benchmark/i }).click();
   await expect(page.getByText(/benchmark complete/i)).toBeVisible({ timeout: 15_000 });

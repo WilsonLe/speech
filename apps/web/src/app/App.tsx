@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { AboutPanel } from './AboutPanel';
 import { AppShell } from './AppShell';
 import { useAppRoute } from './appRouteContext';
 import { BenchmarkPanel } from './BenchmarkPanel';
@@ -53,14 +54,25 @@ function RoutedAppContent() {
     return <StoragePanel />;
   }
 
+  if (route.routeId === 'settings-diagnostics') {
+    return (
+      <>
+        <DiagnosticsPanel />
+        <BenchmarkPanel />
+      </>
+    );
+  }
+
+  if (route.routeId === 'about') {
+    return <AboutPanel />;
+  }
+
   return (
     <>
       <TranscriptPanel />
       <VocabularyPanel />
       <PersonalModelsPanel />
       <OfflineModelPanel />
-      <DiagnosticsPanel />
-      <BenchmarkPanel />
       <MicrophonePanel />
       <ModelRuntimePanel />
 

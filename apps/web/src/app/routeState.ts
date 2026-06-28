@@ -347,7 +347,7 @@ const appRouteSpecs = [
     id: 'about',
     pattern: '/about',
     title: 'About',
-    headingId: 'roadmap-title',
+    headingId: 'about-title',
     queryKeys: ['returnTo'],
     scrollRestoration: 'restore-per-route-when-returning',
     stateSource: 'static',
@@ -419,6 +419,7 @@ const legacyHashRedirects = new Set([
   '#benchmark',
   '#benchmark-title',
   '#runtime-title',
+  '#about-title',
   '#roadmap-title',
 ]);
 
@@ -664,6 +665,7 @@ function resolveLegacyHashRedirect(hash: string, search: string): ResolvedAppRou
       return markLegacy(resolveCanonicalPath('/settings/privacy', search, ['returnTo']));
     case '#shortcuts-title':
       return markLegacy(resolveCanonicalPath('/settings/shortcuts', search, ['returnTo']));
+    case '#about-title':
     case '#roadmap-title':
       return markLegacy(resolveCanonicalPath('/about', search, ['returnTo']));
     case '':

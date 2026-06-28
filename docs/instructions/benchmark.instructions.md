@@ -7,7 +7,7 @@ applyTo: 'packages/benchmark/**,packages/personalization/src/adapter-comparison.
 
 - Keep benchmark report schemas UI-independent in `@speech/benchmark`; UI code may render/export reports but must not own the contract.
 - Run repeatable benchmark work in a dedicated worker, not on the main UI thread. The main thread may start runs, display progress, and download JSON.
-- Benchmark/diagnostics exports are local JSON downloads. Do not upload reports by default and do not include audio, transcript text, private profile data, secrets, or model weights.
+- Benchmark/diagnostics exports are local JSON downloads. Do not upload reports by default and do not include audio, transcript text, private profile data, secrets, storage paths, or model weights. In v0.6 these downloads belong under `/settings/diagnostics` rather than the default workflow.
 - Label synthetic benchmarks clearly. Synthetic worker timing can validate export plumbing and queue/timing math, but headline performance gates require real model packs on declared reference hardware.
 - Include privacy flags, environment metadata, timing summaries, queue depth, audio overrun counts, RTF, provider/thread metadata when available, and interpretation warnings in exported reports.
 - Measure hard performance gates from audio timestamps when real audio/model benchmarks are added; CI synthetic/browser timings are informational unless run on designated reference hardware.
