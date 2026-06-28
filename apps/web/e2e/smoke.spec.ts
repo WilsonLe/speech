@@ -47,6 +47,30 @@ test('renders the task-first PWA shell', async ({ page }) => {
     'href',
     '/settings/audio',
   );
+  await expect(page.getByRole('link', { name: 'Open Storage' })).toHaveAttribute(
+    'href',
+    '/settings/storage',
+  );
+  await page.getByRole('link', { name: 'Open Storage' }).click();
+  await expect(page).toHaveURL(/\/settings\/storage$/);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('storage-title');
+  await expect(page.getByRole('heading', { name: 'Storage' })).toBeVisible();
+  await expect(page.getByLabel('Storage summary')).toContainText('Speech model downloads');
+  await expect(page.getByLabel('Storage summary')).toContainText('Voice models');
+  await expect(page.getByLabel('Storage summary')).toContainText('Recordings and training work');
+  await page.getByRole('button', { name: 'Delete training data' }).click();
+  await expect(page.getByRole('heading', { name: 'Delete training data?' })).toBeVisible();
+  await expect(page.getByLabel('Removes')).toContainText('Training job work files');
+  await expect(page.getByLabel('Retains')).toContainText('Voice models');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('heading', { name: 'Storage' })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete all local speech data' }).click();
+  await expect(page.getByRole('heading', { name: 'Delete all local speech data?' })).toBeVisible();
+  await expect(page.getByLabel('Removes')).toContainText('Speech model downloads');
+  await expect(page.getByLabel('Retains')).toContainText('UI preferences');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.goto('/settings');
   await page.getByRole('link', { name: 'Open Audio' }).click();
   await expect(page).toHaveURL(/\/settings\/audio$/);
   await expect

@@ -11,6 +11,7 @@ import type {
   PortableSpeechModelExportSummaryV1,
   PortableSpeechModelImportSummaryV1,
   ProfileStorageBackendKind,
+  ProfileTrainingDataStorageSummaryV1,
   SpeechProfileManifestMigrationResultV1,
   TrainingJobPromptIdentitySplitSummaryV1,
   TrainingJobRevisionSummaryV1,
@@ -52,6 +53,14 @@ export interface ProfileStoreActiveResult {
   readonly backendKind: ProfileStorageBackendKind;
   readonly persistentStorageGranted: boolean;
   readonly activeState: ActiveEnrollmentProfileStateV1;
+}
+
+export interface ProfileStoreTrainingDataDeleteResult extends ProfileStoreActiveResult {
+  readonly profileId: string;
+}
+
+export interface ProfileStoreTrainingDataStorageSummaryResult extends ProfileStoreActiveResult {
+  readonly summary: ProfileTrainingDataStorageSummaryV1;
 }
 
 export interface ProfileStoreExportResult extends ProfileStoreActiveResult {
@@ -308,6 +317,28 @@ export function deactivateEnrollmentProfile(
     },
     options.timeoutMs,
   ).then(activeResultFromResponse);
+}
+
+export function getTrainingDataStorageSummary(
+  options: { readonly timeoutMs?: number } = {},
+): Promise<ProfileStoreTrainingDataStorageSummaryResult> {
+  return requestProfileStore(
+    {
+      type: 'GET_TRAINING_DATA_STORAGE_SUMMARY',
+      requestId: createRequestId('training-data-storage-summary'),
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_TRAINING_DATA_STORAGE_SUMMARY_READY') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      summary: response.summary,
+    };
+  });
 }
 
 export function exportEnrollmentProfile(
@@ -578,6 +609,29 @@ export function deleteEnrollmentProfile(
       backendKind: response.backendKind,
       persistentStorageGranted: response.persistentStorageGranted,
       activeState: response.activeState,
+    };
+  });
+}
+
+export function deleteEnrollmentProfileTrainingData(
+  options: DeleteProfileOptions,
+): Promise<ProfileStoreTrainingDataDeleteResult> {
+  return requestProfileStore(
+    {
+      type: 'DELETE_PROFILE_TRAINING_DATA',
+      requestId: createRequestId('delete-training-data'),
+      profileId: options.profileId,
+    },
+    options.timeoutMs,
+  ).then((response) => {
+    if (response.type !== 'PROFILE_STORE_TRAINING_DATA_DELETE_COMPLETE') {
+      throw new Error(`Unexpected profile-store response: ${response.type}`);
+    }
+    return {
+      backendKind: response.backendKind,
+      persistentStorageGranted: response.persistentStorageGranted,
+      activeState: response.activeState,
+      profileId: response.profileId,
     };
   });
 }

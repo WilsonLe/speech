@@ -998,6 +998,23 @@ export interface ProfileStorageFileRecord {
   readonly sizeBytes: number;
 }
 
+export interface ProfileTrainingDataStorageSummaryV1 {
+  readonly schemaVersion: 1;
+  readonly trainingJobCount: number;
+  readonly trainingJobBytes: number;
+  readonly privacy: {
+    readonly aggregateOnly: true;
+    readonly localOnly: true;
+    readonly containsRawAudio: false;
+    readonly containsTranscriptText: false;
+    readonly containsFeatureTensors: false;
+    readonly containsCheckpoints: false;
+    readonly containsAdapterWeights: false;
+    readonly exposesRawJobIds: false;
+    readonly exposesStoragePaths: false;
+  };
+}
+
 export interface ProfileStorageBackend {
   readonly kind: ProfileStorageBackendKind;
   putFile(path: readonly string[], bytes: ProfileBinaryFile): Promise<ProfileStorageFileRecord>;
@@ -2266,6 +2283,33 @@ export class EnrollmentProfileStore {
         nextState,
       );
     }
+  }
+
+  async deleteProfileTrainingData(profileId: string): Promise<void> {
+    await this.deleteTrainingJobDataForProfile(normalizeSegment(profileId, 'profileId'));
+  }
+
+  async getTrainingDataStorageSummary(
+    profileId?: string,
+  ): Promise<ProfileTrainingDataStorageSummaryV1> {
+    const normalizedProfileId =
+      profileId === undefined ? undefined : normalizeSegment(profileId, 'profileId');
+    const revisions = await this.listTrainingJobRevisions(normalizedProfileId);
+    const jobIds = new Set(revisions.map((revision) => revision.jobId));
+    const files = await this.backend.listFiles(['training-jobs']);
+    const trainingJobBytes = files.reduce((total, file) => {
+      const jobId = file.path[1];
+      if (normalizedProfileId !== undefined && (jobId === undefined || !jobIds.has(jobId))) {
+        return total;
+      }
+      return total + file.sizeBytes;
+    }, 0);
+    return {
+      schemaVersion: 1,
+      trainingJobCount: jobIds.size,
+      trainingJobBytes,
+      privacy: createTrainingDataStorageSummaryPrivacy(),
+    };
   }
 
   private async deleteTrainingJobDataForProfile(profileId: string): Promise<void> {
@@ -3672,6 +3716,20 @@ function createFrameLabelsSummaryPrivacy(): TrainingJobFrameLabelsSummaryV1['pri
     exposesRawVocabularyEntryIds: false,
     networkUpload: false,
     telemetry: false,
+  };
+}
+
+function createTrainingDataStorageSummaryPrivacy(): ProfileTrainingDataStorageSummaryV1['privacy'] {
+  return {
+    aggregateOnly: true,
+    localOnly: true,
+    containsRawAudio: false,
+    containsTranscriptText: false,
+    containsFeatureTensors: false,
+    containsCheckpoints: false,
+    containsAdapterWeights: false,
+    exposesRawJobIds: false,
+    exposesStoragePaths: false,
   };
 }
 

@@ -859,6 +859,41 @@ describe('enrollment profile store', () => {
     expect(await backend.listFiles(['training-jobs', 'job-feature-export'])).toEqual([]);
   });
 
+  it('deletes training job data while keeping the voice profile summary', async () => {
+    const backend = new InMemoryProfileStorageBackend();
+    const store = createStore(backend);
+    await saveFixtureTake(store, 'profile-training-delete', 'utt-training-delete');
+    const revision = await store.freezeTrainingJobRevision({
+      profileId: 'profile-training-delete',
+      jobId: 'job-training-delete',
+    });
+    await store.prepareTrainingJobFeatureShards({
+      jobId: revision.jobId,
+      featureSetId: 'features-training-delete',
+      splitConfig: { seed: 'delete-seed', trainRatio: 1, validationRatio: 0, testRatio: 0 },
+    });
+
+    const beforeDelete = await store.getTrainingDataStorageSummary('profile-training-delete');
+    expect(beforeDelete.trainingJobCount).toBe(1);
+    expect(beforeDelete.trainingJobBytes).toBeGreaterThan(0);
+    expect(JSON.stringify(beforeDelete)).not.toContain('job-training-delete');
+    expect(beforeDelete.privacy).toMatchObject({
+      aggregateOnly: true,
+      containsFeatureTensors: false,
+      exposesRawJobIds: false,
+      exposesStoragePaths: false,
+    });
+
+    await store.deleteProfileTrainingData('profile-training-delete');
+
+    expect(await store.getProfileSummary('profile-training-delete')).toBeDefined();
+    expect(await backend.listFiles(['training-jobs', 'job-training-delete'])).toEqual([]);
+    expect(await store.getTrainingDataStorageSummary('profile-training-delete')).toMatchObject({
+      trainingJobCount: 0,
+      trainingJobBytes: 0,
+    });
+  });
+
   it('detects enrollment and vocabulary edits after a training job revision is frozen', async () => {
     const store = createStore(new InMemoryProfileStorageBackend());
     await saveFixtureTake(store, 'profile-freeze', 'utt-freeze-001');
