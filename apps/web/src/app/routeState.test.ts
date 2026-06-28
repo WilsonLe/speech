@@ -98,6 +98,14 @@ describe('v0.6 route migration and navigation guards', () => {
       stateSource: 'domain-storage',
     });
 
+    const storage = resolveAppRoute({ pathname: '/settings/storage' });
+    expect(storage.routeId).toBe('settings-storage');
+    expect(storage.headingId).toBe('storage-title');
+    expect(createRouteRestorationPlan(storage)).toMatchObject({
+      headingId: 'storage-title',
+      stateSource: 'domain-storage',
+    });
+
     const training = resolveAppRoute({
       pathname: '/models/profile.local/train',
       search: '?jobId=job-1&returnTo=/models/profile.local',

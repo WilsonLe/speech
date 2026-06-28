@@ -311,7 +311,7 @@ const appRouteSpecs = [
     id: 'settings-storage',
     pattern: '/settings/storage',
     title: 'Storage',
-    headingId: 'offline-model-title',
+    headingId: 'storage-title',
     queryKeys: ['returnTo', 'focus'],
     scrollRestoration: 'restore-per-route-when-returning',
     stateSource: 'domain-storage',

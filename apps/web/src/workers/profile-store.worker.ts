@@ -16,6 +16,7 @@ import {
   type EnrollmentUtteranceV1,
   type ProfileStorageBackend,
   type ProfileStorageBackendKind,
+  type ProfileTrainingDataStorageSummaryV1,
   type SpeechProfileManifestMigrationResultV1,
   type TrainingJobPromptIdentitySplitSummaryV1,
   type TrainingJobRevisionSummaryV1,
@@ -52,6 +53,7 @@ export type ProfileStoreWorkerRequest =
     }
   | { readonly type: 'ROLLBACK_PROFILE'; readonly requestId: string }
   | { readonly type: 'DEACTIVATE_PROFILE'; readonly requestId: string; readonly profileId: string }
+  | { readonly type: 'GET_TRAINING_DATA_STORAGE_SUMMARY'; readonly requestId: string }
   | { readonly type: 'EXPORT_PROFILE'; readonly requestId: string; readonly profileId: string }
   | {
       readonly type: 'EXPORT_PORTABLE_SPEECH_MODEL';
@@ -125,7 +127,12 @@ export type ProfileStoreWorkerRequest =
       readonly jobId: string;
       readonly config?: PromptIdentitySplitConfigV1;
     }
-  | { readonly type: 'DELETE_PROFILE'; readonly requestId: string; readonly profileId: string };
+  | { readonly type: 'DELETE_PROFILE'; readonly requestId: string; readonly profileId: string }
+  | {
+      readonly type: 'DELETE_PROFILE_TRAINING_DATA';
+      readonly requestId: string;
+      readonly profileId: string;
+    };
 
 export type ProfileStoreWorkerResponse =
   | {
@@ -167,6 +174,22 @@ export type ProfileStoreWorkerResponse =
       readonly backendKind: ProfileStorageBackendKind;
       readonly persistentStorageGranted: boolean;
       readonly activeState: ActiveEnrollmentProfileStateV1;
+    }
+  | {
+      readonly type: 'PROFILE_STORE_TRAINING_DATA_DELETE_COMPLETE';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly profileId: string;
+    }
+  | {
+      readonly type: 'PROFILE_STORE_TRAINING_DATA_STORAGE_SUMMARY_READY';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly summary: ProfileTrainingDataStorageSummaryV1;
     }
   | {
       readonly type: 'PROFILE_STORE_EXPORT_COMPLETE';
@@ -538,6 +561,31 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
         await store.deleteProfile(message.profileId);
         post({
           type: 'PROFILE_STORE_DELETE_COMPLETE',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          profileId: message.profileId,
+        });
+        return;
+      }
+      case 'GET_TRAINING_DATA_STORAGE_SUMMARY': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        post({
+          type: 'PROFILE_STORE_TRAINING_DATA_STORAGE_SUMMARY_READY',
+          requestId: message.requestId,
+          backendKind,
+          persistentStorageGranted,
+          activeState: await store.getActiveProfileState(),
+          summary: await store.getTrainingDataStorageSummary(),
+        });
+        return;
+      }
+      case 'DELETE_PROFILE_TRAINING_DATA': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        await store.deleteProfileTrainingData(message.profileId);
+        post({
+          type: 'PROFILE_STORE_TRAINING_DATA_DELETE_COMPLETE',
           requestId: message.requestId,
           backendKind,
           persistentStorageGranted,

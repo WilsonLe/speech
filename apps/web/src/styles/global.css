@@ -508,6 +508,115 @@ h2 {
   flex-direction: column;
 }
 
+.storage-summary-grid,
+.storage-action-grid,
+.storage-confirmation-grid {
+  display: grid;
+  gap: var(--speech-space-3);
+}
+
+.storage-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.storage-action-grid,
+.storage-confirmation-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.storage-summary-card,
+.storage-action-card,
+.storage-confirmation-card {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--speech-radius-md);
+  padding: var(--speech-space-4);
+  background: rgba(2, 6, 23, 0.38);
+}
+
+.storage-summary-card h3,
+.storage-action-card h4,
+.storage-confirmation-card h3 {
+  margin: 0 0 var(--speech-space-2);
+}
+
+.storage-summary-card p,
+.storage-action-card p,
+.storage-confirmation-card p {
+  margin: 0;
+}
+
+.storage-summary-card__value {
+  color: #f8fafc !important;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.storage-management-section {
+  display: grid;
+  gap: var(--speech-space-4);
+  margin-top: var(--speech-space-5);
+}
+
+.storage-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--speech-space-4);
+  align-items: flex-start;
+}
+
+.storage-section-header h3 {
+  margin: 0;
+}
+
+.storage-list-card {
+  grid-row: span 2;
+}
+
+.storage-target-list {
+  display: grid;
+  gap: var(--speech-space-2);
+  margin: var(--speech-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.storage-target-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--speech-space-3);
+  align-items: center;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  padding-top: var(--speech-space-3);
+}
+
+.storage-target-list strong,
+.storage-target-list span {
+  display: block;
+}
+
+.storage-target-list span {
+  color: #94a3b8;
+  font-size: 0.92rem;
+}
+
+.storage-confirmation-screen .back-link {
+  margin-bottom: var(--speech-space-4);
+}
+
+.storage-confirmation-card ul {
+  display: grid;
+  gap: var(--speech-space-2);
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.storage-confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--speech-space-3);
+  margin-top: var(--speech-space-5);
+}
+
 .section-heading {
   max-width: 760px;
 }
@@ -3063,6 +3172,9 @@ button.danger,
   .settings-list-row,
   .audio-settings-grid,
   .audio-settings-advanced__content,
+  .storage-summary-grid,
+  .storage-action-grid,
+  .storage-confirmation-grid,
   .vocabulary-summary,
   .vocabulary-layout,
   .vocabulary-form-grid,
@@ -3127,7 +3239,9 @@ button.danger,
     width: 100%;
   }
 
-  .settings-list-row {
+  .settings-list-row,
+  .storage-section-header,
+  .storage-target-list li {
     display: grid;
   }
 
@@ -3140,12 +3254,17 @@ button.danger,
   .vocabulary-set-row .speech-button,
   .settings-list-row .button,
   .audio-settings-actions button,
-  .audio-settings-card > button {
+  .audio-settings-card > button,
+  .storage-section-header button,
+  .storage-target-list button,
+  .storage-confirmation-actions button {
     width: 100%;
   }
 
   .settings-screen,
   .audio-settings-screen,
+  .storage-screen,
+  .storage-confirmation-screen,
   .vocabulary-entry-editor__heading,
   .create-model-flow,
   .import-model-flow,
@@ -3175,6 +3294,7 @@ button.danger,
   .create-model-flow__actions,
   .import-model-actions,
   .export-model-actions,
+  .storage-confirmation-actions,
   .model-list-toolbar,
   .model-list-actions,
   .model-list-meta,

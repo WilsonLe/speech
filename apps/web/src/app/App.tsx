@@ -8,6 +8,7 @@ import { ModelRuntimePanel } from './ModelRuntimePanel';
 import { OfflineModelPanel } from './OfflineModelPanel';
 import { PersonalModelsPanel } from './PersonalModelsPanel';
 import { SettingsPanel } from './SettingsPanel';
+import { StoragePanel } from './StoragePanel';
 import { TranscriptPanel } from './TranscriptPanel';
 import { VocabularyPanel } from './VocabularyPanel';
 import { getBrowserHash, shouldRenderComponentGalleryRoute } from './component-gallery-route';
@@ -42,6 +43,10 @@ function RoutedAppContent() {
 
   if (route.routeId === 'settings-audio') {
     return <MicrophonePanel mode="settings-audio" />;
+  }
+
+  if (route.routeId === 'settings-storage') {
+    return <StoragePanel />;
   }
 
   return (
