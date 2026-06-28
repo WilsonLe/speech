@@ -112,6 +112,17 @@ test('renders the task-first PWA shell', async ({ page }) => {
   });
   await expect(page.getByLabel('Model import options')).toContainText('Import behavior');
   await expect(page.getByLabel('Import behavior')).toHaveValue('dedupe');
+  await page.goto('/models/local-enrollment-profile/results');
+  await expect(page).toHaveURL(/\/models\/local-enrollment-profile\/results$/);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe('model-results-title');
+  const resultScreen = page.locator('section.model-results-screen');
+  await expect(resultScreen.getByRole('heading', { name: 'Results not ready' })).toBeVisible();
+  await resultScreen.locator('summary').filter({ hasText: 'Results' }).click();
+  await expect(resultScreen).toContainText('Personal speech');
+  await expect(resultScreen).toContainText('General speech');
+  await expect(resultScreen.getByLabel('Quality checks')).toContainText('Required checks');
   await expect(page.getByRole('heading', { name: /offline and updates/i })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: /benchmark and diagnostics export/i }),

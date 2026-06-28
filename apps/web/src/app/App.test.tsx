@@ -59,7 +59,10 @@ describe('App', () => {
     expect(html).toContain('Compatibility');
     expect(html).toContain('Storage');
     expect(html).toContain('Technical details');
-    expect(html).toContain('Quality checks and rollback');
+    expect(html).toContain('Candidate result');
+    expect(html).toContain('Results');
+    expect(html).toContain('Required checks');
+    expect(html).toContain('Advisory checks');
     expect(html).toContain('Personal voice model rows');
     expect(html).toContain('Model import options');
     expect(html).toContain('Dedupe');
