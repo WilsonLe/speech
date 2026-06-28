@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.6.0",
+  "artifact": "release-usability-study",
+  "status": "blocked-participant-evidence-unavailable",
+  "gateStatus": "open",
+  "generatedAt": "2026-06-28T22:20:00.000Z",
+  "purpose": "Record final release usability-study readiness, missing participant evidence, and release-gate status for the v0.6.0 task-first UI without telemetry or personal speech data.",
+  "issue": 255,
+  "privacy": {
+    "usesTelemetry": false,
+    "usesRemoteAnalytics": false,
+    "storesParticipantIdentifiers": false,
+    "storesAudio": false,
+    "storesTranscripts": false,
+    "storesPrivateVocabulary": false,
+    "storesScreenshotsOrRecordings": false,
+    "usesSyntheticLocalEvidenceOnly": true
+  },
+  "participantAvailability": {
+    "sessionsRun": 0,
+    "participantNotesProvided": false,
+    "blocker": "No consented final release-usability participant notes, recordings, transcripts, or task observations were provided to this Linux agent session. The agent cannot synthesize human participant evidence or claim usability gates passed.",
+    "releaseImpact": "The final release usability gates have not been measured. Keep issue #255 and the v0.6.0 release usability gate open until consented moderated sessions or an explicit human release decision are recorded."
+  },
+  "requiredTasks": [
+    {
+      "id": "first-transcript",
+      "task": "Produce a first transcript from the Dictate screen, including required model setup if missing.",
+      "gate": "at-least-90-percent-unassisted-completion",
+      "status": "not-run"
+    },
+    {
+      "id": "enable-vocabulary",
+      "task": "Enable or create vocabulary and understand that changes apply to later recording boundaries.",
+      "gate": "at-least-90-percent-unassisted-completion",
+      "status": "not-run"
+    },
+    {
+      "id": "continue-enrollment",
+      "task": "Create or continue a voice model enrollment and record prompted speech across the visible voice-condition workflow.",
+      "gate": "at-least-90-percent-unassisted-completion",
+      "status": "not-run"
+    },
+    {
+      "id": "start-ready-training",
+      "task": "Open training readiness, identify blockers or readiness, and start training when the profile is ready.",
+      "gate": "at-least-90-percent-unassisted-completion",
+      "status": "not-run"
+    },
+    {
+      "id": "export-model",
+      "task": "Export a personal voice model, understand encrypted export, and identify excluded recordings/checkpoints.",
+      "gate": "at-least-90-percent-unassisted-completion",
+      "status": "not-run"
+    },
+    {
+      "id": "import-model",
+      "task": "Import a .speechmodel file, understand local validation, and identify incompatible-base recovery.",
+      "gate": "at-least-90-percent-unassisted-completion",
+      "status": "not-run"
+    },
+    {
+      "id": "delete-local-data",
+      "task": "Find delete-all-local-data, state the removal consequence, and stop before or complete the confirmation intentionally.",
+      "gate": "at-least-90-percent-unassisted-completion",
+      "status": "not-run"
+    }
+  ],
+  "comprehensionGates": [
+    {
+      "id": "local-data-storage",
+      "description": "At least 80% of participants correctly identify where audio, transcripts, training data, and personal models are stored after seeing the relevant workflow.",
+      "status": "not-measured"
+    },
+    {
+      "id": "vocabulary-versus-voice-model",
+      "description": "At least 80% of participants correctly distinguish Vocabulary from Voice model after completing both tasks.",
+      "status": "not-measured"
+    },
+    {
+      "id": "no-hover-required-action",
+      "description": "No participant must discover a required action only by hovering.",
+      "status": "not-measured"
+    }
+  ],
+  "plannedMeasures": [
+    "unassisted completion outcome",
+    "time on task",
+    "clicks or keyboard steps",
+    "wrong turns",
+    "requests for explanation",
+    "unnoticed or unread content",
+    "privacy comprehension",
+    "vocabulary versus voice-model comprehension",
+    "accessibility obstacles",
+    "participant confidence"
+  ],
+  "localSubstituteEvidence": [
+    {
+      "id": "prototype-usability-blocker",
+      "artifact": "docs/research/v0.6-prototype-usability-study.json",
+      "status": "blocked-participants-unavailable",
+      "limitation": "Prototype blocker evidence does not replace the final moderated release usability study."
+    },
+    {
+      "id": "content-budget-accessible-name-gates",
+      "artifact": "docs/planning/v0.6.0-content-budget-accessible-name-gates.json",
+      "status": "pass",
+      "limitation": "Semantic copy and accessible-name checks do not replace observed participant task completion."
+    },
+    {
+      "id": "manual-accessibility-matrix",
+      "artifact": "docs/planning/v0.6.0-manual-accessibility-matrix.json",
+      "status": "pass-with-external-at-limitations",
+      "limitation": "Local accessibility evidence does not replace participant comprehension or task-success evidence."
+    },
+    {
+      "id": "responsive-visual-regression-suite",
+      "artifact": "docs/planning/v0.6.0-responsive-visual-regression-suite.json",
+      "status": "pass",
+      "limitation": "Viewport/state screenshot checks do not replace moderated usability evidence."
+    }
+  ],
+  "gateResults": {
+    "unassistedCompletion90Percent": "not-measured",
+    "zeroUnrecoveredCriticalTaskFailures": "not-measured",
+    "medianFirstTranscriptInteractionsReduced": "not-measured",
+    "localDataStorageComprehension80Percent": "not-measured",
+    "vocabularyVersusVoiceModelComprehension80Percent": "not-measured",
+    "noRequiredActionHoverOnly": "not-measured",
+    "highSeverityFindingsFixedOrAccepted": "not-measured"
+  },
+  "findings": [],
+  "highSeverityFindings": [],
+  "incorporatedChanges": [],
+  "openFollowUps": [
+    {
+      "id": "run-final-release-usability-study",
+      "severity": "release-gate",
+      "status": "open",
+      "owner": "human-study operator",
+      "description": "Run consented moderated final-candidate sessions covering first transcript, vocabulary, enrollment, training, export, import, and delete-data tasks."
+    },
+    {
+      "id": "record-release-decision-if-study-remains-blocked",
+      "severity": "release-gate",
+      "status": "open",
+      "owner": "release decision maker",
+      "description": "If participant sessions remain unavailable, record an explicit release decision before tagging v0.6.0; do not claim usability gates passed."
+    }
+  ],
+  "releaseDecision": {
+    "mayMergeThisEvidencePr": true,
+    "mayCloseIssue255": false,
+    "mayCloseOverallUsabilityGate": false,
+    "rationale": "Issue #255 requires final moderated release usability evidence. This artifact records the evidence gap only and must not be treated as a completed study.",
+    "requiredBeforeClosingIssue255": "Add consented participant evidence for the required tasks and comprehension gates, or record an explicit human release decision that accepts the missing evidence while keeping claims accurate."
+  }
+}
