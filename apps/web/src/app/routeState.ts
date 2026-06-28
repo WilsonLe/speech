@@ -274,7 +274,7 @@ const appRouteSpecs = [
     pattern: '/models/:profileId/export',
     title: 'Export voice model',
     primaryDestinationId: 'models',
-    headingId: 'personal-models-title',
+    headingId: 'model-export-title',
     queryKeys: ['returnTo'],
     scrollRestoration: 'reset-on-new-task',
     stateSource: 'domain-storage',

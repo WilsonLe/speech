@@ -124,6 +124,16 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(importFlow).toContainText('Unlock when needed');
   await expect(importFlow).toContainText('Validate locally');
   await expect(importFlow).toContainText('Legacy profile JSON import');
+  await page.goto('/models/local-enrollment-profile/export');
+  await expect(page).toHaveURL(/\/models\/local-enrollment-profile\/export$/);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe('model-export-title');
+  const exportFlow = page.locator('section.export-model-flow');
+  await expect(exportFlow).toContainText('Choose contents');
+  await expect(exportFlow).toContainText('Protect file');
+  await expect(exportFlow).toContainText('Recordings and training checkpoints are not included.');
+  await expect(exportFlow).toContainText('Legacy profile export');
   await page.goto('/models/local-enrollment-profile/results');
   await expect(page).toHaveURL(/\/models\/local-enrollment-profile\/results$/);
   await expect

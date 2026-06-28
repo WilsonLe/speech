@@ -20,6 +20,8 @@ import {
   type TrainingJobPromptIdentitySplitSummaryV1,
   type TrainingJobRevisionSummaryV1,
   type PortableSpeechModelImportSmokeContextV1,
+  type PortableSpeechModelExportMode,
+  type PortableSpeechModelExportSummaryV1,
   type PortableSpeechModelImportSmokeResultV1,
   type PortableSpeechModelImportSummaryV1,
   type TrainingJobRevisionVerificationResultV1,
@@ -51,6 +53,15 @@ export type ProfileStoreWorkerRequest =
   | { readonly type: 'ROLLBACK_PROFILE'; readonly requestId: string }
   | { readonly type: 'DEACTIVATE_PROFILE'; readonly requestId: string; readonly profileId: string }
   | { readonly type: 'EXPORT_PROFILE'; readonly requestId: string; readonly profileId: string }
+  | {
+      readonly type: 'EXPORT_PORTABLE_SPEECH_MODEL';
+      readonly requestId: string;
+      readonly profileId: string;
+      readonly exactBaseModel: ExactBaseModelIdentityV1;
+      readonly sourceAppVersion: string;
+      readonly mode?: PortableSpeechModelExportMode;
+      readonly passphrase?: string;
+    }
   | {
       readonly type: 'MIGRATE_SPEECH_PROFILE_MANIFEST_TO_V2';
       readonly requestId: string;
@@ -164,6 +175,15 @@ export type ProfileStoreWorkerResponse =
       readonly persistentStorageGranted: boolean;
       readonly activeState: ActiveEnrollmentProfileStateV1;
       readonly profilePackage: EnrollmentProfileExportPackageV1;
+    }
+  | {
+      readonly type: 'PROFILE_STORE_PORTABLE_EXPORT_COMPLETE';
+      readonly requestId: string;
+      readonly backendKind: ProfileStorageBackendKind;
+      readonly persistentStorageGranted: boolean;
+      readonly activeState: ActiveEnrollmentProfileStateV1;
+      readonly envelopeBytes: ArrayBuffer;
+      readonly summary: PortableSpeechModelExportSummaryV1;
     }
   | {
       readonly type: 'PROFILE_STORE_RENAME_COMPLETE';
@@ -331,6 +351,30 @@ async function handleRequest(message: ProfileStoreWorkerRequest): Promise<void> 
           activeState: await store.getActiveProfileState(),
           profilePackage: await store.exportProfile(message.profileId),
         });
+        return;
+      }
+      case 'EXPORT_PORTABLE_SPEECH_MODEL': {
+        const { store, backendKind, persistentStorageGranted } = await getStoreContext();
+        const exportResult = await store.exportPortableSpeechModel({
+          profileId: message.profileId,
+          exactBaseModel: message.exactBaseModel,
+          sourceAppVersion: message.sourceAppVersion,
+          ...(message.mode === undefined ? {} : { mode: message.mode }),
+          ...(message.passphrase === undefined ? {} : { passphrase: message.passphrase }),
+        });
+        const bytes = exportResult.envelopeBytes.slice().buffer;
+        self.postMessage(
+          {
+            type: 'PROFILE_STORE_PORTABLE_EXPORT_COMPLETE',
+            requestId: message.requestId,
+            backendKind,
+            persistentStorageGranted,
+            activeState: await store.getActiveProfileState(),
+            envelopeBytes: bytes,
+            summary: exportResult.summary,
+          },
+          [bytes],
+        );
         return;
       }
       case 'MIGRATE_SPEECH_PROFILE_MANIFEST_TO_V2': {
