@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.6.0",
+  "artifact": "manual-accessibility-matrix",
+  "generatedAt": "2026-06-28T19:30:00.000Z",
+  "purpose": "Record manual and assisted accessibility evidence for the task-first v0.6.0 UI release without storing personal speech data or binary screenshots.",
+  "privacy": {
+    "usesSyntheticFixturesOnly": true,
+    "storesPersonalAudio": false,
+    "storesTranscripts": false,
+    "storesPrivateVocabulary": false,
+    "storesScreenshots": false,
+    "networkTelemetryAdded": false
+  },
+  "localAutomatedEvidence": {
+    "command": "pnpm --filter @speech/web exec playwright test manual-accessibility-matrix.spec.ts --project=chromium",
+    "browser": "Playwright Chromium",
+    "hostLimitation": "Linux container cannot run Windows NVDA, Microsoft Edge, macOS Safari, or VoiceOver; those rows are documented as accepted external limitations with substitute local evidence.",
+    "checks": [
+      {
+        "id": "axe-critical-serious-required-routes",
+        "status": "pass",
+        "description": "Axe-core scan on required route/state fixtures has zero critical or serious violations."
+      },
+      {
+        "id": "keyboard-focus-chromium",
+        "status": "pass",
+        "description": "Tab order reaches primary navigation and route controls with no keyboard trap and no obscured focused element in Chromium."
+      },
+      {
+        "id": "forced-colours-chromium",
+        "status": "pass",
+        "description": "Forced-colours mode preserves focus visibility, labels, route operation, and no horizontal overflow on required routes."
+      },
+      {
+        "id": "two-hundred-percent-text-scaling",
+        "status": "pass",
+        "description": "A 200% root text-scale smoke confirms required routes remain operable without page-level horizontal overflow."
+      },
+      {
+        "id": "live-region-restraint",
+        "status": "pass",
+        "description": "Visible live-region text is short, status-oriented, and does not wrap the transcript editor or full route contents."
+      },
+      {
+        "id": "no-hover-only-required-actions",
+        "status": "pass",
+        "description": "Required primary actions remain keyboard-focusable controls or labelled file inputs; tooltip/hover text is not required for completion."
+      }
+    ]
+  },
+  "assistiveTechnologyMatrix": [
+    {
+      "id": "keyboard-only-chrome",
+      "environment": "Chrome-compatible keyboard-only path in Playwright Chromium on Linux",
+      "requiredByPlan": "keyboard-only use in Chrome",
+      "status": "pass",
+      "evidence": [
+        "keyboard-focus-chromium",
+        "axe-critical-serious-required-routes",
+        "no-hover-only-required-actions"
+      ],
+      "acceptedLimitations": []
+    },
+    {
+      "id": "keyboard-only-edge",
+      "environment": "Microsoft Edge keyboard-only on Windows",
+      "requiredByPlan": "keyboard-only use in Edge",
+      "status": "accepted-limitation",
+      "evidence": ["keyboard-focus-chromium", "axe-critical-serious-required-routes"],
+      "acceptedLimitations": [
+        "Microsoft Edge is not available in this Linux container. Edge keyboard verification must be repeated on Windows before final release sign-off; no Edge-specific code path is introduced by v0.6.0."
+      ]
+    },
+    {
+      "id": "nvda-chrome",
+      "environment": "NVDA with current Chrome on Windows",
+      "requiredByPlan": "NVDA with current Chrome on Windows",
+      "status": "accepted-limitation",
+      "evidence": [
+        "axe-critical-serious-required-routes",
+        "keyboard-focus-chromium",
+        "live-region-restraint"
+      ],
+      "acceptedLimitations": [
+        "NVDA and Windows are not available in this Linux container. The matrix records local semantic, keyboard, axe, and live-region evidence; a human NVDA/Chrome pass remains external release evidence."
+      ]
+    },
+    {
+      "id": "nvda-edge",
+      "environment": "NVDA with current Edge on Windows",
+      "requiredByPlan": "NVDA with current Edge on Windows",
+      "status": "accepted-limitation",
+      "evidence": [
+        "axe-critical-serious-required-routes",
+        "keyboard-focus-chromium",
+        "live-region-restraint"
+      ],
+      "acceptedLimitations": [
+        "NVDA, Windows, and Edge are not available in this Linux container. The matrix records local semantic, keyboard, axe, and live-region evidence; a human NVDA/Edge pass remains external release evidence."
+      ]
+    },
+    {
+      "id": "voiceover-safari-macos",
+      "environment": "VoiceOver with Safari on macOS for general UI compatibility",
+      "requiredByPlan": "VoiceOver with Safari on macOS general UI compatibility",
+      "status": "accepted-limitation",
+      "evidence": [
+        "axe-critical-serious-required-routes",
+        "keyboard-focus-chromium",
+        "live-region-restraint"
+      ],
+      "acceptedLimitations": [
+        "macOS Safari and VoiceOver are not available in this Linux container. The matrix records local semantic, keyboard, axe, and live-region evidence; a human VoiceOver/Safari pass remains external release evidence."
+      ]
+    },
+    {
+      "id": "forced-colours",
+      "environment": "Chromium forced-colours emulation",
+      "requiredByPlan": "Windows High Contrast or forced-colours mode",
+      "status": "pass",
+      "evidence": ["forced-colours-chromium", "keyboard-focus-chromium"],
+      "acceptedLimitations": [
+        "Playwright forced-colours emulation is not a substitute for every Windows High Contrast theme; manual Windows confirmation remains useful before release tagging."
+      ]
+    },
+    {
+      "id": "zoom-text-scaling-200",
+      "environment": "Chromium 200% root text-scale smoke with narrow viewport checks",
+      "requiredByPlan": "200% browser zoom and operating-system text scaling",
+      "status": "pass",
+      "evidence": ["two-hundred-percent-text-scaling", "keyboard-focus-chromium"],
+      "acceptedLimitations": [
+        "The local check applies 200% text scaling and reflow assertions in Chromium; final release can add OS-specific text-scaling confirmation on Windows/macOS."
+      ]
+    }
+  ],
+  "routeFixtures": [
+    "/",
+    "/vocabulary",
+    "/models",
+    "/models/new",
+    "/models/local-enrollment-profile/train",
+    "/models/local-enrollment-profile/results",
+    "/models/import",
+    "/models/local-enrollment-profile/export",
+    "/settings",
+    "/settings/audio",
+    "/settings/storage",
+    "/settings/privacy",
+    "/settings/shortcuts",
+    "/settings/diagnostics",
+    "/about"
+  ],
+  "requiredOutcomes": [
+    "zero critical or serious axe-core violations on required route fixtures",
+    "no keyboard trap on route-level Tab traversal",
+    "no focused element obscured by sticky header, fixed bottom navigation, dialogs, or popovers",
+    "no required action available only by hover or tooltip",
+    "live regions announce concise state changes rather than full transcript or route contents",
+    "external AT limitations are explicit and cannot be mistaken for completed Windows/macOS manual passes"
+  ]
+}

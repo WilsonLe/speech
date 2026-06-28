@@ -36,6 +36,7 @@
     "workbox-window": "^7.4.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.53.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6"
