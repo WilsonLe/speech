@@ -326,6 +326,10 @@ export interface PortableSpeechModelImportSummaryV1 {
     readonly exactCompatibility: true;
   };
   readonly adaptationType: PortableSpeechModelManifestV1['adaptation']['type'];
+  readonly vocabulary: {
+    readonly included: boolean;
+    readonly containsPrivateTerms: false;
+  };
   readonly fileCount: number;
   readonly expandedBytes: number;
   readonly smokeTest: {
@@ -4189,6 +4193,10 @@ function summarizePortableSpeechModelImportRecord(
       exactCompatibility: true,
     },
     adaptationType: record.summary.adaptationType,
+    vocabulary: {
+      included: record.manifest.vocabulary?.included === true,
+      containsPrivateTerms: false,
+    },
     fileCount: record.summary.fileCount,
     expandedBytes: record.summary.expandedBytes,
     smokeTest: {

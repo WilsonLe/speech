@@ -2058,6 +2058,161 @@ button.danger,
   background: var(--speech-color-accent);
 }
 
+.import-model-flow {
+  display: grid;
+  gap: 1rem;
+  margin: 1.25rem 0;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 1.1rem;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.32);
+}
+
+.import-model-flow__header {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.import-model-flow__header .button {
+  width: max-content;
+}
+
+.import-model-flow__header h3,
+.import-model-flow__header p,
+.import-model-card h4,
+.import-model-card p {
+  margin: 0;
+}
+
+.import-model-flow__header h3,
+.import-model-card h4,
+.import-model-details summary {
+  color: #f8fafc;
+}
+
+.import-model-flow__header p,
+.import-model-card p,
+.import-model-details p {
+  color: #cbd5e1;
+}
+
+.import-model-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.import-model-steps li {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  padding: 0.55rem 0.75rem;
+  color: #cbd5e1;
+  font-weight: 800;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.import-model-steps li[data-status='complete'] {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #bbf7d0;
+  background: rgba(22, 101, 52, 0.22);
+}
+
+.import-model-steps li[data-status='current'] {
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #e0f2fe;
+  background: rgba(14, 116, 144, 0.24);
+}
+
+.import-model-steps li[data-status='blocked'] {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.24);
+}
+
+.import-model-card,
+.import-model-details {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  padding: 1rem;
+  scroll-margin-bottom: calc(6rem + env(safe-area-inset-bottom));
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.import-model-card[data-status='error'] {
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
+.import-model-file-button,
+.import-model-card > button {
+  width: max-content;
+}
+
+.import-model-passphrase {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 28rem;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.import-model-passphrase input {
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 0.85rem;
+  padding: 0.8rem 0.9rem;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.82);
+  font: inherit;
+}
+
+.import-model-passphrase input:focus-visible {
+  outline: var(--speech-focus-ring-width) solid var(--speech-focus-ring-color);
+  outline-offset: var(--speech-focus-ring-offset);
+}
+
+.import-model-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.import-model-summary div {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.import-model-summary dt {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.import-model-summary dd {
+  margin: 0.35rem 0 0;
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.import-model-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.import-model-details summary {
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .model-list-row {
   display: grid;
   grid-template-columns: minmax(14rem, 1.3fr) minmax(12rem, 1fr) max-content;
@@ -2771,6 +2926,8 @@ button.danger,
   .model-list-header,
   .model-import-options,
   .create-model-flow__review dl,
+  .import-model-steps,
+  .import-model-summary,
   .model-detail-summary,
   .model-detail-summary__meta,
   .model-detail-metrics,
@@ -2830,6 +2987,7 @@ button.danger,
 
   .vocabulary-entry-editor__heading,
   .create-model-flow,
+  .import-model-flow,
   .model-results-screen,
   .model-detail-panel {
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
@@ -2853,6 +3011,7 @@ button.danger,
   }
 
   .create-model-flow__actions,
+  .import-model-actions,
   .model-list-toolbar,
   .model-list-actions,
   .model-list-meta,
@@ -2887,6 +3046,10 @@ button.danger,
   .profile-card-actions button,
   .model-list-toolbar .speech-button,
   .model-list-toolbar .file-button,
+  .import-model-file-button,
+  .import-model-card > button,
+  .import-model-actions .button,
+  .import-model-actions button,
   .model-list-actions .speech-button,
   .model-list-actions .button,
   .model-result-actions .button,

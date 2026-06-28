@@ -110,8 +110,20 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(page.getByLabel('Personal voice model rows')).toContainText('Generic', {
     timeout: 10_000,
   });
-  await expect(page.getByLabel('Model import options')).toContainText('Import behavior');
-  await expect(page.getByLabel('Import behavior')).toHaveValue('dedupe');
+  await expect(page.getByRole('link', { name: 'Import' })).toHaveAttribute(
+    'href',
+    '/models/import',
+  );
+  await page.getByRole('link', { name: 'Import' }).click();
+  await expect(page).toHaveURL(/\/models\/import$/);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe('model-import-title');
+  const importFlow = page.locator('section.import-model-flow');
+  await expect(importFlow).toContainText('Choose .speechmodel file');
+  await expect(importFlow).toContainText('Unlock when needed');
+  await expect(importFlow).toContainText('Validate locally');
+  await expect(importFlow).toContainText('Legacy profile JSON import');
   await page.goto('/models/local-enrollment-profile/results');
   await expect(page).toHaveURL(/\/models\/local-enrollment-profile\/results$/);
   await expect

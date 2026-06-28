@@ -234,7 +234,7 @@ const appRouteSpecs = [
     pattern: '/models/import',
     title: 'Import voice model',
     primaryDestinationId: 'models',
-    headingId: 'personal-models-title',
+    headingId: 'model-import-title',
     queryKeys: ['returnTo', 'replaceProfileId'],
     scrollRestoration: 'reset-on-new-task',
     stateSource: 'domain-storage',

@@ -8,6 +8,7 @@ import {
   type EnrollmentProfileImportMode,
   type EnrollmentProfileImportResultV1,
   type EnrollmentProfileSummaryV1,
+  type PortableSpeechModelImportSummaryV1,
   type ProfileStorageBackendKind,
 } from '@speech/profile-manager';
 import type { InstalledModelRecord } from '@speech/model-manager';
@@ -17,6 +18,7 @@ import {
   enableEnrollmentProfile,
   exportEnrollmentProfile,
   importEnrollmentProfile,
+  importPortableSpeechModel,
   listEnrollmentProfiles,
   renameEnrollmentProfile,
   rollbackEnrollmentProfile,
@@ -77,6 +79,16 @@ import {
   type PersonalModelTrainingCompanionSummaryV1,
   type PersonalModelTrainingReadinessViewV1,
 } from './personal-models-preflight';
+import {
+  buildPortableImportBaseModelReview,
+  buildPortableImportReview,
+  buildPortableImportStepView,
+  formatPortableImportError,
+  inspectPortableImportEnvelope,
+  type PortableImportBaseModelReviewV1,
+  type PortableImportEnvelopePreviewV1,
+  type PortableImportStepViewV1,
+} from './personal-model-import-flow';
 
 type PersonalModelsStatus =
   | 'loading'
@@ -117,6 +129,17 @@ interface PersonalModelsPreflightState {
   readonly runtimeSelfTest: RuntimeSelfTestUiState;
 }
 
+type PortableImportStatus = 'idle' | 'selected' | 'validating' | 'staged' | 'error';
+
+interface PortableImportUiState {
+  readonly status: PortableImportStatus;
+  readonly envelopeBytes: ArrayBuffer | null;
+  readonly preview: PortableImportEnvelopePreviewV1 | null;
+  readonly passphrase: string;
+  readonly summary: PortableSpeechModelImportSummaryV1 | null;
+  readonly error: string | null;
+}
+
 const initialVocabularySummary = summarizeActiveVocabulary(createDefaultVocabularyStore());
 
 const initialPersonalModelsState: PersonalModelsUiState = {
@@ -143,6 +166,15 @@ const initialPreflightState: PersonalModelsPreflightState = {
     result: null,
     message: getModelReasonCopy('model-runtime-check-idle').message,
   },
+};
+
+const initialPortableImportState: PortableImportUiState = {
+  status: 'idle',
+  envelopeBytes: null,
+  preview: null,
+  passphrase: '',
+  summary: null,
+  error: null,
 };
 
 type CreateModelWizardStep = 'name' | 'speech' | 'mixed' | 'plan' | 'review';
@@ -209,12 +241,16 @@ export function PersonalModelsPanel() {
   const [state, setState] = useState<PersonalModelsUiState>(initialPersonalModelsState);
   const [preflight, setPreflight] = useState<PersonalModelsPreflightState>(initialPreflightState);
   const [importMode, setImportMode] = useState<EnrollmentProfileImportMode>('dedupe');
+  const [portableImport, setPortableImport] = useState<PortableImportUiState>(
+    initialPortableImportState,
+  );
   const [createModelDraft, setCreateModelDraft] = useState<CreateModelDraftV1>(() =>
     loadCreateModelDraft(typeof window === 'undefined' ? null : window.localStorage),
   );
   const [createModelStep, setCreateModelStep] = useState<CreateModelWizardStep>('name');
   const modelLifecycleWorkerRef = useRef<Worker | null>(null);
   const isCreateModelRoute = currentRoute.routeId === 'models-new';
+  const isImportModelRoute = currentRoute.routeId === 'models-import';
   const isTrainingReadinessRoute = currentRoute.routeId === 'model-train';
   const isModelResultsRoute = currentRoute.routeId === 'model-results';
   const routeProfileId = currentRoute.params['profileId'];
@@ -300,6 +336,27 @@ export function PersonalModelsPanel() {
         ...(preferredBaseModelId === undefined ? {} : { preferredModelId: preferredBaseModelId }),
       }),
     [preflight.inspections, preflight.installed, preflight.models, preferredBaseModelId],
+  );
+  const portableImportBaseModel = useMemo(
+    () => buildPortableImportBaseModelReview(preflight.installed),
+    [preflight.installed],
+  );
+  const portableImportSteps = useMemo(
+    () =>
+      buildPortableImportStepView({
+        preview: portableImport.preview,
+        passphrase: portableImport.passphrase,
+        validating: portableImport.status === 'validating',
+        summary: portableImport.summary,
+        error: portableImport.error,
+      }),
+    [
+      portableImport.error,
+      portableImport.passphrase,
+      portableImport.preview,
+      portableImport.status,
+      portableImport.summary,
+    ],
   );
   const readinessTasks = useMemo(
     () => buildPersonalModelReadinessTasks(readinessReport),
@@ -621,6 +678,102 @@ export function PersonalModelsPanel() {
     }
   }
 
+  async function handlePortableImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (file === undefined) return;
+    try {
+      const envelopeBytes = await file.arrayBuffer();
+      const preview = inspectPortableImportEnvelope(new Uint8Array(envelopeBytes), file.name);
+      setPortableImport({
+        status: 'selected',
+        envelopeBytes,
+        preview,
+        passphrase: '',
+        summary: null,
+        error: null,
+      });
+      setState((current) => ({
+        ...current,
+        status: 'ready',
+        message: preview.passphraseRequired
+          ? 'Enter the passphrase to unlock this voice model on this device.'
+          : 'File selected. Validate it locally before import.',
+      }));
+    } catch (error) {
+      setPortableImport({
+        ...initialPortableImportState,
+        status: 'error',
+        error: formatPortableImportError(error),
+      });
+      setState((current) => ({
+        ...current,
+        status: 'error',
+        message: formatPortableImportError(error),
+      }));
+    }
+  }
+
+  async function stagePortableImport() {
+    if (portableImport.envelopeBytes === null || portableImport.preview === null) return;
+    if (portableImportBaseModel.expectedBaseModel === undefined) {
+      const error = portableImportBaseModel.detail;
+      setPortableImport((current) => ({ ...current, status: 'error', error }));
+      setState((current) => ({ ...current, status: 'error', message: error }));
+      return;
+    }
+    if (
+      portableImport.preview.passphraseRequired &&
+      portableImport.passphrase.trim().length === 0
+    ) {
+      const error = 'Enter the passphrase to unlock this voice model.';
+      setPortableImport((current) => ({ ...current, status: 'error', error }));
+      setState((current) => ({ ...current, status: 'error', message: error }));
+      return;
+    }
+    setPortableImport((current) => ({ ...current, status: 'validating', error: null }));
+    setState((current) => ({
+      ...current,
+      status: 'importing',
+      message: 'Validating this voice model locally. Nothing is active yet.',
+    }));
+    try {
+      const result = await importPortableSpeechModel({
+        envelopeBytes: portableImport.envelopeBytes.slice(0),
+        expectedBaseModel: portableImportBaseModel.expectedBaseModel,
+        overwriteExisting: false,
+        timeoutMs: 60_000,
+        ...(portableImport.preview.passphraseRequired
+          ? { passphrase: portableImport.passphrase }
+          : {}),
+      });
+      setPortableImport({
+        ...portableImport,
+        status: 'staged',
+        envelopeBytes: null,
+        passphrase: '',
+        summary: result.summary,
+        error: null,
+      });
+      await refreshPersonalModels({
+        nextMessage: 'Import checks passed. Review the staged voice model before using it.',
+      });
+    } catch (error) {
+      const message = formatPortableImportError(error);
+      setPortableImport((current) => ({ ...current, status: 'error', error: message }));
+      setState((current) => ({ ...current, status: 'error', message }));
+    }
+  }
+
+  function resetPortableImport() {
+    setPortableImport(initialPortableImportState);
+    setState((current) => ({
+      ...current,
+      status: 'ready',
+      message: 'Choose a local .speechmodel file to import.',
+    }));
+  }
+
   async function duplicateProfile(profileId: string, displayName: string) {
     setState((current) => ({
       ...current,
@@ -768,6 +921,22 @@ export function PersonalModelsPanel() {
           onUpdateDraft={updateCreateModelDraft}
           step={createModelStep}
         />
+      ) : isImportModelRoute ? (
+        <ImportModelFlowPanel
+          baseModelReview={portableImportBaseModel}
+          importMode={importMode}
+          importState={portableImport}
+          isBusy={isBusy}
+          onFileChange={(event) => void handlePortableImportFile(event)}
+          onImportLegacyProfile={(event) => void importProfile(event)}
+          onPassphraseChange={(passphrase) =>
+            setPortableImport((current) => ({ ...current, passphrase, error: null }))
+          }
+          onReset={resetPortableImport}
+          onStage={() => void stagePortableImport()}
+          onUpdateImportMode={setImportMode}
+          steps={portableImportSteps}
+        />
       ) : isTrainingReadinessRoute ? (
         <TrainingReadinessPanel
           capabilityChecks={capabilityChecks}
@@ -793,33 +962,13 @@ export function PersonalModelsPanel() {
                 <a className="button secondary" href="/models/new">
                   New
                 </a>
-                <label className="secondary file-button">
+                <a className="button secondary" href="/models/import">
                   Import
-                  <input
-                    type="file"
-                    accept="application/json,.json,.speechprofile"
-                    onChange={(event) => void importProfile(event)}
-                    disabled={isBusy}
-                  />
-                </label>
+                </a>
               </div>
             </div>
 
-            <div className="model-import-options" aria-label="Model import options">
-              <label className="select-field compact-select">
-                <span>Import behavior</span>
-                <select
-                  value={importMode}
-                  onChange={(event) =>
-                    setImportMode(event.currentTarget.value as EnrollmentProfileImportMode)
-                  }
-                  disabled={isBusy}
-                >
-                  <option value="dedupe">Dedupe</option>
-                  <option value="import-as-new">Import as new</option>
-                  <option value="replace">Replace match</option>
-                </select>
-              </label>
+            <div className="model-list-toolbar" aria-label="Model refresh action">
               <button
                 type="button"
                 className="secondary"
@@ -930,6 +1079,204 @@ export function PersonalModelsPanel() {
         Models privacy: aggregate counts only; no raw audio, transcript text, training data, model
         files, vocabulary terms, or vocabulary item identifiers are displayed.
       </p>
+    </section>
+  );
+}
+
+function ImportModelFlowPanel({
+  baseModelReview,
+  importMode,
+  importState,
+  isBusy,
+  onFileChange,
+  onImportLegacyProfile,
+  onPassphraseChange,
+  onReset,
+  onStage,
+  onUpdateImportMode,
+  steps,
+}: {
+  readonly baseModelReview: PortableImportBaseModelReviewV1;
+  readonly importMode: EnrollmentProfileImportMode;
+  readonly importState: PortableImportUiState;
+  readonly isBusy: boolean;
+  readonly onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  readonly onImportLegacyProfile: (event: ChangeEvent<HTMLInputElement>) => void;
+  readonly onPassphraseChange: (passphrase: string) => void;
+  readonly onReset: () => void;
+  readonly onStage: () => void;
+  readonly onUpdateImportMode: (mode: EnrollmentProfileImportMode) => void;
+  readonly steps: readonly PortableImportStepViewV1[];
+}) {
+  const review =
+    importState.summary === null ? null : buildPortableImportReview(importState.summary);
+  const canStage =
+    importState.preview !== null &&
+    baseModelReview.expectedBaseModel !== undefined &&
+    !isBusy &&
+    importState.status !== 'validating' &&
+    importState.summary === null &&
+    (!importState.preview.passphraseRequired || importState.passphrase.trim().length > 0);
+
+  return (
+    <section className="import-model-flow" aria-labelledby="model-import-title">
+      <div className="import-model-flow__header">
+        <a className="button secondary" href="/models">
+          Back to models
+        </a>
+        <p className="eyebrow">Import voice model</p>
+        <h3 id="model-import-title">Import a voice model</h3>
+        <p>Choose a local .speechmodel file. Validation and smoke tests run on this device.</p>
+      </div>
+
+      <ol className="import-model-steps" aria-label="Import steps">
+        {steps.map((step) => (
+          <li key={step.id} data-status={step.status}>
+            <span>{step.label}</span>
+          </li>
+        ))}
+      </ol>
+
+      <section className="import-model-card" aria-labelledby="import-file-title">
+        <div>
+          <p className="eyebrow">Step 1</p>
+          <h4 id="import-file-title">Choose .speechmodel file</h4>
+          <p>Hostile-file checks begin before archive expansion.</p>
+        </div>
+        <label className="secondary file-button import-model-file-button">
+          Choose file
+          <input
+            type="file"
+            accept=".speechmodel,application/vnd.wilsonle.speechmodel"
+            onChange={onFileChange}
+            disabled={isBusy}
+          />
+        </label>
+        {importState.preview === null ? null : (
+          <dl className="import-model-summary" aria-label="Selected file summary">
+            <div>
+              <dt>File</dt>
+              <dd>{importState.preview.fileName}</dd>
+            </div>
+            <div>
+              <dt>Size</dt>
+              <dd>{importState.preview.sizeLabel}</dd>
+            </div>
+            <div>
+              <dt>Encryption</dt>
+              <dd>{importState.preview.encrypted ? 'Passphrase required' : 'Not encrypted'}</dd>
+            </div>
+          </dl>
+        )}
+      </section>
+
+      <section className="import-model-card" aria-labelledby="import-unlock-title">
+        <div>
+          <p className="eyebrow">Step 2</p>
+          <h4 id="import-unlock-title">Unlock when needed</h4>
+          <p>Passphrases are used for this import only and are not stored.</p>
+        </div>
+        {importState.preview?.passphraseRequired === true ? (
+          <label className="import-model-passphrase" htmlFor="import-model-passphrase">
+            <span>Passphrase</span>
+            <input
+              id="import-model-passphrase"
+              type="password"
+              autoComplete="current-password"
+              value={importState.passphrase}
+              onChange={(event) => onPassphraseChange(event.currentTarget.value)}
+              disabled={isBusy || importState.status === 'staged'}
+            />
+          </label>
+        ) : (
+          <p className="status-message">No passphrase needed for the selected file.</p>
+        )}
+      </section>
+
+      <section className="import-model-card" aria-labelledby="import-validate-title">
+        <div>
+          <p className="eyebrow">Step 3</p>
+          <h4 id="import-validate-title">Validate locally</h4>
+          <p>{baseModelReview.detail}</p>
+        </div>
+        <p className="status-message" data-status={baseModelReview.status}>
+          {baseModelReview.title}
+        </p>
+        <button type="button" onClick={onStage} disabled={!canStage}>
+          {importState.status === 'validating' ? 'Validating…' : 'Validate and stage'}
+        </button>
+        {importState.error === null ? null : <p className="error-message">{importState.error}</p>}
+      </section>
+
+      {review === null ? null : (
+        <section
+          className="import-model-card import-model-review"
+          aria-labelledby="import-review-title"
+        >
+          <div>
+            <p className="eyebrow">Step 4</p>
+            <h4 id="import-review-title">{review.title}</h4>
+            <p>{review.summary}</p>
+          </div>
+          <dl className="import-model-summary" aria-label="Staged voice model review">
+            {review.rows.map((row) => (
+              <div key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="status-message success-message">{review.smokeSummary}</p>
+          <p className="status-message">{review.privacySummary}</p>
+          <div className="import-model-actions">
+            <a className="button" href="/models">
+              Back to models
+            </a>
+            <button type="button" className="secondary" onClick={onReset}>
+              Import another
+            </button>
+          </div>
+        </section>
+      )}
+
+      <details className="import-model-details">
+        <summary>Validation details</summary>
+        <p>
+          Archive parsing, decryption, checksum verification, compatibility checks, smoke tests, and
+          staging run in existing worker/package boundaries.
+        </p>
+        {review === null ? null : <p>{review.technicalSummary}</p>}
+      </details>
+
+      <details className="import-model-details">
+        <summary>Legacy profile JSON import</summary>
+        <p>
+          Use this only for older local profile backups. Portable .speechmodel import is preferred.
+        </p>
+        <label className="select-field compact-select">
+          <span>Import behavior</span>
+          <select
+            value={importMode}
+            onChange={(event) =>
+              onUpdateImportMode(event.currentTarget.value as EnrollmentProfileImportMode)
+            }
+            disabled={isBusy}
+          >
+            <option value="dedupe">Dedupe</option>
+            <option value="import-as-new">Import as new</option>
+            <option value="replace">Replace match</option>
+          </select>
+        </label>
+        <label className="secondary file-button import-model-file-button">
+          Import profile JSON
+          <input
+            type="file"
+            accept="application/json,.json,.speechprofile"
+            onChange={onImportLegacyProfile}
+            disabled={isBusy}
+          />
+        </label>
+      </details>
     </section>
   );
 }
