@@ -1,5 +1,30 @@
 import { expect, test, type Download, type Locator } from '@playwright/test';
 
+test('runs the Audio settings input test with a fake microphone', async ({ page }) => {
+  await page.goto('/settings/audio');
+
+  const audioSettings = page.getByRole('region', { name: 'Audio' });
+  await expect(audioSettings.getByRole('heading', { name: 'Audio' })).toBeVisible();
+  await expect(audioSettings).toContainText('Recording interaction mode');
+  await expect(audioSettings).toContainText('Hold to speak');
+  await expect(audioSettings.getByRole('button', { name: 'Reset calibration' })).toBeDisabled();
+  await expect(audioSettings).not.toContainText('Enrollment recorder');
+
+  await audioSettings.getByRole('button', { name: 'Start input test' }).click();
+  await expect(audioSettings).toContainText('Input test running.', { timeout: 10_000 });
+
+  await audioSettings.getByText('Advanced audio diagnostics').click();
+  const levelDiagnostics = audioSettings.getByLabel('Input level diagnostics');
+  await expect(levelDiagnostics).toContainText('capturing', { timeout: 10_000 });
+  await expect
+    .poll(async () => readMetric(levelDiagnostics, 'Captured chunks'), { timeout: 10_000 })
+    .toBeGreaterThan(0);
+  await expect(levelDiagnostics).toContainText('Worklet sample rate');
+
+  await audioSettings.getByRole('button', { name: 'Stop input test' }).click();
+  await expect(audioSettings).toContainText('Input test stopped.');
+});
+
 test('starts AudioWorklet PCM capture with a fake microphone', async ({ page }) => {
   await page.goto('/');
 

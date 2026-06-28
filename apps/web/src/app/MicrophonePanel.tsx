@@ -177,7 +177,11 @@ const initialProfileStoreState: ProfileStoreUiState = {
   message: 'Checking private enrollment profile storage…',
 };
 
-export function MicrophonePanel() {
+type MicrophonePanelMode = 'enrollment' | 'settings-audio';
+
+export function MicrophonePanel({
+  mode = 'enrollment',
+}: { readonly mode?: MicrophonePanelMode } = {}) {
   const controller = useMemo(() => new MicrophoneCaptureController(), []);
   const workletController = useRef<PcmCaptureWorkletController | null>(null);
   const activeEnrollmentTake = useRef<ActiveEnrollmentTakeBuffer | null>(null);
@@ -269,7 +273,7 @@ export function MicrophonePanel() {
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
+    if (mode === 'settings-audio' || typeof window === 'undefined') return undefined;
     function handleCreateModelDraftUpdate() {
       setEnrollmentLanguage(resolveCreateModelEnrollmentLanguage(window.localStorage));
     }
@@ -277,9 +281,13 @@ export function MicrophonePanel() {
     return () => {
       window.removeEventListener('speech-create-model-draft-updated', handleCreateModelDraftUpdate);
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
+    if (mode === 'settings-audio') {
+      return undefined;
+    }
+
     let cancelled = false;
     setProfileStore(initialProfileStoreState);
     loadEnrollmentProfile({ profileId: defaultProfileId })
@@ -314,7 +322,7 @@ export function MicrophonePanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     return () => {
@@ -429,6 +437,11 @@ export function MicrophonePanel() {
     if (captureSummary.rms > 0) {
       setNormalBaselineRms(captureSummary.rms);
     }
+  }
+
+  function resetCalibration() {
+    setRoomNoiseRms(null);
+    setNormalBaselineRms(null);
   }
 
   function startEnrollmentTake() {
@@ -900,6 +913,208 @@ export function MicrophonePanel() {
       message:
         'Recording enrollment take in memory. Stop and analyze when you finish reading the prompt.',
     });
+  }
+
+  if (mode === 'settings-audio') {
+    const hasCalibration = roomNoiseRms !== null || normalBaselineRms !== null;
+    const inputTestStatusMessage = getInputTestStatusMessage(status, captureSummary.status);
+
+    return (
+      <section className="audio-settings-screen panel" aria-labelledby="audio-settings-title">
+        <div className="section-heading audio-settings-screen__heading">
+          <p className="eyebrow">Settings</p>
+          <h2 id="audio-settings-title">Audio</h2>
+        </div>
+
+        <div className="audio-settings-grid">
+          <article className="audio-settings-card" aria-labelledby="audio-microphone-title">
+            <div>
+              <h3 id="audio-microphone-title">Microphone</h3>
+              <p>Choose browser processing before starting an input test.</p>
+            </div>
+            <fieldset
+              className="toggle-list audio-settings-processing"
+              disabled={status === 'requesting' || status === 'active'}
+            >
+              <legend>Browser audio processing</legend>
+              {toggles.map((toggle) => (
+                <label key={toggle.key}>
+                  <input
+                    type="checkbox"
+                    checked={processing[toggle.key]}
+                    onChange={(event) =>
+                      setProcessing((current) => ({
+                        ...current,
+                        [toggle.key]: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>
+                    <strong>{toggle.label}</strong>
+                    <small>{toggle.description}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <button type="button" className="secondary" onClick={useEnrollmentProcessingDefaults}>
+              Turn browser processing off
+            </button>
+          </article>
+
+          <article className="audio-settings-card" aria-labelledby="audio-mode-title">
+            <div>
+              <h3 id="audio-mode-title">Recording interaction mode</h3>
+              <p>Hold to speak</p>
+            </div>
+            <p className="audio-settings-note">
+              Dictate records while the microphone button or Space key is held.
+            </p>
+          </article>
+
+          <article className="audio-settings-card" aria-labelledby="audio-input-test-title">
+            <div>
+              <h3 id="audio-input-test-title">Input test</h3>
+              <p>{inputTestStatusMessage}</p>
+            </div>
+            <div className="audio-settings-actions" aria-label="Input test controls">
+              <button
+                type="button"
+                onClick={startMicrophoneCheck}
+                disabled={status === 'requesting' || status === 'active'}
+              >
+                {status === 'requesting' ? 'Starting input test' : 'Start input test'}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={stopMicrophoneCheck}
+                disabled={status !== 'active'}
+              >
+                Stop input test
+              </button>
+            </div>
+            {microphoneBlocker ? (
+              <p role="alert" className="status-message error-message">
+                <strong>{microphoneBlocker.headline}.</strong> {microphoneBlocker.message}{' '}
+                {microphoneBlocker.action}
+              </p>
+            ) : null}
+          </article>
+
+          <article className="audio-settings-card" aria-labelledby="audio-calibration-title">
+            <div>
+              <h3 id="audio-calibration-title">Calibration</h3>
+              <p>
+                {hasCalibration
+                  ? 'Local level readings are saved for this session.'
+                  : 'No calibration readings yet.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              onClick={resetCalibration}
+              disabled={!hasCalibration}
+            >
+              Reset calibration
+            </button>
+          </article>
+        </div>
+
+        <details className="audio-settings-advanced">
+          <summary>Advanced audio diagnostics</summary>
+          <div className="audio-settings-advanced__content">
+            <section
+              className="audio-settings-diagnostics-card"
+              aria-label="Actual microphone settings"
+            >
+              <h3>Actual microphone settings</h3>
+              <dl className="probe-list microphone-settings">
+                <div>
+                  <dt>Audio context sample rate</dt>
+                  <dd>{snapshot ? `${snapshot.audioContextSampleRateHz} Hz` : 'not started'}</dd>
+                </div>
+                <div>
+                  <dt>Track sample rate</dt>
+                  <dd>{snapshot?.actualSettings.sampleRate ?? 'not reported'}</dd>
+                </div>
+                <div>
+                  <dt>Channels</dt>
+                  <dd>{snapshot?.actualSettings.channelCount ?? 'not reported'}</dd>
+                </div>
+                <div>
+                  <dt>Echo cancellation</dt>
+                  <dd>{formatSetting(snapshot?.actualSettings.echoCancellation)}</dd>
+                </div>
+                <div>
+                  <dt>Noise suppression</dt>
+                  <dd>{formatSetting(snapshot?.actualSettings.noiseSuppression)}</dd>
+                </div>
+                <div>
+                  <dt>Automatic gain control</dt>
+                  <dd>{formatSetting(snapshot?.actualSettings.autoGainControl)}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section
+              className="audio-settings-diagnostics-card"
+              aria-label="Input level diagnostics"
+            >
+              <h3>Input level diagnostics</h3>
+              <dl className="probe-list microphone-settings">
+                <div>
+                  <dt>Status</dt>
+                  <dd>{captureSummary.status}</dd>
+                </div>
+                <div>
+                  <dt>Captured chunks</dt>
+                  <dd>{captureSummary.chunks}</dd>
+                </div>
+                <div>
+                  <dt>Captured samples</dt>
+                  <dd>{captureSummary.samples}</dd>
+                </div>
+                <div>
+                  <dt>Worklet sample rate</dt>
+                  <dd>
+                    {captureSummary.sampleRateHz
+                      ? `${captureSummary.sampleRateHz} Hz`
+                      : 'not started'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Peak level</dt>
+                  <dd>{captureSummary.peak.toFixed(3)}</dd>
+                </div>
+                <div>
+                  <dt>RMS level</dt>
+                  <dd>{captureSummary.rms.toFixed(3)}</dd>
+                </div>
+                <div>
+                  <dt>Clipping</dt>
+                  <dd>{formatPercent(captureSummary.clippingRatio)}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="audio-settings-diagnostics-card" aria-label="Calibration readings">
+              <h3>Calibration readings</h3>
+              <dl className="probe-list microphone-settings">
+                <div>
+                  <dt>Room noise</dt>
+                  <dd>{roomNoiseRms === null ? 'not set' : formatDb(roomNoiseRms)}</dd>
+                </div>
+                <div>
+                  <dt>Normal voice baseline</dt>
+                  <dd>{normalBaselineRms === null ? 'not set' : formatDb(normalBaselineRms)}</dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+        </details>
+      </section>
+    );
   }
 
   return (
@@ -1594,6 +1809,25 @@ function getAudioContextConstructor(): typeof AudioContext {
     throw new Error('AudioContext is unavailable for enrollment take replay.');
   }
   return AudioContextConstructor;
+}
+
+function getInputTestStatusMessage(
+  microphoneStatus: 'idle' | 'requesting' | 'active' | 'error',
+  captureStatus: WorkletCaptureSummary['status'],
+): string {
+  if (microphoneStatus === 'requesting' || captureStatus === 'loading') {
+    return 'Starting input test…';
+  }
+  if (microphoneStatus === 'active' || captureStatus === 'capturing') {
+    return 'Input test running.';
+  }
+  if (captureStatus === 'stopped') {
+    return 'Input test stopped.';
+  }
+  if (microphoneStatus === 'error' || captureStatus === 'error') {
+    return 'Input test needs attention.';
+  }
+  return 'Start an input test when you want to check this microphone.';
 }
 
 function formatSetting(value: boolean | undefined): string {

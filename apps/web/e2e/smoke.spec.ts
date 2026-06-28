@@ -39,6 +39,25 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(applicationMenu).toContainText('Keyboard shortcuts');
   await expect(applicationMenu).toContainText('Diagnostics');
   await expect(applicationMenu).toContainText('About');
+  await applicationMenu.getByRole('menuitem', { name: 'Settings' }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('settings-title');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Audio' })).toHaveAttribute(
+    'href',
+    '/settings/audio',
+  );
+  await page.getByRole('link', { name: 'Open Audio' }).click();
+  await expect(page).toHaveURL(/\/settings\/audio$/);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe('audio-settings-title');
+  await expect(page.getByRole('heading', { name: 'Audio' })).toBeVisible();
+  await expect(page.getByText('Recording interaction mode')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start input test' })).toBeVisible();
+  await expect(page.getByText('Advanced audio diagnostics')).toBeVisible();
+
+  await appMenu.click();
   await applicationMenu.getByRole('menuitem', { name: 'Diagnostics' }).click();
   await expect(page).toHaveURL(/\/settings\/diagnostics$/);
   await expect
