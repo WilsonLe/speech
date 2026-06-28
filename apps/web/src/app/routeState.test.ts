@@ -29,6 +29,7 @@ describe('v0.6 route migration and navigation guards', () => {
         '/',
         '/vocabulary',
         '/vocabulary/:setId',
+        '/models/import',
         '/models/:profileId/enroll',
         '/models/:profileId/train',
         '/settings/diagnostics',
@@ -59,6 +60,15 @@ describe('v0.6 route migration and navigation guards', () => {
     expect(newModel.headingId).toBe('create-model-flow-title');
     expect(createRouteRestorationPlan(newModel)).toMatchObject({
       headingId: 'create-model-flow-title',
+      scrollRestoration: 'reset-on-new-task',
+    });
+
+    const importRoute = resolveAppRoute({ pathname: '/models/import' });
+    expect(importRoute.routeId).toBe('models-import');
+    expect(importRoute.primaryDestinationId).toBe('models');
+    expect(importRoute.headingId).toBe('model-import-title');
+    expect(createRouteRestorationPlan(importRoute)).toMatchObject({
+      headingId: 'model-import-title',
       scrollRestoration: 'reset-on-new-task',
     });
 

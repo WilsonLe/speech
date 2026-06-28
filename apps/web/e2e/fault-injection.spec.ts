@@ -75,12 +75,26 @@ test.describe('cross-browser personal-model fault injection', () => {
     ).toBeDisabled();
   });
 
-  test('rejects hostile profile imports without echoing private identifiers', async ({ page }) => {
-    await page.goto('/');
+  test('rejects hostile imports without echoing private identifiers', async ({ page }) => {
+    await page.goto('/models/import');
 
-    const personalModels = page.locator('section.personal-models');
+    const importFlow = page.locator('section.import-model-flow');
+    await expect(importFlow.getByRole('heading', { name: 'Import a voice model' })).toBeVisible();
+
+    await importFlow.locator('input[type="file"][accept*=".speechmodel"]').setInputFiles({
+      name: 'hostile.speechmodel',
+      mimeType: 'application/vnd.wilsonle.speechmodel',
+      buffer: Buffer.from('not-a-portable-model-private-profile-id-should-not-render', 'utf8'),
+    });
+    await expect(importFlow.locator('.error-message')).toContainText(
+      'Choose a valid .speechmodel file. No model data was imported.',
+      { timeout: 10_000 },
+    );
+    await expect(importFlow.locator('.error-message')).not.toContainText('private-profile-id');
+
     const hostileProfileId = 'private-profile-id-should-not-render';
-    await personalModels.locator('input[type="file"]').setInputFiles({
+    await importFlow.locator('summary').filter({ hasText: 'Legacy profile JSON import' }).click();
+    await importFlow.locator('input[type="file"][accept*=".speechprofile"]').setInputFiles({
       name: 'hostile.speechprofile.json',
       mimeType: 'application/json',
       buffer: Buffer.from(
@@ -96,9 +110,13 @@ test.describe('cross-browser personal-model fault injection', () => {
       ),
     });
 
-    await expect(personalModels.locator('.error-message')).toBeVisible({ timeout: 10_000 });
-    await expect(personalModels.locator('.error-message')).not.toContainText(hostileProfileId);
-    await expect(personalModels.getByLabel('Personal voice model rows')).toContainText('Generic');
+    const legacyImportError = page.locator(
+      'section.personal-models > p.status-message.error-message',
+    );
+    await expect(legacyImportError).toBeVisible({ timeout: 10_000 });
+    await expect(legacyImportError).not.toContainText(hostileProfileId);
+    await page.goto('/models');
+    await expect(page.getByLabel('Personal voice model rows')).toContainText('Generic');
   });
 
   test('covers profile export/import, activation, rollback, and deletion under fake media', async ({
@@ -113,15 +131,18 @@ test.describe('cross-browser personal-model fault injection', () => {
     await deleteStoredProfileIfPresent(page, profileStore);
     const exportedProfilePath = await saveOneAcceptedTakeAndExport(page, profileStore);
 
-    const personalModels = page.locator('section.personal-models');
+    let personalModels = page.locator('section.personal-models');
     await personalModels.getByRole('button', { name: 'Refresh' }).click();
     await expect(personalModels.getByLabel('Personal voice model rows')).toContainText(
       'Local enrollment profile',
       { timeout: 10_000 },
     );
-    await personalModels.getByLabel('Import behavior').selectOption('import-as-new');
-    await personalModels
-      .locator('.model-list-toolbar input[type="file"]')
+    await page.goto('/models/import');
+    const importFlow = page.locator('section.import-model-flow');
+    await importFlow.locator('summary').filter({ hasText: 'Legacy profile JSON import' }).click();
+    await importFlow.getByLabel('Import behavior').selectOption('import-as-new');
+    await importFlow
+      .locator('input[type="file"][accept*=".speechprofile"]')
       .setInputFiles(exportedProfilePath);
     await expect(
       personalModels.getByText(
@@ -129,6 +150,8 @@ test.describe('cross-browser personal-model fault injection', () => {
       ),
     ).toBeVisible({ timeout: 10_000 });
 
+    await page.goto('/models');
+    personalModels = page.locator('section.personal-models');
     const profileRows = personalModels
       .locator('.model-list-row')
       .filter({ hasText: 'Local enrollment profile' });

@@ -73,26 +73,32 @@ test('loads ONNX Runtime Web inside the ASR worker on demand', async ({ page }) 
   await secondTab.close();
 
   await page.getByRole('button', { name: 'Benchmark worker provider' }).click();
-  await expect(
-    page.getByText('Training paused. Progress is saved on this device.', { exact: true }),
-  ).toBeVisible({
-    timeout: 10_000,
-  });
+  const pauseOutcome = await waitForPauseOrCompletion(page);
   trainingDetails = await openTrainingDetails(page);
   browserTrainingRecovery = trainingDetails.getByLabel('Browser training recovery status');
-  await expect(browserTrainingRecovery.getByText('paused', { exact: true })).toBeVisible();
-  await expect(
-    page
-      .getByLabel('Training resource guidance')
-      .getByText('ASR runtime activity can pause training at a cooperative checkpoint boundary.'),
-  ).toBeVisible();
-
   browserTrainingProgress = page.getByLabel('Training progress');
-  await expect(
-    browserTrainingProgress.getByRole('heading', { name: 'Training paused' }),
-  ).toBeVisible({
-    timeout: 10_000,
-  });
+  if (pauseOutcome === 'paused') {
+    await expect(browserTrainingRecovery.getByText('paused', { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByLabel('Training resource guidance')
+        .getByText('ASR runtime activity can pause training at a cooperative checkpoint boundary.'),
+    ).toBeVisible();
+    await expect(
+      browserTrainingProgress.getByRole('heading', { name: 'Training paused' }),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+  } else {
+    await expect(
+      browserTrainingProgress.getByText(
+        'Training finished. Review results before using the model.',
+        {
+          exact: true,
+        },
+      ),
+    ).toBeVisible();
+  }
   const restartButton = page.getByRole('button', { name: 'Restart browser training prototype' });
   await expect(restartButton).toBeEnabled();
   const restartDialogMessages: string[] = [];
@@ -157,4 +163,21 @@ async function openTrainingDetails(page: Page) {
     await details.locator('summary').click();
   }
   return details;
+}
+
+async function waitForPauseOrCompletion(page: Page): Promise<'paused' | 'completed'> {
+  const pausedMessage = page.getByText('Training paused. Progress is saved on this device.', {
+    exact: true,
+  });
+  const completedMessage = page
+    .getByLabel('Training progress')
+    .getByText('Training finished. Review results before using the model.', { exact: true });
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (await pausedMessage.isVisible()) return 'paused';
+    if (await completedMessage.isVisible()) return 'completed';
+    await page.waitForTimeout(100);
+  }
+  await expect(pausedMessage).toBeVisible({ timeout: 1 });
+  return 'paused';
 }

@@ -64,9 +64,10 @@ describe('App', () => {
     expect(html).toContain('Required checks');
     expect(html).toContain('Advisory checks');
     expect(html).toContain('Personal voice model rows');
-    expect(html).toContain('Model import options');
-    expect(html).toContain('Dedupe');
-    expect(html).toContain('Import as new');
+    expect(html).toContain('href="/models/import"');
+    expect(html).not.toContain('Model import options');
+    expect(html).not.toContain('Dedupe');
+    expect(html).not.toContain('Import as new');
     expect(html).toContain('Offline and updates');
     expect(html).toContain('Offline is normal after app files and the speech model are installed.');
     expect(html).toContain('Model lifecycle details');
