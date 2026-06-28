@@ -124,6 +124,22 @@ describe('v0.6 route migration and navigation guards', () => {
       stateSource: 'static',
     });
 
+    const diagnostics = resolveAppRoute({ pathname: '/settings/diagnostics' });
+    expect(diagnostics.routeId).toBe('settings-diagnostics');
+    expect(diagnostics.headingId).toBe('diagnostics-title');
+    expect(createRouteRestorationPlan(diagnostics)).toMatchObject({
+      headingId: 'diagnostics-title',
+      stateSource: 'domain-storage',
+    });
+
+    const about = resolveAppRoute({ pathname: '/about' });
+    expect(about.routeId).toBe('about');
+    expect(about.headingId).toBe('about-title');
+    expect(createRouteRestorationPlan(about)).toMatchObject({
+      headingId: 'about-title',
+      stateSource: 'static',
+    });
+
     const training = resolveAppRoute({
       pathname: '/models/profile.local/train',
       search: '?jobId=job-1&returnTo=/models/profile.local',
@@ -156,6 +172,7 @@ describe('v0.6 route migration and navigation guards', () => {
     expect(resolveAppRoute({ pathname: '/', hash: '#shortcuts-title' }).href).toBe(
       '/settings/shortcuts',
     );
+    expect(resolveAppRoute({ pathname: '/', hash: '#about-title' }).href).toBe('/about');
     expect(
       resolveAppRoute({ pathname: '/', hash: '#vocabulary-title', search: '?setId=medical' }).href,
     ).toBe('/vocabulary/medical');

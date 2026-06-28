@@ -294,7 +294,7 @@ test('Dictate performance parity smoke records aggregate UI and ASR-limitation e
 });
 
 test('benchmark export covers MVP timing, queue, RTF, and privacy metrics', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/settings/diagnostics');
   await page.getByRole('button', { name: /run synthetic benchmark/i }).click();
   await expect(page.getByText(/benchmark complete/i)).toBeVisible({ timeout: 15_000 });
 

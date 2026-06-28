@@ -117,6 +117,22 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => document.activeElement?.id))
     .toBe('diagnostics-title');
+  await expect(page.getByRole('heading', { name: 'Diagnostics', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Browser and capabilities' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy diagnostics' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download support bundle' })).toBeVisible();
+
+  await appMenu.click();
+  await applicationMenu.getByRole('menuitem', { name: 'About' }).click();
+  await expect(page).toHaveURL(/\/about$/);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('about-title');
+  await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+  await expect(page.getByText('Version', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'WilsonLe/speech' })).toHaveAttribute(
+    'href',
+    'https://github.com/WilsonLe/speech',
+  );
+  await expect(page.getByRole('heading', { name: 'Update state' })).toBeVisible();
 
   const primaryNav = page.getByRole('navigation', { name: 'Primary destinations' }).first();
   await primaryNav.getByRole('link', { name: 'Vocabulary' }).click();
@@ -218,7 +234,8 @@ test('renders the task-first PWA shell', async ({ page }) => {
   await expect(resultScreen).toContainText('Personal speech');
   await expect(resultScreen).toContainText('General speech');
   await expect(resultScreen.getByLabel('Quality checks')).toContainText('Required checks');
-  await expect(page.getByRole('heading', { name: /offline and updates/i })).toBeVisible();
+  await page.goto('/settings/diagnostics');
+  await expect(page.getByRole('heading', { name: 'Diagnostics', exact: true })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: /benchmark and diagnostics export/i }),
   ).toBeVisible();
