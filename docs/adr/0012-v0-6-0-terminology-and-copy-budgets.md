@@ -16,6 +16,8 @@ Commit the approved terminology map and copy-budget contract at:
 
 - `docs/planning/v0.6.0-terminology-copy-budgets.json`
 
+Together with `docs/planning/v0.6.0-copy-deletion-pass.json` and the README's v0.6 component/content references, this contract is the release content style guide for task-first UI copy.
+
 The terminology contract maps the default UI terms used by ordinary workflows:
 
 | Technical concept          | Default UI term        | Technical details may use  |
@@ -56,7 +58,7 @@ This ADR does not change any model, profile, vocabulary, training, import/export
 
 ## Consequences
 
-- Future v0.6 implementation issues must use `docs/planning/v0.6.0-terminology-copy-budgets.json` as the source of truth for default UI terminology and copy-budget checks.
+- Future v0.6 implementation and documentation issues must use `docs/planning/v0.6.0-terminology-copy-budgets.json` as the source of truth for default UI terminology and copy-budget checks.
 - Static validation in `training/tests/test_v0_6_terminology_copy_budgets.py` keeps the terminology map, copy budgets, exception process, and ADR references in sync.
 - Copy-budget automation can start with critical surfaces and grow as route implementations land; until then, issue-level reviews must document exceptions manually.
 - Default UI copy can be shorter without removing expert diagnostics, because technical terms remain available in explicitly advanced or diagnostic locations.

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "title": "Current state for wilsonle/speech",
+  "asOf": "2026-06-29",
+  "status": "v0.6.0 documentation candidate; release gates still open",
+  "packageVersion": "0.5.0",
+  "plannedRelease": "v0.6.0",
+  "lineage": ["v0.5.0-browser-personal-models", "v0.6.0-minimal-ui-ux"],
+  "informationArchitecture": {
+    "persistentPrimaryDestinations": ["Dictate", "Vocabulary", "Models"],
+    "appMenuDestinations": [
+      "Settings",
+      "Storage",
+      "Privacy",
+      "Keyboard shortcuts",
+      "Diagnostics",
+      "About"
+    ],
+    "defaultRoute": "/",
+    "noDashboardOrMarketingHome": true
+  },
+  "workflows": {
+    "dictate": "Install required speech model in place, record by holding microphone button or Space, edit transcript locally, and use menu actions for download/clear.",
+    "vocabulary": "Compact set list with on/off state, word counts, search, basic word editor, and Advanced disclosure for steering/diagnostics.",
+    "models": "Compact voice-model list, focused create/enroll/train/results/import/export/storage workflows, and detail accordions for optional evidence.",
+    "settings": "Settings index routes Audio, Storage, Privacy, Keyboard shortcuts, Diagnostics, and About behind the app menu.",
+    "diagnostics": "Dense aggregate diagnostics and redacted support bundle live only on /settings/diagnostics."
+  },
+  "contractsPreserved": [
+    "local-first privacy and no telemetry by default",
+    "worker ownership for inference, training, import/export, hashing, and storage lifecycle",
+    "model-pack, vocabulary, profile, adapter, portable-bundle, and route-migration compatibility contracts",
+    "offline app-shell and model lifecycle semantics"
+  ],
+  "schemas": {
+    "uiPreferences": "UiPreferencesV1 stored separately at speech:ui-preferences:v1",
+    "speechModelExport": "Encrypted .speechmodel export is worker-owned and excludes recordings/training checkpoints",
+    "legacyProfileExport": "Legacy .speechprofile export remains under details because it may include sensitive enrollment data"
+  },
+  "evidence": {
+    "semanticCopyAccessibleNameGates": "docs/planning/v0.6.0-content-budget-accessible-name-gates.json",
+    "responsiveVisualMatrix": "docs/planning/v0.6.0-responsive-visual-regression-suite.json",
+    "manualAccessibilityMatrix": "docs/planning/v0.6.0-manual-accessibility-matrix.json",
+    "documentationScreenshots": "docs/planning/v0.6.0-documentation-screenshots.json",
+    "prototypeUsability": "docs/research/v0.6-prototype-usability-study.json",
+    "releaseUsability": "docs/research/v0.6-release-usability-study.json"
+  },
+  "openReleaseGates": [
+    "Issue #255 remains open for final moderated release-usability participant evidence or explicit human release decision.",
+    "Production accuracy/performance claims remain bounded by ADR 0004 and ADR 0005 until evidence exists.",
+    "Publication/update/offline restart/rollback verification remains for later v0.6 release issues."
+  ],
+  "nextPlanningInstruction": "Plan only the user's next requested delta against this current state, preserve the open release-evidence gates, and write a successor snapshot when that delta completes.",
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false
+  }
+}

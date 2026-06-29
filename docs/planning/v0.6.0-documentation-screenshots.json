@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "issue": 256,
+  "title": "v0.6.0 documentation screenshots",
+  "captureDate": "2026-06-29",
+  "appVersionAtCapture": "0.5.0",
+  "releaseCandidate": "v0.6.0-minimal-ui-ux",
+  "screenshotPolicy": {
+    "committedScreenshots": false,
+    "committedArtifact": "metadata-only manifest",
+    "localRoot": "/tmp/speech-v0.6-docs-256/screenshots",
+    "reason": "Avoid binary repository growth and private-data risk while documenting regenerated final UI screenshots."
+  },
+  "privacy": {
+    "usesSyntheticBrowserStateOnly": true,
+    "includesParticipantData": false,
+    "includesAudio": false,
+    "includesTranscripts": false,
+    "includesVocabularyTerms": false,
+    "includesProfileArtifacts": false,
+    "includesModelWeights": false,
+    "includesScreenshotsInRepository": false
+  },
+  "viewports": [
+    {
+      "id": "desktop",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "mobile",
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "entries": [
+    {
+      "id": "desktop-dictate-setup",
+      "route": "/",
+      "title": "Dictate setup",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-dictate-setup.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-dictate-setup.png",
+      "bytes": 713792,
+      "sha256": "0b023339de4d010cb18371449a02121981f6c59826e47389726990ae86d0caa9"
+    },
+    {
+      "id": "desktop-vocabulary-list",
+      "route": "/vocabulary",
+      "title": "Vocabulary sets",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-vocabulary-list.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-vocabulary-list.png",
+      "bytes": 712918,
+      "sha256": "8eb18be6caabefa601d876c21e7f6e4a9e2d96fbb07efee7dae6dad41b39aae6"
+    },
+    {
+      "id": "desktop-models-list",
+      "route": "/models",
+      "title": "Voice models",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-models-list.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-models-list.png",
+      "bytes": 722927,
+      "sha256": "ab386073f04cd710305ada5e0d0fe36b1f05ec2a487225648bb2e7ace00732cd"
+    },
+    {
+      "id": "desktop-settings-index",
+      "route": "/settings",
+      "title": "Settings",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-settings-index.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-settings-index.png",
+      "bytes": 122149,
+      "sha256": "fd5f479a1118705b3c1517d668fb8abb3ab55247ef26adae5929e908fb42c20f"
+    },
+    {
+      "id": "desktop-storage",
+      "route": "/settings/storage",
+      "title": "Storage",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-storage.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-storage.png",
+      "bytes": 122576,
+      "sha256": "c8797d0bcb80f600a2ea126ccaf1d2c7751c0291c4fb49f5d12d5f21bfec15ae"
+    },
+    {
+      "id": "desktop-privacy",
+      "route": "/settings/privacy",
+      "title": "Privacy",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-privacy.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-privacy.png",
+      "bytes": 152353,
+      "sha256": "254f2eec0589d27c8ee1cbd54c69502d5670cc23a2ff97d64c1ef214528d688e"
+    },
+    {
+      "id": "desktop-diagnostics",
+      "route": "/settings/diagnostics",
+      "title": "Diagnostics",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-diagnostics.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-diagnostics.png",
+      "bytes": 179751,
+      "sha256": "9b68eadbc570babdd55e2171de185477d5555fc46cc627f1eb6907dd3bd0bb3d"
+    },
+    {
+      "id": "desktop-about",
+      "route": "/about",
+      "title": "About",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 900,
+      "element": "main",
+      "fileName": "desktop-about.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/desktop-about.png",
+      "bytes": 116478,
+      "sha256": "7d9247a4e41fb4f16f13be640bb3dbd5cbf53aca4f9fc3522a1041458cc14d45"
+    },
+    {
+      "id": "mobile-dictate-setup",
+      "route": "/",
+      "title": "Dictate setup",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-dictate-setup.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-dictate-setup.png",
+      "bytes": 699135,
+      "sha256": "abb8a4db36a1326f6b91faa915ff3f10a943a554c9e4a178e820aa974b889936"
+    },
+    {
+      "id": "mobile-vocabulary-list",
+      "route": "/vocabulary",
+      "title": "Vocabulary sets",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-vocabulary-list.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-vocabulary-list.png",
+      "bytes": 695565,
+      "sha256": "11674ea4a4c01a5ee0269588aa2cc691fe131046c401b696abf4595017e1b5e8"
+    },
+    {
+      "id": "mobile-models-list",
+      "route": "/models",
+      "title": "Voice models",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-models-list.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-models-list.png",
+      "bytes": 706309,
+      "sha256": "dbfbd3fed7a31e4d31aeeece02de7ac646a97c5d26a999cb18032526ed8ae88e"
+    },
+    {
+      "id": "mobile-settings-index",
+      "route": "/settings",
+      "title": "Settings",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-settings-index.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-settings-index.png",
+      "bytes": 115199,
+      "sha256": "4f6c6357ac71e808b62b687311d1b32b5612b5b56f0836b3b3ac2deec5f6b043"
+    },
+    {
+      "id": "mobile-storage",
+      "route": "/settings/storage",
+      "title": "Storage",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-storage.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-storage.png",
+      "bytes": 126239,
+      "sha256": "bf6394f8e1f0aa3748e6168f851109316a0e48b6fdc4fe86fe57b921677cdaec"
+    },
+    {
+      "id": "mobile-privacy",
+      "route": "/settings/privacy",
+      "title": "Privacy",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-privacy.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-privacy.png",
+      "bytes": 164961,
+      "sha256": "2a2ff22f18c3997fd01015712a1cbbb2f363bcf10d35ab5e3adc6b192f8965f1"
+    },
+    {
+      "id": "mobile-diagnostics",
+      "route": "/settings/diagnostics",
+      "title": "Diagnostics",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-diagnostics.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-diagnostics.png",
+      "bytes": 175418,
+      "sha256": "80f2ec874a29931ca00cfc543c3a9d02a58c34abd922aaa8fa66531a342ee6cf"
+    },
+    {
+      "id": "mobile-about",
+      "route": "/about",
+      "title": "About",
+      "viewport": "mobile",
+      "width": 390,
+      "height": 844,
+      "element": "main",
+      "fileName": "mobile-about.png",
+      "localPath": "/tmp/speech-v0.6-docs-256/screenshots/mobile-about.png",
+      "bytes": 118178,
+      "sha256": "1c96955f035959eaa0e94819a7290248f859e0144db78d944924db3b50519321"
+    }
+  ],
+  "validation": {
+    "staticTest": "training/tests/test_v0_6_documentation_screenshots.py",
+    "note": "PNG files are local /tmp artifacts and may be regenerated; only checksums and metadata are committed."
+  },
+  "guideMap": {
+    "userGuide": ["README.md#user-guide"],
+    "privacyGuide": [
+      "README.md#privacy-and-local-data",
+      "docs/instructions/privacy-data.instructions.md"
+    ],
+    "modelTrainingGuide": [
+      "README.md#models",
+      "docs/instructions/personalization.instructions.md",
+      "docs/instructions/profile-trainer-docker.instructions.md"
+    ],
+    "contributorUiGuide": [
+      "CONTRIBUTING.md#v06-ui-contribution-guide",
+      "docs/instructions/architecture.instructions.md"
+    ],
+    "componentUseGuide": [
+      "README.md#component-use-and-content-style-guides",
+      "docs/adr/0014-v0-6-0-component-gallery-and-usage-docs.md",
+      "docs/planning/v0.6.0-component-gallery-contract.json"
+    ],
+    "contentStyleGuide": [
+      "README.md#component-use-and-content-style-guides",
+      "docs/adr/0012-v0-6-0-terminology-and-copy-budgets.md",
+      "docs/planning/v0.6.0-terminology-copy-budgets.json",
+      "docs/planning/v0.6.0-copy-deletion-pass.json"
+    ]
+  }
+}

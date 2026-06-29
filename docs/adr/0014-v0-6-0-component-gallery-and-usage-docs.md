@@ -9,7 +9,7 @@
 
 v0.6.0 adds repository-owned UI primitives and needs a way to inspect their behaviour, accessibility coverage, and usage rules before those primitives are used across task-first screens. The gallery must not become a production destination, an onboarding screen, or a source of domain fixtures.
 
-The current production application default path must remain focused on Dictate and existing v0.5 capabilities until the route/shell issues intentionally replace it.
+The production application default path is now the task-first Dictate workspace, with Vocabulary and Models as the other persistent primary destinations. The gallery remains a development-only inspection tool and must not become a production help center or onboarding screen.
 
 ## Decision
 
@@ -33,7 +33,7 @@ The committed gallery contract is `docs/planning/v0.6.0-component-gallery-contra
 - Primitive changes must update the shared `@speech/ui/testing` examples and the gallery contract/tests together.
 - Gallery examples stay synthetic and task-focused. They must not import domain workers, storage, audio, archive, encryption, profile, transcript, model, or private vocabulary fixtures.
 - Required privacy terms, destructive consequences, recovery actions, blockers, and primary task instructions must not be documented as tooltip/menu/toast/collapsed-panel-only content.
-- The gallery may be used for local development and review, but not as a production route, marketing page, or user-facing help center.
+- The gallery may be used for local development and review, but not as a production route, marketing page, user-facing help center, or replacement for the README/component-use guide.
 - Any future Storybook-equivalent replacement must preserve the same nonproduction, privacy, accessibility, and bundle-impact guarantees before removing this route.
 
 ## Validation
