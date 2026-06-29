@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "issue": 258,
+  "release": "v0.6.0",
+  "title": "v0.6.0 release publication checklist",
+  "status": "prepared-before-publication",
+  "approvedWithOpenGates": {
+    "releaseUsabilityIssue": 255,
+    "approvedByUserInSession": true,
+    "decision": "Publish v0.6.0 while keeping #255 open for participant evidence.",
+    "mustNotCloseIssue255FromThisChecklist": true
+  },
+  "preTagChecks": [
+    "Release PR merges to clean main.",
+    "Required CI checks pass on the release PR and clean main commit.",
+    "All package versions are 0.6.0.",
+    "Static validation confirms release notes, successor snapshot, #255 checklist, and privacy flags.",
+    "Full local validation passes: pnpm lint && pnpm format-check && pnpm typecheck && pnpm test && pnpm build && pnpm chromium-smoke."
+  ],
+  "publicationSteps": [
+    "Create annotated tag v0.6.0 from clean main after CI passes.",
+    "Generate web dist archive from tagged commit: speech-web-v0.6.0-dist.tar.gz.",
+    "Generate SHA256SUMS.txt for release assets.",
+    "Create GitHub release v0.6.0 with notes that preserve #255, ADR 0004, and ADR 0005 limitations.",
+    "Deploy or verify production Vercel URL for the tagged release commit.",
+    "Verify HTTPS app load, service worker registration, offline reload after first load, COOP/COEP/CSP/Permissions-Policy headers, update activation, and rollback instructions on production URL.",
+    "Close issue #258 only after GitHub release and deployment verification evidence are recorded.",
+    "Do not close issue #255 unless participant evidence or an explicit separate human decision updates that issue."
+  ],
+  "postPublicationEvidenceToRecord": {
+    "tagCommit": null,
+    "githubReleaseUrl": null,
+    "distArchiveSha256": null,
+    "sha256SumsSha256": null,
+    "productionUrl": null,
+    "vercelDeploymentUrl": null,
+    "verifiedHeaders": [],
+    "offlineReloadVerified": false,
+    "rollbackInstructionsVerified": false
+  },
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false
+  }
+}

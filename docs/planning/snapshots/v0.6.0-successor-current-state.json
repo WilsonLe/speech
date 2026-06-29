@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "title": "v0.6.0 successor current-state snapshot",
+  "release": "v0.6.0-minimal-ui-ux",
+  "status": "Ready for tag and publication after #258 release PR merges and CI passes.",
+  "currentStatePath": "docs/planning/CURRENT_STATE.json",
+  "lineage": [
+    "docs/planning/snapshots/v0.5.0-current-state-archive.json",
+    "docs/planning/snapshots/v0.6.0-documentation-candidate-snapshot.json",
+    "docs/planning/CURRENT_STATE.json"
+  ],
+  "appIdea": "A local-first installable browser PWA for Vietnamese/English dictation, vocabulary steering, guided voice enrollment, browser-side personal-model training, encrypted voice-model portability, offline use, and privacy-preserving diagnostics.",
+  "informationArchitecture": {
+    "primaryDestinations": ["Dictate", "Vocabulary", "Models"],
+    "appMenuScreens": [
+      "Settings",
+      "Storage",
+      "Privacy",
+      "Keyboard shortcuts",
+      "Diagnostics",
+      "About"
+    ],
+    "defaultTaskSurface": "Dictate",
+    "settingsAndDiagnosticsAreNotPrimaryDestinations": true
+  },
+  "workflowSummary": {
+    "dictate": "Immediate task surface with in-place model setup, hold-to-speak recording, editable transcript, hidden low-frequency actions, and disclosed technical details.",
+    "vocabulary": "Compact set list and editor with Advanced disclosure for steering/tokenization details.",
+    "models": "Compact model list, model detail accordions, create/enroll/train/results/import/export routes, and storage/deletion controls.",
+    "enrollment": "One prompt at a time with safe Whisper/Normal/Loud labels and concise recovery feedback.",
+    "training": "Blocker-first readiness plus Preparing/Training/Checking/Ready progress with technical details disclosed.",
+    "portability": "Dedicated encrypted .speechmodel import/export routes with worker-owned validation/crypto/archive handling.",
+    "settingsStoragePrivacyDiagnostics": "Dedicated app-menu screens keep low-frequency data-management, privacy, shortcuts, dense diagnostics, and About content outside primary task flows."
+  },
+  "contracts": {
+    "inference": "Existing ASR worker, decoder, formatter, stable-prefix, finalization, WebGPU/WASM fallback, and mock model CI contracts remain intact.",
+    "personalization": "Enrollment, quality analysis, profile storage, adapter training prototype, evaluation, activation, rollback, and multi-profile contracts remain intact.",
+    "portability": "Encrypted portable model envelope, manifest, hostile-file import validation, exact compatibility, and worker-owned archive/crypto contracts remain intact.",
+    "privacySecurity": "No telemetry, no accounts, local-first data, redacted diagnostics, safe links/return targets, no private artifacts in committed evidence."
+  },
+  "schemas": {
+    "uiPreferencesV1": "Additive UI-only storage at speech:ui-preferences:v1; excluded from .speechmodel exports.",
+    "coreDomainSchemas": "Model manifest, profile manifest, vocabulary, portable model, training jobs, feature shards, and worker protocols remain compatible with v0.5 domain data."
+  },
+  "verifiedEvidence": [
+    "docs/planning/v0.6.0-content-budget-accessible-name-gates.json",
+    "docs/planning/v0.6.0-responsive-visual-regression-suite.json",
+    "docs/planning/v0.6.0-manual-accessibility-matrix.json",
+    "docs/planning/v0.6.0-documentation-screenshots.json",
+    "docs/planning/v0.6.0-update-offline-rollback-verification.json",
+    "docs/planning/v0.6.0-release-notes.json",
+    "docs/planning/v0.6.0-release-publication-checklist.json"
+  ],
+  "blockedOrAcceptedLimitations": [
+    "Issue #255 remains open for release-usability participant evidence; the user explicitly approved publishing v0.6.0 while keeping this gate open.",
+    "ADR 0004 and ADR 0005 still block production accuracy and reference-hardware performance claims.",
+    "Manual Windows/macOS assistive-technology rows remain accepted limitations until run outside the Linux agent environment."
+  ],
+  "instructionsForNextPlanningAgent": [
+    "Use docs/planning/CURRENT_STATE.json as the cumulative current state.",
+    "Plan only the user's next requested delta instead of re-planning v0.6.0.",
+    "Do not close #255 unless aggregate participant evidence or a separate explicit human decision updates docs/research/v0.6-release-usability-study.json.",
+    "After any future delta, write another successor snapshot with privacy-safe aggregate evidence only."
+  ],
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false
+  }
+}

@@ -6,7 +6,7 @@ Local-first Vietnamese/English speech-to-text PWA with private voice-model workf
 
 ## Current status
 
-The current implementation target is the v0.6.0 minimal UI/UX release candidate on package version `0.5.0` until the release tag is published. It preserves the v0.5.0 speech, enrollment, browser-training, profile, portability, privacy, security, and compatibility contracts while replacing the default interface with focused routes:
+The current implementation target is the v0.6.0 minimal UI/UX release on package version `0.6.0`. It preserves the v0.5.0 speech, enrollment, browser-training, profile, portability, privacy, security, and compatibility contracts while replacing the default interface with focused routes:
 
 - **Dictate** — install the required speech model, record, edit, copy, download, or clear local transcript text.
 - **Vocabulary** — create sets, enable/disable them, add words, and use Advanced only for steering and diagnostics.
@@ -71,7 +71,7 @@ Open the dev server and use the app menu to reach Settings, Storage, Privacy, Ke
 - Final v0.6 documentation/screenshot manifest: `docs/planning/v0.6.0-documentation-screenshots.json`.
 - Current-state snapshot: `docs/planning/CURRENT_STATE.json`.
 - v0.5 archive snapshot: `docs/planning/snapshots/v0.5.0-current-state-archive.json`.
-- v0.6 documentation-candidate snapshot: `docs/planning/snapshots/v0.6.0-documentation-candidate-snapshot.json`.
+- v0.6 successor snapshot: `docs/planning/snapshots/v0.6.0-successor-current-state.json`.
 
 Screenshot PNGs are captured locally under `/tmp` and are not committed. The manifest records route, viewport, local path, byte size, dimensions, and checksum using synthetic/fake browser state only.
 
@@ -165,11 +165,11 @@ The previous release line was v0.5.0 browser Personal Voice Model infrastructure
 - `docs/adr/0006-v0-5-0-privacy-security-licensing-review.md` — v0.5 privacy/security/licensing review.
 - `docs/adr/0007-v0-5-0-release-notes-and-planning-snapshot.md` — v0.5 release notes and follow-on planning snapshot.
 
-v0.6 documentation must also keep the release-usability gate open until issue #255 has consented participant evidence or an explicit human release decision. Synthetic fixtures, CI smoke tests, local diagnostics, semantic tests, and visual screenshots are regression evidence only; they are not substitutes for production quality, performance, or usability evidence.
+v0.6 documentation must keep the release-usability gate open until issue #255 has consented participant evidence or a separate explicit human release decision. Synthetic fixtures, CI smoke tests, local diagnostics, semantic tests, and visual screenshots are regression evidence only; they are not substitutes for production quality, performance, or usability evidence. To verify #255, follow `docs/planning/v0.6.0-issue-255-verification-checklist.json` and update the release-usability research artifact with aggregate participant results only.
 
 ## Known limitations
 
-- v0.6.0 release-usability evidence is blocked until participant sessions or an explicit release decision resolve issue #255.
+- v0.6.0 release-usability participant evidence remains open in issue #255. The v0.6.0 release may be published under the explicit human release decision recorded for #258, but closing #255 still requires aggregate participant evidence or a separate explicit decision recorded in `docs/research/v0.6-release-usability-study.json`.
 - v0.5.0 does not yet publish user-approved 30-speaker bilingual cohort evidence; do not claim production Personal Voice Model accuracy or quality gates pass until ADR 0004 is resolved.
 - v0.5.0 does not yet publish declared reference-hardware Personal Voice Model benchmark evidence; do not claim production memory, storage, latency, RTF, export/import, offline, or zero-network performance gates pass until ADR 0005 is resolved.
 - Synthetic fixtures, CI smoke tests, local diagnostics, semantic tests, and contract tests are regression evidence only.

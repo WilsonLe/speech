@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-EXPECTED_VERSION = "0.5.0"
+EXPECTED_CURRENT_VERSION = "0.6.0"
 
 
 def read_text(relative_path: str) -> str:
@@ -23,14 +23,14 @@ def package_json_paths() -> list[Path]:
     ]
 
 
-def test_v0_5_workspace_versions_are_aligned() -> None:
+def test_current_workspace_versions_are_aligned_after_v0_6_bump() -> None:
     versions = {
         path.relative_to(ROOT).as_posix(): json.loads(path.read_text(encoding="utf-8"))["version"]
         for path in package_json_paths()
     }
 
     assert versions
-    assert set(versions.values()) == {EXPECTED_VERSION}
+    assert set(versions.values()) == {EXPECTED_CURRENT_VERSION}
 
 
 def test_v0_5_release_snapshot_records_claim_boundaries() -> None:

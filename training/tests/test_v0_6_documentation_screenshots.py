@@ -28,7 +28,7 @@ def test_documentation_screenshot_manifest_is_metadata_only_and_complete() -> No
 
     assert manifest["schemaVersion"] == 1
     assert manifest["issue"] == 256
-    assert manifest["releaseCandidate"] == "v0.6.0-minimal-ui-ux"
+    assert manifest["releaseCandidate"] == "v0.6.0"
     assert manifest["screenshotPolicy"]["committedScreenshots"] is False
     assert manifest["screenshotPolicy"]["committedArtifact"] == "metadata-only manifest"
     assert str(manifest["screenshotPolicy"]["localRoot"]).startswith("/tmp/")
@@ -99,8 +99,8 @@ def test_current_state_and_snapshots_preserve_release_gate_boundaries() -> None:
     archive = read_json(V0_5_ARCHIVE)
     candidate = read_json(V0_6_CANDIDATE)
 
-    assert current["plannedRelease"] == "v0.6.0"
-    assert current["packageVersion"] == "0.5.0"
+    assert current["currentRelease"] == "v0.6.0-minimal-ui-ux"
+    assert current["packageVersion"] == "0.6.0"
     assert current["informationArchitecture"]["persistentPrimaryDestinations"] == [
         "Dictate",
         "Vocabulary",
@@ -119,8 +119,8 @@ def test_current_state_and_snapshots_preserve_release_gate_boundaries() -> None:
     assert candidate["release"] == "v0.6.0-minimal-ui-ux"
     assert candidate["currentStatePath"] == "docs/planning/CURRENT_STATE.json"
     assert candidate["screenshotsPath"] == "docs/planning/v0.6.0-documentation-screenshots.json"
+    assert "superseded" in "\n".join(candidate["notReleaseCompleteBecause"]).lower()
     assert "Issue #255" in "\n".join(candidate["notReleaseCompleteBecause"])
-    assert "issue #257" in "\n".join(candidate["notReleaseCompleteBecause"])
     assert "issue #258" in "\n".join(candidate["notReleaseCompleteBecause"])
 
 
@@ -131,11 +131,11 @@ def test_public_docs_match_v0_6_ui_without_overclaiming_release_evidence() -> No
     components_adr = read_text(ADR_COMPONENTS)
 
     for phrase in [
-        "v0.6.0 minimal UI/UX release candidate",
+        "v0.6.0 minimal UI/UX release",
         "**Dictate**, **Vocabulary**, and **Models**",
         "Encrypted `.speechmodel` export is the default",
         "Screenshot PNGs are captured locally under `/tmp` and are not committed",
-        "v0.6 documentation must also keep the release-usability gate open until issue #255",
+        "v0.6 documentation must keep the release-usability gate open until issue #255",
         "v0.5.0 browser Personal Voice Model infrastructure",
         "do not claim production Personal Voice Model accuracy",
         "do not claim production memory, storage, latency",
