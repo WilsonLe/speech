@@ -130,7 +130,12 @@ def test_vercel_csp_remains_exact_for_model_download_hotfix() -> None:
         if directive.strip().startswith("connect-src ")
     )
 
-    assert connect_src == ["'self'", "https://huggingface.co"]
+    assert connect_src == [
+        "'self'",
+        "https://huggingface.co",
+        "https://us.aws.cdn.hf.co",
+    ]
     assert "https:" not in connect_src
     assert "https://*.huggingface.co" not in connect_src
+    assert "https://*.hf.co" not in connect_src
     assert "*" not in connect_src

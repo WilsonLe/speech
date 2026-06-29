@@ -8,6 +8,11 @@ ROOT = Path(__file__).resolve().parents[2]
 VERCEL_CONFIG = ROOT / "vercel.json"
 MODEL_PACKS_DIR = ROOT / "apps" / "web" / "public" / "model-packs"
 
+# Hugging Face /resolve URLs for the committed model pack currently redirect
+# large Xet-backed files to this exact CDN origin. Keep this explicit rather
+# than allowing wildcard hf.co/CDN hosts.
+REQUIRED_MODEL_REDIRECT_ORIGINS = {"https://us.aws.cdn.hf.co"}
+
 REQUIRED_DIRECT_ROUTES = [
     "/about",
     "/settings/audio",
@@ -88,13 +93,15 @@ def test_vercel_keeps_security_headers_with_spa_fallback() -> None:
 
 
 def test_vercel_csp_allows_only_committed_installable_model_origins() -> None:
-    origins = installable_model_file_origins()
-    assert origins == {"https://huggingface.co"}
+    manifest_origins = installable_model_file_origins()
+    assert manifest_origins == {"https://huggingface.co"}
+
+    required_origins = manifest_origins | REQUIRED_MODEL_REDIRECT_ORIGINS
 
     csp = get_vercel_headers()["Content-Security-Policy"]
     connect_src = get_csp_directive(csp, "connect-src")
 
-    for origin in origins:
+    for origin in required_origins:
         assert origin in connect_src
 
     assert "'self'" in connect_src
@@ -102,3 +109,4 @@ def test_vercel_csp_allows_only_committed_installable_model_origins() -> None:
     assert "https:" not in connect_src
     assert "http:" not in connect_src
     assert "https://*.huggingface.co" not in connect_src
+    assert "https://*.hf.co" not in connect_src
