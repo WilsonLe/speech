@@ -43,12 +43,13 @@
     "manualAccessibilityMatrix": "docs/planning/v0.6.0-manual-accessibility-matrix.json",
     "documentationScreenshots": "docs/planning/v0.6.0-documentation-screenshots.json",
     "prototypeUsability": "docs/research/v0.6-prototype-usability-study.json",
-    "releaseUsability": "docs/research/v0.6-release-usability-study.json"
+    "releaseUsability": "docs/research/v0.6-release-usability-study.json",
+    "updateOfflineRollback": "docs/planning/v0.6.0-update-offline-rollback-verification.json"
   },
   "openReleaseGates": [
     "Issue #255 remains open for final moderated release-usability participant evidence or explicit human release decision.",
     "Production accuracy/performance claims remain bounded by ADR 0004 and ADR 0005 until evidence exists.",
-    "Publication/update/offline restart/rollback verification remains for later v0.6 release issues."
+    "GitHub release, checksums, deployment, and production alias verification remain for issue #258."
   ],
   "nextPlanningInstruction": "Plan only the user's next requested delta against this current state, preserve the open release-evidence gates, and write a successor snapshot when that delta completes.",
   "privacy": {
