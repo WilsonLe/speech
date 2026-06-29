@@ -1,6 +1,6 @@
 {
   "name": "@speech/context-bias",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Vocabulary schemas, token automata, and bounded contextual bias scoring.",
   "type": "module",

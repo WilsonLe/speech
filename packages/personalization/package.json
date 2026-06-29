@@ -1,6 +1,6 @@
 {
   "name": "@speech/personalization",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Speaker profile, personal/anchor evaluation, bilingual cohort release gates, activation decisions, adapter runtime, browser-vs-Python comparison, and residual/LHUC personalization contracts.",
   "type": "module",

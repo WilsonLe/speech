@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-EXPECTED_CURRENT_VERSION = "0.6.1"
+EXPECTED_CURRENT_VERSION = "0.6.2"
 
 
 def read_text(relative_path: str) -> str:

@@ -1,7 +1,7 @@
 {
   "name": "speech",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Local-first Vietnamese/English streaming speech-to-text PWA with private voice personalization",
   "license": "Apache-2.0",
   "type": "module",
