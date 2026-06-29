@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "title": "v0.6.0 documentation-candidate snapshot",
+  "release": "v0.6.0-minimal-ui-ux",
+  "status": "Documentation and screenshot candidate before release publication.",
+  "currentStatePath": "docs/planning/CURRENT_STATE.json",
+  "screenshotsPath": "docs/planning/v0.6.0-documentation-screenshots.json",
+  "documentationUpdated": [
+    "README user guide, privacy guide, model training guide, contributor UI guide, component-use guide, and content-style guide references",
+    "CONTRIBUTING v0.6 UI contribution guidance",
+    "ADR 0012 content-style guidance",
+    "ADR 0014 component-use guidance"
+  ],
+  "notReleaseCompleteBecause": [
+    "Issue #255 release usability participant evidence remains open.",
+    "Update/offline restart/rollback verification belongs to issue #257.",
+    "Tag, release notes, deployment, and successor snapshot publication belong to issue #258."
+  ],
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "title": "Archived v0.5.0 current-state snapshot",
+  "release": "v0.5.0",
+  "source": "README.md before v0.6 documentation refresh plus ADR 0007",
+  "summary": "v0.5.0 browser Personal Voice Model infrastructure with local-first speech, enrollment, vocabulary, browser-training, encrypted portability, privacy, and release guardrails.",
+  "persistentPrimaryDestinations": "v0.5 UI surfaces were feature panels rather than the v0.6 Dictate/Vocabulary/Models shell.",
+  "evidenceBoundaries": [
+    "ADR 0004 blocks production Personal Voice Model accuracy claims without user-approved cohort evidence.",
+    "ADR 0005 blocks production reference-hardware performance claims without declared benchmark evidence.",
+    "Synthetic fixtures, CI smoke tests, diagnostics, and contract tests are regression evidence only."
+  ],
+  "archivePurpose": "Keep a concise v0.5 baseline reference after README and current-state docs move to the v0.6 task-first UI.",
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false
+  }
+}

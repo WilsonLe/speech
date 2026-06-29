@@ -12,3 +12,4 @@ applyTo: '**'
 - Add topic-specific troubleshooting notes only after real debugging work, using `docs/troubleshooting/troubleshoot-*.instructions.md`.
 - Do not commit production model weights, private recordings, speech corpora, transcripts, generated build output, secrets, or unknown-license fixtures.
 - Root community files (`README.md`, `CONTRIBUTING.md`, `SECURITY.md`, etc.) are allowed because GitHub expects them at the repository root; detailed guidance should point into `docs/instructions/`.
+- Structured planning/current-state/screenshot metadata may live under `docs/planning/**/*.json`. Keep it static-tested, privacy-safe, and free of binary screenshot files, production model weights, private speech data, and unverified release claims.
