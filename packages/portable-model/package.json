@@ -1,6 +1,6 @@
 {
   "name": "@speech/portable-model",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Portable per-user .speechmodel manifest, deterministic inner bundle, encrypted binary envelope, CLI residual-adapter compatibility, constrained importer, and hostile-import boundary contracts.",
   "type": "module",

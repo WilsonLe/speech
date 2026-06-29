@@ -1,6 +1,6 @@
 {
   "name": "@speech/enrollment",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Guided enrollment scheduling, CTC forced alignment, quality reporting, prompt-identity splitting, and coverage accounting.",
   "type": "module",
