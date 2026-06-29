@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "issue": 257,
+  "title": "v0.6.0 update, offline restart, and rollback verification",
+  "generatedAt": "2026-06-29T01:37:30.819Z",
+  "status": "local release-candidate verification passed; hosted publication remains for issue #258",
+  "sourceVersions": {
+    "fromRelease": {
+      "tag": "v0.5.0",
+      "commit": "8e72dd120e41e69cc52458804fa8b8804e74b9bc"
+    },
+    "toCandidate": {
+      "branch": "257-verify-update-offline-restart-rollback",
+      "baseCommit": "38b7a0fb975d2a43ee9838d31e8b70fa805fb2fe"
+    }
+  },
+  "method": {
+    "kind": "local same-origin two-version PWA verification",
+    "server": "temporary localhost HTTP server with Vercel-equivalent COOP/COEP/CSP/Permissions-Policy headers",
+    "builds": [
+      "pnpm --filter @speech/web build on the current candidate worktree",
+      "git worktree add --detach /tmp/speech-release-257/v0.5.0 v0.5.0 && pnpm install --frozen-lockfile && pnpm --filter @speech/web build"
+    ],
+    "browser": "Playwright Chromium with service workers enabled",
+    "notes": [
+      "The same localhost origin served v0.5.0, then v0.6.0 candidate, then v0.5.0 again to exercise update and rollback service-worker replacement.",
+      "UiPreferencesV1 was written before update and remained present after update and rollback, proving the additive namespace does not delete domain data or block rollback.",
+      "No model files, audio, transcripts, vocabulary terms, profile artifacts, support bundles, or screenshots were committed."
+    ]
+  },
+  "checks": [
+    {
+      "id": "fresh-v0.5-load",
+      "result": "pass",
+      "evidence": "v0.5.0 app shell loaded from the tagged build on localhost and registered a controlling service worker."
+    },
+    {
+      "id": "v0.5-offline-restart",
+      "result": "pass",
+      "evidence": "With the browser context offline, the precached v0.5.0 app shell reloaded and rendered local-first speech UI text."
+    },
+    {
+      "id": "update-v0.5-to-v0.6-current",
+      "result": "pass",
+      "evidence": "After switching the same origin to the v0.6 candidate build, service-worker update produced a waiting worker, SKIP_WAITING activated it, controllerchange fired, and the task-first Dictate/Vocabulary/Models shell rendered."
+    },
+    {
+      "id": "ui-preferences-additive-after-update",
+      "result": "pass",
+      "evidence": "The namespaced speech:ui-preferences:v1 record survived the update and did not replace domain stores."
+    },
+    {
+      "id": "rollback-v0.6-to-v0.5",
+      "result": "pass",
+      "evidence": "After switching the same origin back to the v0.5.0 build, a waiting service worker activated, controllerchange fired, and the v0.5 app shell rendered again without requiring data deletion."
+    },
+    {
+      "id": "ui-preferences-additive-after-rollback",
+      "result": "pass",
+      "evidence": "The additive UiPreferencesV1 record remained present after rollback, demonstrating rollback-safe ignore semantics for the v0.5 app line."
+    },
+    {
+      "id": "service-worker-update-prompt-contract",
+      "result": "pass",
+      "evidence": "apps/web/src/app/pwa-lifecycle.test.ts verifies update availability is recorded without reloading until activatePwaUpdate() is called explicitly."
+    },
+    {
+      "id": "offline-restart-regression-suite",
+      "result": "pass",
+      "evidence": "apps/web/e2e/offline-model-lifecycle.spec.ts keeps the current candidate offline restart and offline indicator coverage green."
+    }
+  ],
+  "domainCompatibility": {
+    "uiPreferencesV1": "additive and namespaced at speech:ui-preferences:v1",
+    "domainStores": "no destructive migration was run during update or rollback verification",
+    "modelProfileVocabularyStores": "existing v0.5 contracts remain unchanged by this verification issue"
+  },
+  "activeOperationUpdatePrompt": {
+    "result": "pass",
+    "evidence": "The PWA lifecycle records updateAvailable and exposes an explicit Install update action; it does not call the reload callback until activatePwaUpdate() runs. Active recording/training/import/export flows therefore are not interrupted by a passive update notice."
+  },
+  "residualLimitations": [
+    "Hosted production deployment, tag/release publication, production alias checks, and public release checksum publication belong to issue #258.",
+    "Issue #255 remains open for final moderated release-usability participant evidence or an explicit human release decision.",
+    "This evidence uses localhost same-origin release builds rather than Vercel production URLs; it is release-candidate update/rollback evidence, not a production deployment claim."
+  ],
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false,
+    "containsScreenshotsInRepository": false,
+    "containsSupportBundles": false
+  }
+}
