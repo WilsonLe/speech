@@ -1,6 +1,6 @@
 {
   "name": "@speech/audio",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Audio transport primitives: capture controller, ring buffer, fallback buffers, and resampling integration.",
   "type": "module",

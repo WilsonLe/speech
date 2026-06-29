@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "title": "Current state for wilsonle/speech",
   "asOf": "2026-06-29",
-  "status": "v0.6.0 release prepared for publication; #255 usability evidence remains open",
-  "packageVersion": "0.6.0",
-  "currentRelease": "v0.6.0-minimal-ui-ux",
-  "lineage": ["v0.5.0-browser-personal-models", "v0.6.0-minimal-ui-ux"],
+  "status": "v0.6.1 CSP hotfix prepared for publication; #255 usability evidence remains open",
+  "packageVersion": "0.6.1",
+  "currentRelease": "v0.6.1-csp-hotfix",
+  "lineage": ["v0.5.0-browser-personal-models", "v0.6.0-minimal-ui-ux", "v0.6.1-csp-hotfix"],
   "appIdea": "A local-first installable browser PWA for Vietnamese/English dictation, vocabulary steering, guided voice-model enrollment, browser-side personal-model training, encrypted portable voice-model import/export, offline use, and privacy-preserving diagnostics.",
   "informationArchitecture": {
     "persistentPrimaryDestinations": ["Dictate", "Vocabulary", "Models"],
@@ -132,8 +132,8 @@
     "prototypeUsabilityBlocker": "docs/research/v0.6-prototype-usability-study.json",
     "releaseUsabilityBlocker": "docs/research/v0.6-release-usability-study.json",
     "updateOfflineRollback": "docs/planning/v0.6.0-update-offline-rollback-verification.json",
-    "releaseNotes": "docs/planning/v0.6.0-release-notes.json",
-    "releasePublicationChecklist": "docs/planning/v0.6.0-release-publication-checklist.json",
+    "releaseNotes": "docs/planning/v0.6.1-csp-hotfix-release-notes.json",
+    "releasePublicationChecklist": "docs/planning/v0.6.1-release-publication-checklist.json",
     "issue255VerificationChecklist": "docs/planning/v0.6.0-issue-255-verification-checklist.json"
   },
   "intentionalProductBoundaries": [
@@ -144,7 +144,7 @@
   "openReleaseGates": [
     "Issue #255 remains open for final moderated release-usability participant evidence or a separate explicit human release decision that updates the #255 artifact.",
     "Production accuracy/performance claims remain bounded by ADR 0004 and ADR 0005 until evidence exists.",
-    "Publication/deployment evidence is issue #258 work and must be completed on the tagged release commit before closing #258."
+    "Publication/deployment evidence is issue #310 work and must be completed on the tagged v0.6.1 hotfix release commit before closing #310."
   ],
   "nextPlanningInstruction": "Plan only the user's next requested delta against this current state. Preserve #255, ADR 0004, and ADR 0005 evidence limitations unless the user provides the missing evidence or an explicit human decision. After the next delta completes, generate another cumulative successor snapshot.",
   "privacy": {
@@ -154,5 +154,8 @@
     "containsVocabularyTerms": false,
     "containsProfileArtifacts": false,
     "containsModelWeights": false
-  }
+  },
+  "intentionalBoundaries": [
+    "v0.6.1 is a CSP-only patch release over v0.6.0; it does not change UI, model, profile, adapter, portable-bundle, storage, training, or privacy schemas."
+  ]
 }

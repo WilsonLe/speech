@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "issue": 310,
+  "release": "v0.6.1",
+  "title": "v0.6.1 CSP hotfix release publication checklist",
+  "status": "prepared-before-publication",
+  "baseRelease": "v0.6.0",
+  "baseReleaseImmutable": true,
+  "preTagChecks": [
+    "Release-prep PR merges to clean main.",
+    "Required CI checks pass on the release-prep PR and clean main commit.",
+    "All package versions are 0.6.1.",
+    "Static validation confirms v0.6.1 release notes/checklist and v0.6.0 immutability wording.",
+    "Full local validation passes: pnpm lint && pnpm format-check && pnpm typecheck && pnpm test && pnpm build && pnpm chromium-smoke."
+  ],
+  "publicationSteps": [
+    "Create annotated tag v0.6.1 from clean main after CI passes.",
+    "Generate web dist archive from tagged commit: speech-web-v0.6.1-dist.tar.gz.",
+    "Generate SHA256SUMS.txt for release assets.",
+    "Create GitHub release v0.6.1 with notes that preserve #255, ADR 0004, and ADR 0005 limitations.",
+    "Verify production Vercel deployment for the tagged release commit.",
+    "Verify direct-route headers include `connect-src 'self' https://huggingface.co` and that model lifecycle worker fetch is not CSP-blocked.",
+    "Close issue #310 only after GitHub release and deployment verification evidence are recorded.",
+    "Do not close issue #255 unless participant evidence or an explicit separate human decision updates that issue."
+  ],
+  "postPublicationEvidenceToRecord": {
+    "tagCommit": null,
+    "githubReleaseUrl": null,
+    "distArchiveSha256": null,
+    "sha256SumsSha256": null,
+    "productionUrl": null,
+    "vercelDeploymentUrl": null,
+    "verifiedHeaders": [],
+    "modelDownloadCspVerified": false
+  },
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false,
+    "addsTelemetryOrAnalytics": false,
+    "allowsBroadThirdPartyNetwork": false
+  }
+}

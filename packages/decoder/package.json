@@ -1,6 +1,6 @@
 {
   "name": "@speech/decoder",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "RNN-T decoding, stable-prefix control, and contextual-scoring integration.",
   "type": "module",

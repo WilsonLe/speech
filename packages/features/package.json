@@ -1,6 +1,6 @@
 {
   "name": "@speech/features",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Streaming acoustic feature extraction contracts and implementations.",
   "type": "module",

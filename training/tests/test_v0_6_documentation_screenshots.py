@@ -99,8 +99,8 @@ def test_current_state_and_snapshots_preserve_release_gate_boundaries() -> None:
     archive = read_json(V0_5_ARCHIVE)
     candidate = read_json(V0_6_CANDIDATE)
 
-    assert current["currentRelease"] == "v0.6.0-minimal-ui-ux"
-    assert current["packageVersion"] == "0.6.0"
+    assert current["currentRelease"] == "v0.6.1-csp-hotfix"
+    assert current["packageVersion"] == "0.6.1"
     assert current["informationArchitecture"]["persistentPrimaryDestinations"] == [
         "Dictate",
         "Vocabulary",

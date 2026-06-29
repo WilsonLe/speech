@@ -6,12 +6,14 @@ Local-first Vietnamese/English speech-to-text PWA with private voice-model workf
 
 ## Current status
 
-The current implementation target is the v0.6.0 minimal UI/UX release on package version `0.6.0`. It preserves the v0.5.0 speech, enrollment, browser-training, profile, portability, privacy, security, and compatibility contracts while replacing the default interface with focused routes:
+The current implementation target is the v0.6.1 CSP hotfix on package version `0.6.1`, superseding the v0.6.0 minimal UI/UX release without moving the v0.6.0 tag or assets. It preserves the v0.5.0 speech, enrollment, browser-training, profile, portability, privacy, security, and compatibility contracts while keeping the v0.6 task-first interface and fixing production model-download CSP for the explicit **Install model** action:
 
 - **Dictate** — install the required speech model, record, edit, copy, download, or clear local transcript text.
 - **Vocabulary** — create sets, enable/disable them, add words, and use Advanced only for steering and diagnostics.
 - **Models** — create a voice model, record prompts, train/check candidates, activate or roll back, import `.speechmodel`, export encrypted `.speechmodel`, and manage local model data.
 - **Settings menu** — Audio, Storage, Privacy, Keyboard shortcuts, Diagnostics, About, and install/update actions.
+
+v0.6.1 changes only deployment/release metadata around the CSP model-download hotfix. It does not change UI, model-pack, profile, adapter, portable-bundle, storage, training, or privacy schemas.
 
 Production ASR weights, private recordings, speech corpora, and personal profiles are intentionally not committed. The current VietASR catalog entry is a metadata-only external candidate; it is not yet advertised as a low-latency streaming model because its inspected encoder does not expose streaming cache tensors.
 
@@ -169,7 +171,7 @@ v0.6 documentation must keep the release-usability gate open until issue #255 ha
 
 ## Known limitations
 
-- v0.6.0 release-usability participant evidence remains open in issue #255. The v0.6.0 release may be published under the explicit human release decision recorded for #258, but closing #255 still requires aggregate participant evidence or a separate explicit decision recorded in `docs/research/v0.6-release-usability-study.json`.
+- v0.6.0/v0.6.1 release-usability participant evidence remains open in issue #255. The v0.6.1 hotfix may be published as a CSP-only patch over the human-approved v0.6.0 release, but closing #255 still requires aggregate participant evidence or a separate explicit decision recorded in `docs/research/v0.6-release-usability-study.json`.
 - v0.5.0 does not yet publish user-approved 30-speaker bilingual cohort evidence; do not claim production Personal Voice Model accuracy or quality gates pass until ADR 0004 is resolved.
 - v0.5.0 does not yet publish declared reference-hardware Personal Voice Model benchmark evidence; do not claim production memory, storage, latency, RTF, export/import, offline, or zero-network performance gates pass until ADR 0005 is resolved.
 - Synthetic fixtures, CI smoke tests, local diagnostics, semantic tests, and contract tests are regression evidence only.

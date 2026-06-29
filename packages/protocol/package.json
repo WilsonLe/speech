@@ -1,6 +1,6 @@
 {
   "name": "@speech/protocol",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Versioned TypeScript contracts for workers, profiles, manifests, browser training, tools, and tests.",
   "type": "module",
