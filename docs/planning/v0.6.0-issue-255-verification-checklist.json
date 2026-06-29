@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "issue": 255,
+  "title": "How to verify v0.6.0 release usability (#255)",
+  "status": "open-until-participant-evidence-or-separate-human-decision",
+  "purpose": "Describe exactly what the user must do to close #255 without storing private participant material in the repository.",
+  "participantEvidenceRequiredToPass": {
+    "minimumStudy": "Run the final moderated release-usability task study described in docs/research/v0.6-release-usability-study.json.",
+    "tasks": [
+      "first transcript",
+      "enable vocabulary",
+      "continue enrollment",
+      "start ready training",
+      "export a voice model",
+      "import a voice model",
+      "delete local speech data"
+    ],
+    "gates": [
+      "At least 90% unassisted completion for required tasks.",
+      "Zero unrecovered critical task failures among tested participants.",
+      "Median first-transcript interactions reduced relative to v0.5.0 baseline.",
+      "At least 80% of participants correctly identify where audio/model data is stored after relevant workflows.",
+      "At least 80% correctly distinguish Vocabulary from Voice model after completing both tasks.",
+      "No participant must discover a required action only by hovering.",
+      "High-severity usability findings are fixed or explicitly accepted through a documented human release decision."
+    ]
+  },
+  "privacySafeArtifactUpdate": {
+    "update": "Update docs/research/v0.6-release-usability-study.json and docs/research/v0.6-release-usability.md with aggregate results only.",
+    "allowed": [
+      "participant counts by broad cohort category",
+      "aggregate completion percentages",
+      "median interactions or time-on-task",
+      "summarized high-severity findings",
+      "explicit human release decision if accepting unresolved findings"
+    ],
+    "forbidden": [
+      "participant names or contact details",
+      "raw audio",
+      "raw transcripts",
+      "personal vocabulary terms",
+      "profile/model artifacts",
+      "screen recordings or screenshots containing participant data",
+      "private support bundles"
+    ]
+  },
+  "closeIssue255OnlyWhen": [
+    "The aggregate artifact shows all #255 gates pass, or",
+    "A separate explicit human release decision accepts the unresolved gate state and is recorded in the artifact."
+  ],
+  "notSatisfiedBy": [
+    "Automated axe, keyboard, visual, copy-budget, or semantic tests alone.",
+    "The #254 prototype blocker artifact.",
+    "The #258 release publication approval alone, which permits v0.6.0 publication but does not by itself verify #255 participant usability gates."
+  ],
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false
+  }
+}

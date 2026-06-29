@@ -66,7 +66,7 @@ def test_update_offline_rollback_evidence_is_local_privacy_safe_and_gate_aware()
 
 def test_current_state_points_to_update_offline_rollback_evidence() -> None:
     current = read_json(CURRENT_STATE)
-    evidence = current["evidence"]
+    evidence = current["verifiedGates"]
 
     assert (
         evidence["updateOfflineRollback"]
@@ -76,8 +76,8 @@ def test_current_state_points_to_update_offline_rollback_evidence() -> None:
     assert "Issue #255 remains open" in gates
     assert "Production accuracy/performance claims" in gates
     issue_258_gate = (
-        "GitHub release, checksums, deployment, and production alias verification remain "
-        "for issue #258"
+        "Publication/deployment evidence is issue #258 work and must be completed "
+        "on the tagged release commit before closing #258."
     )
     assert issue_258_gate in gates
 

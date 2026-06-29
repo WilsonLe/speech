@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "issue": 256,
-  "title": "v0.6.0 documentation screenshots",
+  "title": "v0.6.0 release documentation screenshots",
   "captureDate": "2026-06-29",
-  "appVersionAtCapture": "0.5.0",
-  "releaseCandidate": "v0.6.0-minimal-ui-ux",
+  "appVersionAtCapture": "0.6.0",
+  "releaseCandidate": "v0.6.0",
   "screenshotPolicy": {
     "committedScreenshots": false,
     "committedArtifact": "metadata-only manifest",

@@ -2,10 +2,11 @@
   "schemaVersion": 1,
   "title": "Current state for wilsonle/speech",
   "asOf": "2026-06-29",
-  "status": "v0.6.0 documentation candidate; release gates still open",
-  "packageVersion": "0.5.0",
-  "plannedRelease": "v0.6.0",
+  "status": "v0.6.0 release prepared for publication; #255 usability evidence remains open",
+  "packageVersion": "0.6.0",
+  "currentRelease": "v0.6.0-minimal-ui-ux",
   "lineage": ["v0.5.0-browser-personal-models", "v0.6.0-minimal-ui-ux"],
+  "appIdea": "A local-first installable browser PWA for Vietnamese/English dictation, vocabulary steering, guided voice-model enrollment, browser-side personal-model training, encrypted portable voice-model import/export, offline use, and privacy-preserving diagnostics.",
   "informationArchitecture": {
     "persistentPrimaryDestinations": ["Dictate", "Vocabulary", "Models"],
     "appMenuDestinations": [
@@ -14,44 +15,138 @@
       "Privacy",
       "Keyboard shortcuts",
       "Diagnostics",
-      "About"
+      "About",
+      "Install/update when applicable"
     ],
     "defaultRoute": "/",
-    "noDashboardOrMarketingHome": true
+    "noDashboardOrMarketingHome": true,
+    "legacyRoutesRedirected": true
   },
   "workflows": {
-    "dictate": "Install required speech model in place, record by holding microphone button or Space, edit transcript locally, and use menu actions for download/clear.",
-    "vocabulary": "Compact set list with on/off state, word counts, search, basic word editor, and Advanced disclosure for steering/diagnostics.",
-    "models": "Compact voice-model list, focused create/enroll/train/results/import/export/storage workflows, and detail accordions for optional evidence.",
-    "settings": "Settings index routes Audio, Storage, Privacy, Keyboard shortcuts, Diagnostics, and About behind the app menu.",
-    "diagnostics": "Dense aggregate diagnostics and redacted support bundle live only on /settings/diagnostics."
+    "dictate": "The default screen is Dictate. If the required speech model is missing, setup appears in place with install/verify/activate progress and model details disclosed. When ready, the user records by holding the microphone button or Space, edits transcript text locally, and uses the transcript menu for new/download/clear actions.",
+    "vocabulary": "Vocabulary uses a compact set list with search, on/off state, word counts, row menus, basic word editing, and a single Advanced disclosure for steering, category, prompt inclusion, pronunciation/diagnostic tokenization details, and expert controls.",
+    "models": "Models uses a compact voice-model list with state-dependent actions, focused create/enroll/train/results/import/export routes, model detail accordions, blocker-first readiness, four-stage training progress, outcome-first candidate results, and dedicated storage/deletion routes.",
+    "enrollment": "Enrollment is one prompt at a time with current voice condition, progress, one recording control, concise quality feedback, and Recording details for SNR, clipping, VAD, alignment, language, storage, and diagnostics.",
+    "training": "Training readiness shows blockers first; progress uses Preparing, Training, Checking, and Ready stages while epoch/loss/backend/thread/checkpoint details stay disclosed in Training details.",
+    "import": "Import is a dedicated .speechmodel route with choose/unlock/validate/review steps. Hostile-file and archive validation remain worker-owned; incompatible exact-base cases are staged safely and described as requiring the matching speech model.",
+    "export": "Export is a dedicated route that defaults to encrypted .speechmodel export, keeps 'Recordings and training checkpoints are not included' visible, puts manifest/hash/crypto details behind Details, and keeps legacy sensitive profile export advanced-only.",
+    "settings": "Settings is an index behind the application menu with dedicated Audio, Storage, Privacy, Keyboard shortcuts, Diagnostics, and About routes.",
+    "storage": "Storage shows aggregate base-model/profile/training/local-preference sizes and uses dedicated confirmation screens for training-data, one-model, base-model, and all-local-speech-data deletion.",
+    "privacy": "Privacy states that audio, transcripts, training, and personal models stay on this device; export/delete/network-isolation actions are visible and detailed docs are linked.",
+    "diagnostics": "Diagnostics is intentionally dense, grouped by accordions, and exports a redacted support bundle without participant/private data."
   },
-  "contractsPreserved": [
-    "local-first privacy and no telemetry by default",
-    "worker ownership for inference, training, import/export, hashing, and storage lifecycle",
-    "model-pack, vocabulary, profile, adapter, portable-bundle, and route-migration compatibility contracts",
-    "offline app-shell and model lifecycle semantics"
-  ],
+  "progressiveDisclosureRules": {
+    "visibleByDefault": [
+      "current task",
+      "primary action",
+      "required choices",
+      "active recording/training state",
+      "blocking errors",
+      "privacy or destructive consequences at the point they matter",
+      "recovery actions"
+    ],
+    "disclosedByDefault": [
+      "technical metrics",
+      "compatibility hashes and IDs",
+      "runtime versions/providers",
+      "recording-quality measurements",
+      "training loss/epoch/backend/thread data",
+      "benchmark tables",
+      "low-frequency management actions"
+    ],
+    "noNestedAccordions": true,
+    "noRequiredInformationTooltipOnly": true,
+    "noLongFormsInMenusOrDialogs": true
+  },
+  "minimalCopyRules": {
+    "destinations": [
+      "Dictate",
+      "Vocabulary",
+      "Models",
+      "Storage",
+      "Privacy",
+      "Diagnostics",
+      "About"
+    ],
+    "defaultUiAvoidsUnexplainedAcronyms": true,
+    "copyBudgetsEnforcedBy": "docs/planning/v0.6.0-content-budget-accessible-name-gates.json",
+    "copyDeletionPass": "docs/planning/v0.6.0-copy-deletion-pass.json"
+  },
+  "capabilitiesPreserved": {
+    "speech": [
+      "local Vietnamese/English/automatic/mixed-language streaming transcription",
+      "stable committed/provisional transcript rendering",
+      "offline model-pack installation and atomic activation",
+      "WebGPU inference with multithreaded WASM fallback where supported"
+    ],
+    "personalization": [
+      "contextual vocabulary sets with bounded decoder steering",
+      "guided multi-condition enrollment",
+      "quality checks and resumable profile storage",
+      "browser-side frozen-feature personal adapter training prototype",
+      "checkpoint, pause, recovery, comparison, activation, rollback, and multi-profile controls"
+    ],
+    "portability": [
+      "encrypted .speechmodel export/import with hostile-file validation",
+      "exact base-model/tokenizer/graph/adapter compatibility binding",
+      "legacy profile export/import retained behind advanced disclosures"
+    ],
+    "privacySecurityCompatibility": [
+      "no telemetry by default",
+      "no accounts or cloud sync",
+      "personal speech data remains browser-local unless explicitly exported",
+      "support bundles are redacted",
+      "route/deep-link return targets are validated",
+      "large archive parsing, hashing, crypto, storage lifecycle, inference, and training remain worker/package-owned"
+    ]
+  },
+  "uiArchitecture": {
+    "uiPackage": "packages/ui owns semantic tokens, primitives, feedback components, and testing contracts.",
+    "webRoutes": "apps/web/src/app route-state helpers and route-aware panels implement v0.6 paths with legacy redirects.",
+    "featureBoundaries": "UI components call typed controllers/workers and do not import ONNX Runtime, OPFS path logic, archive parsing, cryptography, or raw worker internals directly."
+  },
   "schemas": {
-    "uiPreferences": "UiPreferencesV1 stored separately at speech:ui-preferences:v1",
-    "speechModelExport": "Encrypted .speechmodel export is worker-owned and excludes recordings/training checkpoints",
-    "legacyProfileExport": "Legacy .speechprofile export remains under details because it may include sensitive enrollment data"
+    "uiPreferences": {
+      "name": "UiPreferencesV1",
+      "storageKey": "speech:ui-preferences:v1",
+      "fields": [
+        "schemaVersion",
+        "onboardingRevision",
+        "transcriptTextScale",
+        "reducedMotion",
+        "dismissedHintIds",
+        "lastPrimaryDestination"
+      ],
+      "excludedFromSpeechmodelExports": true
+    },
+    "modelManifest": "Model-pack manifest V3 and browser-training contract remain unchanged by v0.6 UI work.",
+    "profileManifest": "SpeechProfileManifestV2 plus V1 migration remain unchanged by v0.6 UI work.",
+    "portableSpeechModel": "PortableSpeechModelManifestV1 and encrypted envelope remain the .speechmodel portability contract.",
+    "vocabulary": "Vocabulary set/entry schemas remain compatible with v0.5 data and v0.6 UI-only preferences."
   },
-  "evidence": {
-    "semanticCopyAccessibleNameGates": "docs/planning/v0.6.0-content-budget-accessible-name-gates.json",
-    "responsiveVisualMatrix": "docs/planning/v0.6.0-responsive-visual-regression-suite.json",
+  "verifiedGates": {
+    "semanticCopyAccessibleNames": "docs/planning/v0.6.0-content-budget-accessible-name-gates.json",
+    "responsiveVisualRegression": "docs/planning/v0.6.0-responsive-visual-regression-suite.json",
     "manualAccessibilityMatrix": "docs/planning/v0.6.0-manual-accessibility-matrix.json",
     "documentationScreenshots": "docs/planning/v0.6.0-documentation-screenshots.json",
-    "prototypeUsability": "docs/research/v0.6-prototype-usability-study.json",
-    "releaseUsability": "docs/research/v0.6-release-usability-study.json",
-    "updateOfflineRollback": "docs/planning/v0.6.0-update-offline-rollback-verification.json"
+    "prototypeUsabilityBlocker": "docs/research/v0.6-prototype-usability-study.json",
+    "releaseUsabilityBlocker": "docs/research/v0.6-release-usability-study.json",
+    "updateOfflineRollback": "docs/planning/v0.6.0-update-offline-rollback-verification.json",
+    "releaseNotes": "docs/planning/v0.6.0-release-notes.json",
+    "releasePublicationChecklist": "docs/planning/v0.6.0-release-publication-checklist.json",
+    "issue255VerificationChecklist": "docs/planning/v0.6.0-issue-255-verification-checklist.json"
   },
-  "openReleaseGates": [
-    "Issue #255 remains open for final moderated release-usability participant evidence or explicit human release decision.",
-    "Production accuracy/performance claims remain bounded by ADR 0004 and ADR 0005 until evidence exists.",
-    "GitHub release, checksums, deployment, and production alias verification remain for issue #258."
+  "intentionalProductBoundaries": [
+    "No production telemetry, account system, cloud sync, remote support collection, browser extension, native companion, new language/localization, model-quality claim, decorative marketing dashboard, gamification, or generic feature-card home screen was added.",
+    "v0.6.0 is a product/UX and frontend architecture release, not a model-quality release.",
+    "Production Personal Voice Model accuracy and reference-hardware performance claims remain blocked by ADR 0004 and ADR 0005 evidence boundaries."
   ],
-  "nextPlanningInstruction": "Plan only the user's next requested delta against this current state, preserve the open release-evidence gates, and write a successor snapshot when that delta completes.",
+  "openReleaseGates": [
+    "Issue #255 remains open for final moderated release-usability participant evidence or a separate explicit human release decision that updates the #255 artifact.",
+    "Production accuracy/performance claims remain bounded by ADR 0004 and ADR 0005 until evidence exists.",
+    "Publication/deployment evidence is issue #258 work and must be completed on the tagged release commit before closing #258."
+  ],
+  "nextPlanningInstruction": "Plan only the user's next requested delta against this current state. Preserve #255, ADR 0004, and ADR 0005 evidence limitations unless the user provides the missing evidence or an explicit human decision. After the next delta completes, generate another cumulative successor snapshot.",
   "privacy": {
     "containsParticipantData": false,
     "containsAudio": false,

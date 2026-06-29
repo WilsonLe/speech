@@ -13,9 +13,9 @@ const basePwa: PwaLifecycleSnapshot = {
 
 describe('about-screen helpers', () => {
   it('builds source, license, provenance, acknowledgements, and update state without marketing copy', () => {
-    const model = buildAboutScreenModel({ appVersion: '0.5.0', pwa: basePwa });
+    const model = buildAboutScreenModel({ appVersion: '0.6.0', pwa: basePwa });
 
-    expect(model.version).toBe('0.5.0');
+    expect(model.version).toBe('0.6.0');
     expect(model.sourceRepository).toEqual({
       label: 'WilsonLe/speech',
       href: speechSourceRepository,
