@@ -8,6 +8,7 @@ import {
 } from '@speech/audio';
 import { MenuButton, type MenuButtonItem } from '@speech/ui';
 import pcmCaptureWorkletUrl from '../worklets/pcm-capture.worklet.ts?worker&url';
+import { createAsrWorker } from '../workers/asr-worker-client';
 import {
   createModelLifecycleWorker,
   type ModelLifecycleModel,
@@ -26,6 +27,7 @@ import {
 } from './dictate-model-setup';
 import { formatMicrophoneBlockerText } from './microphone-state';
 import {
+  applyTranscriptPartial,
   buildTranscriptDownloadText,
   clearTranscript,
   editTranscriptCommittedText,
@@ -41,7 +43,11 @@ import {
   type TranscriptWorkspaceState,
 } from './transcript-state';
 
-import type { LanguageModeDiagnostics, SpeechLanguageMode } from '@speech/protocol';
+import type {
+  AsrWorkerToMain,
+  LanguageModeDiagnostics,
+  SpeechLanguageMode,
+} from '@speech/protocol';
 
 const pushToTalkKeyLabel = 'Space';
 
@@ -70,6 +76,7 @@ export function TranscriptPanel() {
   const microphoneController = useMemo(() => new MicrophoneCaptureController(), []);
   const workletController = useRef<PcmCaptureWorkletController | null>(null);
   const modelLifecycleWorkerRef = useRef<Worker | null>(null);
+  const asrWorkerRef = useRef<Worker | null>(null);
   const workspaceRef = useRef<TranscriptWorkspaceState>(initialTranscriptWorkspaceState);
   const modelSetupRef = useRef<DictateModelSetupState>(initialDictateModelSetupState);
   const stopRequestedRef = useRef(false);
@@ -151,6 +158,78 @@ export function TranscriptPanel() {
     };
   }, [updateModelSetup]);
 
+  useEffect(() => {
+    if (modelSetup.status !== 'ready') {
+      asrWorkerRef.current?.terminate();
+      asrWorkerRef.current = null;
+      return undefined;
+    }
+
+    const modelId = modelSetup.setupModel?.id;
+    if (modelId === undefined) {
+      return undefined;
+    }
+
+    const worker = createAsrWorker();
+    asrWorkerRef.current = worker;
+    worker.addEventListener('message', handleAsrWorkerMessage);
+    worker.addEventListener('error', handleAsrWorkerError);
+    worker.postMessage({ type: 'INIT', modelId, preferredProvider: 'wasm' });
+    worker.postMessage({ type: 'SET_LANGUAGE_MODE', mode: settings.languageMode });
+
+    function handleAsrWorkerMessage(event: MessageEvent<AsrWorkerToMain>) {
+      const message = event.data;
+      switch (message.type) {
+        case 'PARTIAL':
+          updateWorkspace((current) =>
+            applyTranscriptPartial(current, {
+              committed: message.committed,
+              provisional: message.provisional,
+              emittedAtMs: message.timings.partialEmittedAtMs ?? performance.now(),
+              ...(message.languageSpans !== undefined
+                ? { languageSpans: message.languageSpans }
+                : {}),
+            }),
+          );
+          return;
+        case 'FINAL':
+          updateWorkspace((current) =>
+            finishTranscriptUtterance(current, {
+              text: message.text,
+              endedAtMs: message.timings.finalEmittedAtMs ?? performance.now(),
+              ...(message.languageSpans !== undefined
+                ? { languageSpans: message.languageSpans }
+                : {}),
+            }),
+          );
+          return;
+        case 'ERROR':
+          if (workspaceRef.current.status !== 'idle') {
+            updateWorkspace((current) => failTranscriptCapture(current, message.message));
+          }
+          return;
+        default:
+          return;
+      }
+    }
+
+    function handleAsrWorkerError(event: ErrorEvent) {
+      if (workspaceRef.current.status !== 'idle') {
+        updateWorkspace((current) => failTranscriptCapture(current, event.message));
+      }
+    }
+
+    return () => {
+      worker.postMessage({ type: 'DISPOSE' });
+      worker.removeEventListener('message', handleAsrWorkerMessage);
+      worker.removeEventListener('error', handleAsrWorkerError);
+      worker.terminate();
+      if (asrWorkerRef.current === worker) {
+        asrWorkerRef.current = null;
+      }
+    };
+  }, [modelSetup.setupModel?.id, modelSetup.status, settings.languageMode, updateWorkspace]);
+
   const inspectSetupModel = useCallback(() => {
     const setupModel = modelSetupRef.current.setupModel;
     if (setupModel === null || setupModel.manifestUrl === undefined) return;
@@ -188,13 +267,16 @@ export function TranscriptPanel() {
     const releasedAtMs = performance.now();
     updateWorkspace(markTranscriptStopping);
     try {
+      const utteranceId = workspaceRef.current.utteranceId;
       workletController.current?.stop();
       workletController.current?.dispose();
       workletController.current = null;
       await microphoneController.stop();
-      updateWorkspace((current) =>
-        finishTranscriptUtterance(current, { releasedAtMs, endedAtMs: performance.now() }),
-      );
+      const endedAtMs = performance.now();
+      if (utteranceId !== null) {
+        asrWorkerRef.current?.postMessage({ type: 'END_UTTERANCE', utteranceId, endedAtMs });
+      }
+      updateWorkspace((current) => finishTranscriptUtterance(current, { releasedAtMs, endedAtMs }));
     } finally {
       stoppingRef.current = false;
       stopRequestedRef.current = false;
@@ -216,6 +298,24 @@ export function TranscriptPanel() {
               sampleRateHz: message.sampleRateHz,
             }),
           );
+          {
+            const utteranceId = workspaceRef.current.utteranceId;
+            if (utteranceId !== null) {
+              const pcm = message.pcm.slice(
+                0,
+                message.sampleCount * Float32Array.BYTES_PER_ELEMENT,
+              );
+              asrWorkerRef.current?.postMessage(
+                {
+                  type: 'AUDIO_CHUNK',
+                  utteranceId,
+                  pcm,
+                  sampleRateHz: message.sampleRateHz,
+                },
+                [pcm],
+              );
+            }
+          }
           workletController.current?.releaseTransferredBuffer(message);
           return;
         case 'CAPTURE_ERROR':
@@ -254,12 +354,14 @@ export function TranscriptPanel() {
       });
       workletController.current = captureWorklet;
       captureWorklet.start();
+      const startedAtMs = performance.now();
       updateWorkspace((current) =>
         startTranscriptUtterance(current, {
           utteranceId,
-          startedAtMs: performance.now(),
+          startedAtMs,
         }),
       );
+      asrWorkerRef.current?.postMessage({ type: 'START_UTTERANCE', utteranceId, startedAtMs });
 
       if (stopRequestedRef.current) {
         await stopPushToTalk();
