@@ -1,6 +1,6 @@
 {
   "name": "@speech/formatter",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "private": true,
   "description": "Vietnamese/English normalization, detokenization, punctuation, and ITN.",
   "type": "module",

@@ -99,8 +99,8 @@ def test_current_state_and_snapshots_preserve_release_gate_boundaries() -> None:
     archive = read_json(V0_5_ARCHIVE)
     candidate = read_json(V0_6_CANDIDATE)
 
-    assert current["currentRelease"] == "v0.6.2-cdn-csp-hotfix"
-    assert current["packageVersion"] == "0.6.2"
+    assert current["currentRelease"] == "v0.6.3-real-asr-dictation-hotfix"
+    assert current["packageVersion"] == "0.6.3"
     assert current["informationArchitecture"]["persistentPrimaryDestinations"] == [
         "Dictate",
         "Vocabulary",
@@ -131,7 +131,7 @@ def test_public_docs_match_v0_6_ui_without_overclaiming_release_evidence() -> No
     components_adr = read_text(ADR_COMPONENTS)
 
     for phrase in [
-        "v0.6.2 CDN/Xet CSP hotfix",
+        "v0.6.3 real-ASR production dictation hotfix",
         "**Dictate**, **Vocabulary**, and **Models**",
         "Encrypted `.speechmodel` export is the default",
         "Screenshot PNGs are captured locally under `/tmp` and are not committed",

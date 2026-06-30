@@ -1,15 +1,16 @@
 {
   "schemaVersion": 1,
   "title": "Current state for wilsonle/speech",
-  "asOf": "2026-06-29",
-  "status": "v0.6.2 CDN/Xet CSP hotfix prepared for publication; #255 usability evidence remains open",
-  "packageVersion": "0.6.2",
-  "currentRelease": "v0.6.2-cdn-csp-hotfix",
+  "asOf": "2026-06-30",
+  "status": "v0.6.3 real ASR production dictation hotfix prepared for publication; #255 usability evidence remains open",
+  "packageVersion": "0.6.3",
+  "currentRelease": "v0.6.3-real-asr-dictation-hotfix",
   "lineage": [
     "v0.5.0-browser-personal-models",
     "v0.6.0-minimal-ui-ux",
     "v0.6.1-csp-hotfix",
-    "v0.6.2-cdn-csp-hotfix"
+    "v0.6.2-cdn-csp-hotfix",
+    "v0.6.3-real-asr-dictation-hotfix"
   ],
   "appIdea": "A local-first installable browser PWA for Vietnamese/English dictation, vocabulary steering, guided voice-model enrollment, browser-side personal-model training, encrypted portable voice-model import/export, offline use, and privacy-preserving diagnostics.",
   "informationArchitecture": {
@@ -28,7 +29,7 @@
     "legacyRoutesRedirected": true
   },
   "workflows": {
-    "dictate": "The default screen is Dictate. If the required speech model is missing, setup appears in place with install/verify/activate progress and model details disclosed. When ready, the user records by holding the microphone button or Space, edits transcript text locally, and uses the transcript menu for new/download/clear actions.",
+    "dictate": "The default screen is Dictate. If the required speech model is missing, setup appears in place with install/verify/activate progress and model details disclosed. When ready, the user records by holding the microphone button or Space; captured PCM is sent to the worker-owned ASR runtime, final transcript text is committed locally, and transcript menu actions handle new/download/clear.",
     "vocabulary": "Vocabulary uses a compact set list with search, on/off state, word counts, row menus, basic word editing, and a single Advanced disclosure for steering, category, prompt inclusion, pronunciation/diagnostic tokenization details, and expert controls.",
     "models": "Models uses a compact voice-model list with state-dependent actions, focused create/enroll/train/results/import/export routes, model detail accordions, blocker-first readiness, four-stage training progress, outcome-first candidate results, and dedicated storage/deletion routes.",
     "enrollment": "Enrollment is one prompt at a time with current voice condition, progress, one recording control, concise quality feedback, and Recording details for SNR, clipping, VAD, alignment, language, storage, and diagnostics.",
@@ -79,7 +80,7 @@
   },
   "capabilitiesPreserved": {
     "speech": [
-      "local Vietnamese/English/automatic/mixed-language streaming transcription",
+      "local Vietnamese/English/automatic/mixed-language dictation through worker-owned ASR over installed model graphs",
       "stable committed/provisional transcript rendering",
       "offline model-pack installation and atomic activation",
       "WebGPU inference with multithreaded WASM fallback where supported"
@@ -137,9 +138,10 @@
     "prototypeUsabilityBlocker": "docs/research/v0.6-prototype-usability-study.json",
     "releaseUsabilityBlocker": "docs/research/v0.6-release-usability-study.json",
     "updateOfflineRollback": "docs/planning/v0.6.0-update-offline-rollback-verification.json",
-    "releaseNotes": "docs/planning/v0.6.2-cdn-csp-hotfix-release-notes.json",
-    "releasePublicationChecklist": "docs/planning/v0.6.2-release-publication-checklist.json",
-    "issue255VerificationChecklist": "docs/planning/v0.6.0-issue-255-verification-checklist.json"
+    "releaseNotes": "docs/planning/v0.6.3-real-asr-dictation-release-notes.json",
+    "releasePublicationChecklist": "docs/planning/v0.6.3-release-publication-checklist.json",
+    "issue255VerificationChecklist": "docs/planning/v0.6.0-issue-255-verification-checklist.json",
+    "productionDictationSmoke": "apps/web/e2e/production-dictation.spec.ts"
   },
   "intentionalProductBoundaries": [
     "No production telemetry, account system, cloud sync, remote support collection, browser extension, native companion, new language/localization, model-quality claim, decorative marketing dashboard, gamification, or generic feature-card home screen was added.",
@@ -149,7 +151,7 @@
   "openReleaseGates": [
     "Issue #255 remains open for final moderated release-usability participant evidence or a separate explicit human release decision that updates the #255 artifact.",
     "Production accuracy/performance claims remain bounded by ADR 0004 and ADR 0005 until evidence exists.",
-    "Publication/deployment evidence is issue #314 work and must be completed on the tagged v0.6.2 hotfix release commit before closing #314."
+    "Publication/deployment evidence is issue #323 work and must be completed on the tagged v0.6.3 hotfix release commit before closing #323."
   ],
   "nextPlanningInstruction": "Plan only the user's next requested delta against this current state. Preserve #255, ADR 0004, and ADR 0005 evidence limitations unless the user provides the missing evidence or an explicit human decision. After the next delta completes, generate another cumulative successor snapshot.",
   "privacy": {
@@ -161,7 +163,8 @@
     "containsModelWeights": false
   },
   "intentionalBoundaries": [
-    "v0.6.2 is a CSP-only patch release over v0.6.1; it does not change UI, model, profile, adapter, portable-bundle, storage, training, or privacy schemas.",
-    "v0.6.0 and v0.6.1 release tags/assets remain immutable; v0.6.2 supersedes them only for the Hugging Face CDN/Xet CSP redirect fix."
+    "v0.6.3 is a real-ASR production dictation patch release over v0.6.2; it does not change model-pack, profile, adapter, portable-bundle, vocabulary, training, import/export, or privacy schemas.",
+    "v0.6.0, v0.6.1, and v0.6.2 release tags/assets remain immutable; v0.6.3 supersedes them for the worker-owned production dictation fix and opt-in deployed-app smoke evidence.",
+    "Production dictation smoke artifacts must remain opt-in, redacted, and free of committed WAVs, model files, browser profiles, raw audio, signed URLs, and transcript artifacts."
   ]
 }

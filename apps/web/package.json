@@ -1,6 +1,6 @@
 {
   "name": "@speech/web",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "private": true,
   "description": "Installable local-first speech-to-text PWA shell.",
   "type": "module",

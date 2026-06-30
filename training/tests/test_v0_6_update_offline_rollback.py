@@ -75,11 +75,11 @@ def test_current_state_points_to_update_offline_rollback_evidence() -> None:
     gates = "\n".join(current["openReleaseGates"])
     assert "Issue #255 remains open" in gates
     assert "Production accuracy/performance claims" in gates
-    issue_310_gate = (
-        "Publication/deployment evidence is issue #314 work and must be completed "
-        "on the tagged v0.6.2 hotfix release commit before closing #314."
+    issue_323_gate = (
+        "Publication/deployment evidence is issue #323 work and must be completed "
+        "on the tagged v0.6.3 hotfix release commit before closing #323."
     )
-    assert issue_310_gate in gates
+    assert issue_323_gate in gates
 
 
 def test_update_prompt_and_offline_restart_tests_are_present() -> None:
