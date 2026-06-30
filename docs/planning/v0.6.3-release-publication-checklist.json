@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "issue": 323,
+  "release": "v0.6.3",
+  "title": "v0.6.3 real ASR dictation hotfix release publication checklist",
+  "status": "prepared-before-publication",
+  "baseRelease": "v0.6.2",
+  "baseReleaseImmutable": true,
+  "preTagChecks": [
+    "Release-prep PR merges to clean main.",
+    "Required CI checks pass on the release-prep PR and clean main commit.",
+    "All package versions are 0.6.3.",
+    "Static validation confirms v0.6.3 release notes/checklist and v0.6.0/v0.6.1/v0.6.2 immutability wording.",
+    "Full local validation passes: pnpm lint && pnpm format-check && pnpm typecheck && pnpm test && pnpm build && pnpm chromium-smoke."
+  ],
+  "publicationSteps": [
+    "Create annotated tag v0.6.3 from clean main after CI passes.",
+    "Generate web dist archive from tagged commit: speech-web-v0.6.3-dist.tar.gz.",
+    "Generate SHA256SUMS.txt for release assets.",
+    "Create GitHub release v0.6.3 with notes that preserve #255, ADR 0004, and ADR 0005 limitations.",
+    "Verify production Vercel deployment for the tagged release commit.",
+    "Verify direct-route headers include `connect-src 'self' https://huggingface.co https://us.aws.cdn.hf.co`.",
+    "Verify production About shows 0.6.3.",
+    "Run the opt-in production dictation smoke on a fresh browser profile and record the real model download plus fake-microphone transcript assertion result.",
+    "Close issue #323 only after GitHub release and production verification evidence are recorded.",
+    "Do not close issue #255 unless participant evidence or an explicit separate human decision updates that issue."
+  ],
+  "postPublicationEvidenceToRecord": {
+    "tagCommit": null,
+    "githubReleaseUrl": null,
+    "distArchiveSha256": null,
+    "sha256SumsSha256": null,
+    "productionUrl": null,
+    "vercelDeploymentUrl": null,
+    "verifiedHeaders": [],
+    "aboutVersionVerified": false,
+    "productionDictationSmokeVerified": false,
+    "staleServiceWorkerUpdateGuidanceRecorded": false
+  },
+  "privacy": {
+    "containsParticipantData": false,
+    "containsAudio": false,
+    "containsTranscripts": false,
+    "containsVocabularyTerms": false,
+    "containsProfileArtifacts": false,
+    "containsModelWeights": false,
+    "addsTelemetryOrAnalytics": false,
+    "allowsBroadThirdPartyNetwork": false
+  }
+}

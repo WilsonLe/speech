@@ -779,7 +779,7 @@ export function PersonalModelsPanel() {
       const result = await exportPortableSpeechModel({
         profileId: primarySummary.profile.id,
         exactBaseModel: portableExportBaseModel.exactBaseModel,
-        sourceAppVersion: '0.6.2',
+        sourceAppVersion: '0.6.3',
         mode: portableExport.encrypted ? 'encrypted' : 'unencrypted',
         timeoutMs: 60_000,
         ...(portableExport.encrypted ? { passphrase: portableExport.passphrase } : {}),
