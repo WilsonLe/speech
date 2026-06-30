@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "chromium-smoke": "playwright test",
+    "test:production-dictation-smoke": "playwright test -c playwright.production.config.ts e2e/production-dictation.spec.ts",
     "cross-browser-smoke": "playwright test --project=chromium && if [ \"${SPEECH_E2E_EDGE:-0}\" = \"1\" ]; then playwright test --project=edge; else echo 'Skipping Edge project; set SPEECH_E2E_EDGE=1 on hosts with Microsoft Edge installed.'; fi"
   },
   "dependencies": {
@@ -19,8 +20,10 @@
     "@speech/benchmark": "workspace:*",
     "@speech/browser-training": "workspace:*",
     "@speech/context-bias": "workspace:*",
+    "@speech/decoder": "workspace:*",
     "@speech/enrollment": "workspace:*",
     "@speech/features": "workspace:*",
+    "@speech/formatter": "workspace:*",
     "@speech/inference": "workspace:*",
     "@speech/model-manager": "workspace:*",
     "@speech/personalization": "workspace:*",

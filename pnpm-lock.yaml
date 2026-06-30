@@ -53,12 +53,18 @@ importers:
       '@speech/context-bias':
         specifier: workspace:*
         version: link:../../packages/context-bias
+      '@speech/decoder':
+        specifier: workspace:*
+        version: link:../../packages/decoder
       '@speech/enrollment':
         specifier: workspace:*
         version: link:../../packages/enrollment
       '@speech/features':
         specifier: workspace:*
         version: link:../../packages/features
+      '@speech/formatter':
+        specifier: workspace:*
+        version: link:../../packages/formatter
       '@speech/inference':
         specifier: workspace:*
         version: link:../../packages/inference
